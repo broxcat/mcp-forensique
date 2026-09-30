@@ -6,10 +6,12 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+CLASSIFICATIONS = ("lab", "internal", "client")
+
 
 @dataclass
 class Config:
-    """Server settings (keys match forensic-mcp.toml)."""
+    """Server settings (keys match forensic-mcp.docker.toml)."""
 
     evidence_root: Path = Path("evidence")
     output_root: Path = Path("output")
@@ -22,11 +24,18 @@ class Config:
         default_factory=lambda: ["localhost:8000", "127.0.0.1:8000"])
     allowed_origins: list[str] = field(
         default_factory=lambda: ["http://localhost:8000", "http://127.0.0.1:8000"])
-    max_upload_gb: int = 64
     timeout_seconds: int = 1800
     max_rows_returned: int = 100
     max_cell_chars: int = 400
-    llm_mode: str = "local"
+    max_response_kb: int = 64          # response size bound (ET-02, §5)
+    max_output_mb: int = 1024          # stdout+stderr bound of one tool run (ET-02)
+    llm_mode: str = "local"            # "local" (Ollama) or "cloud"
+    default_classification: str = "internal"  # when no case.toml applies
+
+    @property
+    def audit_file(self) -> Path:
+        """The hash-chained journal (§6)."""
+        return Path(self.output_root) / "audit.jsonl"
 
 
 _PATH_KEYS = {"evidence_root", "output_root", "tools_file", "vol3_symbols_dir", "api_token_file"}
@@ -47,6 +56,8 @@ def load_config(path: str | Path | None = None) -> Config:
     cfg = Config(**raw)
     if cfg.llm_mode not in ("local", "cloud"):
         raise ValueError("llm_mode must be 'local' or 'cloud'")
+    if cfg.default_classification not in CLASSIFICATIONS:
+        raise ValueError(f"default_classification must be one of {CLASSIFICATIONS}")
     return cfg
 
 

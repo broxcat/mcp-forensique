@@ -6,15 +6,21 @@ import pytest
 from mcp import Client
 from starlette.testclient import TestClient
 
-from forensic_mcp import results, server, web
+from forensic_mcp import results, safety, server, web
 from forensic_mcp.engines import volatility3
 
 pytestmark = pytest.mark.anyio
+SHA = "a" * 64
+
+
+async def _run(cfg, plugin, pid=None):
+    path = volatility3.image_path(cfg, "mem.raw")
+    return await volatility3.run(cfg, path, plugin, pid, SHA)
 
 
 async def test_plugins_parsed_and_resolved(cfg) -> None:
     plugins = await volatility3.list_plugins(cfg)
-    assert "windows.netscan.NetScan" in plugins and len(plugins) == 8
+    assert "windows.netscan.NetScan" in plugins and len(plugins) == 9
     assert plugins["windows.malfind.Malfind"]["deprecated"]
     assert await volatility3.version(cfg) == "2.28.2"
     r = volatility3.resolve_plugin
@@ -27,40 +33,42 @@ async def test_plugins_parsed_and_resolved(cfg) -> None:
 
 
 async def test_run_flattens_children_with_depth(cfg) -> None:
-    out = await volatility3.run(cfg, "mem.raw", "windows.pstree")
+    out = await _run(cfg, "windows.pstree")
     assert out["row_count"] == 4 and out["exit_code"] == 0
-    assert [(x["PID"], x["depth"]) for x in out["rows"]] == [(4, 0), (252, 1), (340, 2), (500, 0)]
-    meta = json.loads((cfg.output_root / out["result_id"] / "meta.json").read_text())
-    assert meta["tool_version"] == "2.28.2" and len(meta["input_sha256"]) == 64
+    rows = results.query(out["dir"])["rows"]
+    assert [(x["_row"], x["PID"], x["depth"]) for x in rows] == [
+        (1, 4, 0), (2, 252, 1), (3, 340, 2), (4, 500, 0)]
+    meta = json.loads((out["dir"] / "meta.json").read_text())
+    assert meta["tool_version"] == "2.28.2" and meta["input_sha256"] == SHA
     assert meta["argv"][-1] == "windows.pstree.PsTree" and "-o" in meta["argv"]
 
 
 async def test_run_pid_and_jail(cfg) -> None:
-    out = await volatility3.run(cfg, "mem.raw", "windows.pslist", pid=3496)
-    assert out["row_count"] == 1 and out["rows"][0]["ImageFileName"] == "UWkpjFjDzM.exe"
-    with pytest.raises(Exception):
-        await volatility3.run(cfg, "../tools.toml", "windows.pslist")
+    out = await _run(cfg, "windows.pslist", pid=3496)
+    rows = results.query(out["dir"])["rows"]
+    assert out["row_count"] == 1 and rows[0]["ImageFileName"] == "UWkpjFjDzM.exe"
+    with pytest.raises(safety.SafetyError):
+        volatility3.image_path(cfg, "../tools.toml")
     with pytest.raises(ValueError):
-        await volatility3.run(cfg, "mem.raw", "windows.pslist", pid=-1)
+        await _run(cfg, "windows.pslist", pid=-1)
 
 
 async def test_big_int_addresses_are_exact_hex(cfg) -> None:
-    out = await volatility3.run(cfg, "mem.raw", "windows.pslist")
-    first = out["rows"][0]
+    d = (await _run(cfg, "windows.pslist"))["dir"]
+    first = results.query(d)["rows"][0]
     assert first["Offset(V)"] == "0xfffffa800577ba10"  # not 18446738026487330000
     assert first["Threads"] == 87 and first["PID"] == 4  # small ints stay ints
-    d = cfg.output_root / out["result_id"]
     raw = (d / "rows.jsonl").read_text()
     assert '"0xfffffa800577ba10"' in raw and "18446738026487331344" not in raw
     for wanted in ("0xfffffa800577ba10", "0xFFFFFA800577BA10", str(0xFFFFFA800577BA10)):
         q = results.query(d, column="Offset(V)", equals=wanted)
         assert [r["PID"] for r in q["rows"]] == [4], wanted
-    assert results.query(d, column="Offset(V)", equals="18446738026487330000")["returned"] == 0
+    assert results.query(d, column="Offset(V)", equals="18446738026487330000")["matched"] == 0
     s = results.query(d, sort_by="Offset(V)", sort_desc=True, limit=1)
     assert s["rows"][0]["PID"] == 4  # hex sorted numerically (0x...ba10 > 0x...b060)
 
 
-async def test_mcp_lists_six_tools_and_runs(cfg) -> None:
+async def test_mcp_lists_tools_and_runs(cfg) -> None:
     mcp = server.build_server(cfg)
     async with Client(mcp) as client:
         names = sorted(t.name for t in (await client.list_tools()).tools)
@@ -72,9 +80,10 @@ async def test_mcp_lists_six_tools_and_runs(cfg) -> None:
         r = await client.call_tool("memory_run", {"path": "mem.raw", "plugin": "windows.pslist"})
         rid = r.structured_content["result_id"]
         q = await client.call_tool("query_results", {"result_id": rid, "contains": "uwkp"})
-        assert q.structured_content["returned"] == 1
+        assert q.structured_content["row_count"] == 1
+        assert q.structured_content["rows"][0]["_row"] == 2
         ev = await client.call_tool("list_evidence", {})
-        assert ev.structured_content["files"][0]["path"] == "mem.raw"
+        assert ev.structured_content["rows"][0]["path"] == "mem.raw"
         bad = await client.call_tool("list_evidence", {"subdir": "../"})
         assert bad.is_error
 

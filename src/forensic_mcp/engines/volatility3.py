@@ -135,12 +135,20 @@ def _write_rows(d: Path) -> int:
     return count
 
 
-async def run(cfg: Config, image: str, plugin: str, pid: int | None = None) -> dict[str, Any]:
-    """Run one vol3 plugin on an evidence image; returns the result summary."""
+def image_path(cfg: Config, image: str) -> Path:
+    """Jail the image path and require a regular file."""
     path = safety.jail_path(image, cfg.evidence_root)
     if not path.is_file():
-        raise FileNotFoundError(f"not a file: {image}")
-    if pid is not None and (not isinstance(pid, int) or pid < 0):
+        raise FileNotFoundError(f"not a file under the evidence root: {image}")
+    return path
+
+
+async def run(cfg: Config, path: Path, plugin: str, pid: int | None,
+              evidence_sha256: str) -> dict[str, Any]:
+    """Run one vol3 plugin on an already jailed and registered image.
+    Returns run facts: result_id, dir, plugin, argv, version, exit_code, timed_out,
+    output_exceeded, duration, row_count, stderr_tail."""
+    if pid is not None and (not isinstance(pid, int) or isinstance(pid, bool) or pid < 0):
         raise ValueError("pid must be a non-negative integer")
     full = resolve_plugin(plugin, await list_plugins(cfg))
     rid, d = results.new_result(cfg.output_root, "vol3_" + full.rsplit(".", 1)[0])
@@ -150,15 +158,17 @@ async def run(cfg: Config, image: str, plugin: str, pid: int | None = None) -> d
     if pid is not None:
         argv += ["--pid", str(pid)]
     start = time.time()
-    rr, digest = await asyncio.gather(
-        runner.run_process(argv, d / "stdout.txt", d / "stderr.txt", cfg.timeout_seconds),
-        asyncio.to_thread(results.sha256_cached, path, cfg.output_root))
+    rr = await runner.run_process(argv, d / "stdout.txt", d / "stderr.txt", cfg.timeout_seconds,
+                                  max_output_bytes=cfg.max_output_mb * 1024 * 1024)
     row_count = _write_rows(d)
+    ver = await version(cfg)
     results.write_meta(
-        d, tool="vol3", plugin=full, argv=argv, tool_version=await version(cfg),
-        input_path=str(path), input_sha256=digest, start=start, end=time.time(),
+        d, tool="vol3", plugin=full, argv=argv, tool_version=ver, input_path=str(path),
+        input_sha256=evidence_sha256, start=start, end=time.time(),
         duration=round(rr.duration, 2), exit_code=rr.exit_code, timed_out=rr.timed_out,
-        row_count=row_count)
-    summary = results.summarize(d, n=cfg.max_rows_returned, max_cell_chars=cfg.max_cell_chars)
-    return {**summary, "plugin": full, "exit_code": rr.exit_code, "timed_out": rr.timed_out,
-            "duration": round(rr.duration, 2)}
+        output_exceeded=rr.output_exceeded, row_count=row_count)
+    err = (d / "stderr.txt").read_text(errors="replace")[-2000:]
+    return {"result_id": rid, "dir": d, "plugin": full, "argv": argv, "version": ver,
+            "exit_code": rr.exit_code, "timed_out": rr.timed_out,
+            "output_exceeded": rr.output_exceeded, "duration": round(rr.duration, 2),
+            "row_count": row_count, "stderr_tail": err}

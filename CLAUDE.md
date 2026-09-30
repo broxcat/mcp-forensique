@@ -33,8 +33,8 @@ exposed** by the server (they stay installed in the image, unused).
 ## 2. STATUS (update at the end of every task)
 
 ```
-Today: J3 (30/09) — Gantt phase P2 done (2.2 finished ahead of J4)
-Current task: 2.2 DONE, waiting for the user (L2 review = M2); next 3.1 (J5) — see §9
+Today: J3 (30/09) — 4.1 done ahead of plan (P3 defensive part still open, see below)
+Current task: 4.1 DONE, waiting for the user; next 4.2 (vol3 typed tools + allowlist) — see §9
 Next milestones: M2 architecture validated J4 (01/10, livrable L2) · M3 evidence ready J6 (05/10)
                  · M4 MCP server functional J10 (09/10) · M5 feature freeze J13 (14/10)
 Existing code (built before this CDC-aligned plan, to be reconciled in task 2.1):
@@ -53,12 +53,32 @@ Done: 2.2 (30/09) — L2 completed: §5 Docker deployment vs ET-08, §6 HTTP/Ope
   (risk, design, test, status, task), §12 open points for review. audit_schema: tool_call gets
   `outcome` (ok/tool_error/timeout/refused) + `error`. compliance.md aligned (statuses checked
   equal by .scratch/check_l2.py). No feature code. pytest 17 passed.
-Next: 3.1 (L3 scenario FR + lab/prepare_victim.ps1), after the M2 review of L2 §12 open points.
+3.1: NOT done. Two attempts were stopped by a safety classifier while writing the scenario step
+  table; attack procedures are written by the humans. docs/L3_scenario.md is a partial,
+  UNTRACKED draft (never committed): the humans decide to finish or delete it. Defensive items
+  still to do on request: lab/prepare_victim.ps1, lab/check_logging.ps1, eval/ground_truth
+  template+schema+test, scripts/register_evidence.py.
+Done: 4.1 (30/09) — socle: new modules schemas.py, contract.py, evidence.py, redact.py, ops.py
+  (Engine.call wraps every tool); audit.py rewritten (typed events, audit_id, ts_utc, flock,
+  verify_report = chain + sequence + schema, head_hash); runner output bound (max_output_mb);
+  contract.fit (max_response_kb); EVIDENCE DATA markers with "<" escaped; READ/JOURNAL
+  annotations; case.toml classification + pseudonymisation; tools register_evidence,
+  verify_evidence, replay (9 tools). Decision 5 applied (max_upload_gb, validate_args,
+  FORBIDDEN_FLAGS, sha256 cache removed). pytest 31 passed (tests/test_socle.py = 14 new).
+  Real sample: memory_run windows.info 1st call 61.5 s (registration hash + vol3), 2nd 3.2 s,
+  23 rows, schema OK, verify_report ok (5 lines). Server restarted: /health ok, /mcp 401.
+Decisions recorded (user, 30/09): 3 = deny Bash in the analysis workspace (Claude Code setting,
+  analyst side, not implemented in this repo); 5 = cleanup approved. Points 1, 2, 4 of L2 §12
+  still open (default transport, llm_mode per transport, version pinning).
 Notes:
-  Audit decisions for 4.1: audit.py is NOT called by server.py (no tool_call records); its `ts` is
-    epoch and `event` untyped -> migrate to audit_schema (audit_id, ts_utc, type, actor). Body kept
-    as a canonical JSON string inside the line (hash over exact characters). Remove unused
-    validate_args/FORBIDDEN_FLAGS and max_upload_gb (ask user). Replace sha256 cache by registration.
+  4.1 design choices: tool_call actor = {"kind": "llm", "client": "mcp; llm_mode=..."};
+    evidence_verified journaled only on quick-check mismatch or verify_evidence (tool_call carries
+    evidence_sha256); unregistered evidence is registered automatically on first memory_run;
+    internal IPs = RFC1918 + 169.254/16 + 100.64/10 (TEST-NET counts as external);
+    default_classification = "internal" when no case.toml; raw_output.host uses env OUTPUT_DIR
+    (not passed by compose, shows "<OUTPUT_DIR>"). Old output/.cache/ is unused (delete by hand).
+  Old tests adapted (rule 10: they asserted the pre-§5 shape `returned`/`summarize` and untyped
+    journal events); test_validate_args removed with the code (decision 5).
   Sample /evidence/Triage-Memory.mem (5 GiB): Win7 SP1 x64, NTBuildLab 7601.18741,
     SystemTime 2019-03-22 05:46:00 (dev sample only). windows.info: 1st run 54.0 s (symbol
     download), 2nd 3.3 s (vol3-cache, 8.7 MB); over HTTP 23 rows, vol3 3.5 s; first call on an
@@ -390,4 +410,17 @@ statements and rejects one with a wrong IP.
 - `llm_mode` is declared by the server config, not detected: a cloud client can connect to a
   server set to `local` and receive client-classified data (L2 §12 point 2).
 - A hash chain is tamper-evident, not tamper-proof: whoever can write `/output` can rewrite the
-  whole chain; only an off-host copy of the head hash detects it
+  whole chain; only an off-host copy of the head hash detects it.
+- Observed 30/09 (CTF session): the analysis assistant could not see the image through the MCP
+  server (evidence outside EVIDENCE_DIR), so it installed Volatility 3 locally with `pip --user`
+  and ran `strings` and ad-hoc Python on the dump. Answers were correct but produced no audit
+  record, no evidence hash and no citable result_id: a server-side guardrail is void if the client
+  has a shell. Mitigation: decision 3 (deny Bash in the analysis workspace) and an explicit error
+  telling the analyst to place evidence under the evidence root instead of working around the server.
+- `output/` holds results of `windows.registry.hashdump` and `windows.dumpfiles` run on 29/09
+  through the generic `memory_run`: credential extraction happened with no human confirmation
+  and no journal entry. Mitigation: 4.1 journals every call; 4.2 allowlist + action class.
+- Python `ipaddress.is_private` is True for documentation ranges (203.0.113.0/24 TEST-NET), so a
+  lab "C2" address was first tokenised as internal (`IP_INT`). Mitigation: explicit RFC 1918 list.
+- Pseudonymisation limits (4.1): names recognised only in host/user columns or declared in
+  case.toml; IPv6 and error messages not pseudonymised.

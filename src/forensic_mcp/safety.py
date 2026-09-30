@@ -1,21 +1,16 @@
-"""Path jail and argument validation."""
+"""Path jail (ET-05). Tool parameters are typed; no free-form argument reaches a tool (rule 8)."""
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
-ARG_RE = re.compile(r"^[A-Za-z0-9_.:=,/-]+$")
-
-FORBIDDEN_FLAGS: dict[str, set[str]] = {
-    "vol3": {"-f", "-o", "-r", "-c", "-p", "-s", "--output-dir", "--renderer",
-             "--plugin-dirs", "--symbol-dirs", "--write-config"},
-    "ez": {"-f", "-d", "--csv", "--json", "--csvf", "--jsonf"},
-    "vol2": {"-f", "--output", "--output-file", "--dump-dir"},
-}
+OUTSIDE_ROOT_HELP = (
+    "Place the evidence under EVIDENCE_DIR (mounted read-only at {root}), then call "
+    "list_evidence. Do not analyse it outside this server: such work is not journaled, not "
+    "hashed and not citable.")
 
 
 class SafetyError(ValueError):
-    """Raised when a path or argument is refused."""
+    """Raised when a request is refused (journaled with outcome 'refused')."""
 
 
 def jail_path(path: str | Path, evidence_root: str | Path) -> Path:
@@ -26,17 +21,6 @@ def jail_path(path: str | Path, evidence_root: str | Path) -> Path:
         p = root / p
     resolved = p.resolve()
     if resolved != root and not resolved.is_relative_to(root):
-        raise SafetyError(f"path outside evidence root: {path}")
+        raise SafetyError(f"path outside evidence root: {path}. "
+                          + OUTSIDE_ROOT_HELP.format(root=root))
     return resolved
-
-
-def validate_args(extra_args: list[str], family: str) -> list[str]:
-    """Check extra_args against the character whitelist and the family's forbidden flags."""
-    forbidden = FORBIDDEN_FLAGS[family]
-    for arg in extra_args:
-        if not ARG_RE.match(arg):
-            raise SafetyError(f"invalid characters in argument: {arg!r}")
-        flag = arg.split("=", 1)[0]
-        if flag in forbidden:
-            raise SafetyError(f"flag not allowed: {flag}")
-    return list(extra_args)

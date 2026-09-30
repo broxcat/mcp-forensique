@@ -13,8 +13,12 @@ api_token_file = "/app/.secrets/api_token"
 allowed_hosts = ["localhost:8000", "127.0.0.1:8000", "forensic:8000"]
 # Browser origins allowed to call /mcp (the Open WebUI page runs on http://localhost:3000).
 allowed_origins = ["http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:3000"]
-max_upload_gb = 64
 timeout_seconds = 1800
 max_rows_returned = 100
 max_cell_chars = 400
+# Bounds (ET-02): one response, and stdout+stderr of one tool run.
+max_response_kb = 64
+max_output_mb = 1024
+# Classification used when no case.toml applies (lab | internal | client).
+default_classification = "internal"
 llm_mode = "local"
