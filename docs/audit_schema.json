@@ -76,9 +76,14 @@
           "if": {"properties": {"type": {"const": "tool_call"}}},
           "then": {
             "required": ["tool", "params", "argv", "engine", "evidence_sha256", "result_id",
-                         "exit_code", "duration_s", "output_sha256"],
+                         "exit_code", "duration_s", "output_sha256", "outcome"],
             "properties": {
               "tool": {"type": "string"},
+              "outcome": {
+                "description": "refused = rejected before execution (path jail, validation, missing confirmation); refused calls are journaled too.",
+                "enum": ["ok", "tool_error", "timeout", "refused"]
+              },
+              "error": {"description": "Readable reason when outcome != ok.", "type": "string"},
               "params": {"type": "object"},
               "argv": {"type": "array", "items": {"type": "string"}},
               "engine": {"description": "Tool name and version.", "type": "string"},

@@ -33,8 +33,8 @@ exposed** by the server (they stay installed in the image, unused).
 ## 2. STATUS (update at the end of every task)
 
 ```
-Today: J3 (30/09) — Gantt phase P2, task 2.1
-Current task: 2.1 DONE, waiting for the user; next 2.2 (J4) — see §9
+Today: J3 (30/09) — Gantt phase P2 done (2.2 finished ahead of J4)
+Current task: 2.2 DONE, waiting for the user (L2 review = M2); next 3.1 (J5) — see §9
 Next milestones: M2 architecture validated J4 (01/10, livrable L2) · M3 evidence ready J6 (05/10)
                  · M4 MCP server functional J10 (09/10) · M5 feature freeze J13 (14/10)
 Existing code (built before this CDC-aligned plan, to be reconciled in task 2.1):
@@ -47,7 +47,13 @@ Done: 2.1 (30/09) — docs/compliance.md (15 EF + 9 ET + 8 guardrails + 5 object
   items), docs/output_schema.json, docs/audit_schema.json (Draft 2020-12, checked with
   jsonschema 4.26.0, already in the image via mcp), docs/L2_architecture.md (FR draft, 2 Mermaid
   diagrams, tool list read/journal/action). Check script: .scratch/check_schemas.py. pytest 17 passed.
-Next: 2.2 (guardrails matrix FR + audit journal design in L2).
+Done: 2.2 (30/09) — L2 completed: §5 Docker deployment vs ET-08, §6 HTTP/Open WebUI as a
+  deviation from ET-01 (stdio = reference), §9 audit journal design (types, canonical body,
+  flock for concurrent HTTP+stdio writers, replay, head-hash anchoring), §10 guardrails matrix
+  (risk, design, test, status, task), §12 open points for review. audit_schema: tool_call gets
+  `outcome` (ok/tool_error/timeout/refused) + `error`. compliance.md aligned (statuses checked
+  equal by .scratch/check_l2.py). No feature code. pytest 17 passed.
+Next: 3.1 (L3 scenario FR + lab/prepare_victim.ps1), after the M2 review of L2 §12 open points.
 Notes:
   Audit decisions for 4.1: audit.py is NOT called by server.py (no tool_call records); its `ts` is
     epoch and `event` untyped -> migrate to audit_schema (audit_id, ts_utc, type, actor). Body kept
@@ -62,8 +68,8 @@ Notes:
     `docker compose restart forensic` after code/config changes (also restarts webui,
     depends_on). Open WebUI first boot ~2 min; MCP server not yet registered in Open WebUI.
     Token in .secrets/api_token (0600). `time` needs `bash -c` (sh = dash).
-  Project folder is not a git repository (git show HEAD~1 impossible; notes recovered from the
-    previous CLAUDE.md kept in the session).
+  Git repo initialised by the user after 2.1 (first commit fbadffd); earlier notes were
+    recovered from the previous CLAUDE.md, not from git history.
 ```
 
 ---
@@ -377,3 +383,11 @@ statements and rejects one with a wrong IP.
   download (54 s first time, 3.3 s cached): perceived latency may push analysts to bypass the tool.
 - JSON Schema `oneOf` with both `integer` and `number` rejects every integer (seen in 2.1):
   schema tests must include positive samples, not only a meta-schema check.
+- The AI client can bypass server-side guardrails: Claude Code has a shell on the analyst PC, so
+  it could read `.secrets/api_token`, edit `/output/audit.jsonl` or run a validation command.
+  Mitigation: validation via `ctx.elicit`, Claude Code deny rules, actor in journal, head-hash
+  anchoring (L2 §9.5, §10). Residual risk for L7.
+- `llm_mode` is declared by the server config, not detected: a cloud client can connect to a
+  server set to `local` and receive client-classified data (L2 §12 point 2).
+- A hash chain is tamper-evident, not tamper-proof: whoever can write `/output` can rewrite the
+  whole chain; only an off-host copy of the head hash detects it.

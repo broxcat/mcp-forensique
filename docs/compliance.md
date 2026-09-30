@@ -1,7 +1,9 @@
 # Matrice de conformité CDC ↔ forensic-mcp
 
-Mise à jour : J3 (30/09/2026), tâche 2.1 — audit du code existant (construit avant le plan
-aligné sur le CDC). À tenir à jour à la fin de chaque tâche (règle 1 de `CLAUDE.md`).
+Mise à jour : J4 (01/10/2026), tâche 2.2 — conception des garde-fous et du journal
+documentée dans [`L2_architecture.md`](L2_architecture.md) (sections 5, 6, 9, 10). Audit du
+code existant : J3, tâche 2.1. Aucun code modifié en 2.2 : les statuts ci-dessous décrivent le
+code, pas la conception. À tenir à jour à la fin de chaque tâche (règle 1 de `CLAUDE.md`).
 
 Statuts : **fait** · **partiel** · **manquant** · **hors périmètre**.
 Les intitulés ET-xx sont repris de `CLAUDE.md` (§4, §8, §9) ; le CDC n'est pas versionné
@@ -31,24 +33,26 @@ dans le dépôt, les intitulés sont à vérifier contre le CDC du 26/09/2026.
 
 | ID | Exigence | Statut | Existant (fichier) | Test existant | Écart / tâche |
 |---|---|---|---|---|---|
-| ET-01 | Serveur MCP, SDK officiel, transport de référence stdio | partiel | `__main__.py --stdio`, `server.py` (`mcp==2.2.0`) | `test_fasttrack.py::test_mcp_lists_six_tools_and_runs` (client en mémoire) | stdio jamais vérifié depuis Windows (`docker exec -i`) ; HTTP seul testé de bout en bout. → 4.4 |
+| ET-01 | Serveur MCP, SDK officiel, transport de référence stdio | partiel | `__main__.py --stdio`, `server.py` (`mcp==2.2.0`) | `test_fasttrack.py::test_mcp_lists_six_tools_and_runs` (client en mémoire) | stdio jamais vérifié depuis Windows (`docker exec -i`) ; HTTP seul testé de bout en bout. Transport HTTP = écart documenté (L2 §6), stdio reste la référence. → 4.4 |
 | ET-02 | Outils en sous-processus, timeout, sortie bornée | partiel | `runner.run_process` (exec sans shell, timeout, kill du groupe de processus) | `test_phase2.py::test_runner_kills_on_timeout` | `stdout.txt` non borné en taille ; réponses bornées seulement en lignes/cellules (pas de `max_response_kb`). → 4.1 |
 | ET-03 | Sorties JSON structurées | partiel | dicts `summarize`/`query` | — | Contrat §5 absent ; schéma créé : `docs/output_schema.json` (2.1). Validation en test → 4.1 |
-| ET-04 | Journal d'audit horodaté et rejouable | partiel | `audit.py` (chaînage SHA-256, `verify_audit`) | `test_phase2.py::test_audit_chain_detects_tampering` | **Non branché sur le serveur** (aucun appel journalisé) ; `ts` en epoch au lieu d'UTC ISO ; pas de types ni d'`audit_id` ; pas de `replay`. Schéma créé : `docs/audit_schema.json` (2.1). → 4.1 |
+| ET-04 | Journal d'audit horodaté et rejouable | partiel | `audit.py` (chaînage SHA-256, `verify_audit`) | `test_phase2.py::test_audit_chain_detects_tampering` | **Non branché sur le serveur** (aucun appel journalisé) ; `ts` en epoch au lieu d'UTC ISO ; pas de types ni d'`audit_id` ; pas de `replay`. Schéma : `docs/audit_schema.json` (2.1, champ `outcome` ajouté en 2.2) ; conception : L2 §9 (types, verrou `flock`, rejeu, ancrage du hash de tête). → 4.1 |
 | ET-05 | Validation des chemins (jail) | fait | `safety.jail_path` (`resolve` + `is_relative_to`) | `test_phase2.py::test_jail_blocks_traversal_and_symlink`, `::test_jail_sibling_prefix_symlink_dir_and_relative` | — |
 | ET-06 | Skill au format SKILL.md | manquant | — | — | `skills/playbook-poste-compromis/`. → P5 |
 | ET-07 | LLM cloud et LLM local | partiel | Service `webui` (Open WebUI + Ollama), transport HTTP, clé `llm_mode` | `test_config_docker.py` | Serveur MCP pas encore enregistré dans Open WebUI ; `llm_mode` lu mais inutilisé. → 5.2 |
-| ET-08 | Machine d'analyse Linux | fait | `Dockerfile` (Debian bookworm, Python 3.12, utilisateur `analyst`, `cap_drop: ALL`, `no-new-privileges`) | Phase 1 : `check_tools.py` 20/20 | Justification à rédiger dans L2 (fait en 2.1, §5). |
+| ET-08 | Machine d'analyse Linux | fait | `Dockerfile` (Debian bookworm, Python 3.12, utilisateur `analyst`, `cap_drop: ALL`, `no-new-privileges`) | Phase 1 : `check_tools.py` 20/20 | Justification rédigée : L2 §5 (comparaison VM / conteneur, contenu de l'image, montages, durcissement, limites). Épinglage des versions à compléter (L2 §12). |
 | ET-09 | ≥ 1 test unitaire par outil exposé | partiel | 17 tests pytest, faux `vol` dans `tests/fakebin/` | `tests/` | Pas de test par outil ni de validation du schéma de sortie. → 4.4 |
 
 ## 3. Garde-fous (CDC §5)
 
+Conception, risque couvert et test d'acceptation de chaque garde-fou : L2 §10.
+
 | Garde-fou | Statut | Existant | Écart / tâche |
 |---|---|---|---|
-| Validation humaine | manquant | Aucun outil d'action n'existe (conforme par défaut) | Annotations lecture/action absentes ; `ctx.elicit` / page `/approvals` à faire. → 4.1 |
+| Validation humaine | manquant | Aucun outil d'action n'existe (conforme par défaut) | Annotations lecture/action absentes ; `ctx.elicit` / page `/approvals` à faire ; validation des findings hors outils MCP (L2 §7, §12 point 3). → 4.1 |
 | Traçabilité | partiel | `meta.json` par exécution (argv, version, hash, durée, code retour) ; `audit.py` non branché | Enregistrements `tool_call` automatiques, `record_finding`. → 4.1, 4.4 |
-| Chaîne de preuve | partiel | Montage `:ro`, SHA-256 mis en cache | Enregistrement + vérification avant/après, hash dans le rapport. → 4.1 |
-| Données confidentielles | manquant | `llm_mode = "local"` par défaut (clé seule) | `case.toml` (classification), refus `client`+cloud, pseudonymisation. → 4.1 |
+| Chaîne de preuve | partiel | Montage `:ro`, SHA-256 mis en cache | Enregistrement + vérification avant/après, hash dans le rapport. → 3.2 (manifeste), 4.1 |
+| Données confidentielles | manquant | `llm_mode = "local"` par défaut (clé seule) | `case.toml` (classification), refus `client`+cloud, pseudonymisation ; mode LLM déclaré, pas détecté (L2 §12 point 2). → 4.1 |
 | Limites de confiance | manquant | — | `confidence` sur chaque finding + revérification serveur. → 4.4 |
 | Anti-hallucination | partiel | Entiers > 2^53−1 en hexadécimal (`volatility3.safe_value`), filtres numériques exacts | Contre-vérification des citations dans `record_finding`. → 4.4 |
 | Excès de confiance | manquant | — | Statut « à valider », nom du relecteur, export final refusé sinon. → 4.4 / 6.1 |
@@ -68,9 +72,11 @@ dans le dépôt, les intitulés sont à vérifier contre le CDC du 26/09/2026.
 
 | Élément | Constat | Décision proposée |
 |---|---|---|
-| Transport HTTP + jeton bearer + Open WebUI | Extension hors CDC, déjà construite | Conservée pour le mode LLM local (ET-07) ; surface d'attaque → L7. |
+| Transport HTTP + jeton bearer + Open WebUI | Écart à ET-01, déjà construit | Conservé pour le mode LLM local (ET-07) ; contrôles et risques résiduels : L2 §6 ; transport par défaut à trancher (L2 §12 point 1) ; surface d'attaque → L7. |
 | Volatility 2, 15 outils Zimmerman | Installés, non exposés | Conforme au périmètre (non exposés). `safety.FORBIDDEN_FLAGS["vol2"/"ez"]` et `validate_args` inutilisés : à retirer en 4.1 au profit des paramètres typés (règle 8). |
 | `max_upload_gb` | Clé de config sans usage (pas de téléversement dans le CDC) | À retirer en 4.1 (à confirmer par l'utilisateur). |
 | Cache SHA-256 (`output/.cache/sha256.json`) | Accélère, mais n'est pas une preuve avant/après | Remplacé par enregistrement + contrôle rapide en 4.1. |
 | `memory_run(path, plugin, pid)` générique | Tout plugin vol3 exécutable, y compris ceux qui extraient des fichiers vers `/output/<id>/files` | Restreint à une allowlist en 4.2 ; extractions = outil d'action. |
 | Noms d'outils (`memory_list_plugins`) | Diffèrent de la cible (`vol_list_plugins`) | Renommage en 4.2. |
+| Versions non épinglées | Outils Zimmerman (dernière version téléchargée), `uvicorn`, `pyyaml`, image `open-webui:main`, sans version ni empreinte | Épingler avant M3 (L2 §12 point 4) ; modification du `Dockerfile` après accord. |
+| Écriture concurrente du journal | Les serveurs HTTP et stdio peuvent tourner en même temps | Verrou `flock` à chaque ajout (L2 §9.4), 4.1. |
