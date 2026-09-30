@@ -1,0 +1,86 @@
+# Rule table applied by the server to memory results (CLAUDE.md §10, EF-09 support).
+# ATT&CK IDs come from this table only: the LLM never invents them.
+# Logic lives in src/forensic_mcp/analyzers.py (one function per rule id); data lives here.
+# Explanation templates use: {pid} {ppid} {name} {parent_name} {path} {foreign} {state} {count}
+# {decoded} {ioc}. Next-step args "{pid}" are replaced by the integer PID of the flagged row.
+
+office_parents: [winword.exe, excel.exe, powerpnt.exe, outlook.exe, msaccess.exe, mspub.exe,
+                 visio.exe, onenote.exe]
+shells: [powershell.exe, pwsh.exe, cmd.exe, wscript.exe, cscript.exe, mshta.exe, rundll32.exe,
+         regsvr32.exe, certutil.exe, bitsadmin.exe]
+# Expected parent of system processes (Windows Vista and later).
+expected_parents:
+  svchost.exe: [services.exe]
+  services.exe: [wininit.exe]
+  lsass.exe: [wininit.exe]
+singletons: [lsass.exe, services.exe, wininit.exe]
+# Names compared by edit distance (1-2) for masquerading; kept to names of 7+ characters.
+system_binaries: [svchost.exe, lsass.exe, services.exe, csrss.exe, smss.exe, wininit.exe,
+                  winlogon.exe, explorer.exe, spoolsv.exe, taskhost.exe, taskhostw.exe,
+                  conhost.exe, dllhost.exe, rundll32.exe, lsm.exe, dwm.exe]
+# Legitimate binaries within edit distance 2 of a system name (false positives seen on the
+# real Win7 sample: iexplore.exe ~ explorer.exe; lsaiso.exe ~ lsass.exe; dashost.exe ~ dllhost.exe).
+masquerade_exclude: [iexplore.exe, lsaiso.exe, dashost.exe]
+# Where a system binary is expected to live (lower case, backslashes).
+system_dirs: ['c:\windows\system32\', 'c:\windows\syswow64\', '\systemroot\system32\']
+system_dir_exceptions:
+  explorer.exe: ['c:\windows\']
+suspicious_dirs: ['\temp\', '\appdata\', '\users\public\']
+
+rules:
+  - id: office_spawns_shell
+    severity: high
+    attack: [T1566.001, T1204.002, T1059]
+    explanation: "{parent_name} (PID {ppid}) started {name} (PID {pid}): typical of a malicious Office macro."
+    next_steps:
+      - {tool: vol_cmdline, args: {pid: "{pid}"}, why: "command line of the process started by Office"}
+      - {tool: vol_netscan, args: {pid: "{pid}"}, why: "network connections of that process"}
+  - id: encoded_powershell
+    severity: high
+    attack: [T1059.001, T1027]
+    explanation: "PowerShell (PID {pid}) runs an encoded command, decoded by the server: {decoded}"
+    next_steps:
+      - {tool: vol_netscan, args: {pid: "{pid}"}, why: "does the process talk to the decoded address?"}
+      - {tool: vol_malfind, args: {pid: "{pid}"}, why: "injected code in the PowerShell process"}
+  - id: system_process_wrong_parent
+    severity: high
+    attack: [T1036]
+    explanation: "{name} (PID {pid}) has parent {parent_name} (PID {ppid}); expected {expected}."
+    next_steps:
+      - {tool: vol_dlllist, args: {pid: "{pid}"}, why: "image path and modules of the process"}
+      - {tool: vol_malfind, args: {pid: "{pid}"}, why: "injected code"}
+  - id: duplicate_singleton
+    severity: high
+    attack: [T1036]
+    explanation: "{count} running instances of {name}, which should be unique."
+    next_steps:
+      - {tool: vol_dlllist, args: {pid: "{pid}"}, why: "compare the image paths of the instances"}
+  - id: masquerade_name
+    severity: medium
+    attack: [T1036.005]
+    explanation: "{name} (PID {pid}) looks like the system binary {expected} (edit distance {count})."
+    next_steps:
+      - {tool: vol_dlllist, args: {pid: "{pid}"}, why: "image path of the look-alike process"}
+      - {tool: vol_cmdline, args: {pid: "{pid}"}, why: "command line of the look-alike process"}
+  - id: unusual_path
+    severity: medium
+    attack_system_name: [T1036.005]   # used when a system binary name runs from elsewhere
+    attack: []                          # executable in Temp/AppData/Public: no technique implied
+    explanation: "{name} (PID {pid}) runs from {path}."
+    next_steps:
+      - {tool: vol_malfind, args: {pid: "{pid}"}, why: "injected code"}
+      - {tool: vol_netscan, args: {pid: "{pid}"}, why: "network activity of the process"}
+  - id: external_connection
+    severity: medium            # high when the owning PID is already flagged by another rule
+    attack: [T1071]
+    explanation: "PID {pid} ({name}) has an {state} connection to public address {foreign}."
+    next_steps:
+      - {tool: vol_cmdline, args: {pid: "{pid}"}, why: "what started this connection"}
+      - {tool: vol_dlllist, args: {pid: "{pid}"}, why: "modules of the connected process"}
+  # Not one of the 7 process rules: matches IOCs extracted earlier (decoded commands) on this image.
+  - id: ioc_match
+    severity: high
+    attack: [T1071]
+    explanation: "Connection of PID {pid} ({name}) to {foreign} matches IOC {ioc} extracted earlier."
+    next_steps:
+      - {tool: vol_cmdline, args: {pid: "{pid}"}, why: "command line of the connected process"}

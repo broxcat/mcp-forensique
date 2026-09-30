@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""Fake Volatility 2.6 for unit tests: --info, -h, imageinfo, JSON output and a text-only plugin."""
+import json
+import sys
+
+INFO = """Volatility Foundation Volatility Framework 2.6
+
+Profiles
+--------
+Win7SP1x64            - A Profile for Windows 7 SP1 x64
+WinXPSP2x86           - A Profile for Windows XP SP2 x86
+
+Address Spaces
+--------------
+FileAddressSpace          - This is a direct file AS
+
+Plugins
+-------
+cmdline                    - Display process command-line arguments
+hashdump                   - Dumps passwords hashes (LM/NTLM) from memory
+imageinfo                  - Identify information for the image
+procdump                   - Dump a process to an executable file sample
+pslist                     - Print all running processes by following the EPROCESS lists
+"""
+GLOBAL = """Usage: Volatility - A memory forensics analysis platform.
+
+Options:
+  -h, --help            list all available options and their default values.
+  -f FILENAME, --filename=FILENAME
+                        Filename to use when opening an image
+  --profile=WinXPSP2x86
+                        Name of the profile to load
+  --plugins=PLUGINS     Additional plugin directories to use (colon separated)
+  -w, --write           Enable write support
+  --output=text         Output in this format
+  --output-file=OUTPUT_FILE
+                        Write output in this file
+"""
+PLUGIN_OPTS = {
+    "pslist": ["  -o OFFSET, --offset=OFFSET", "                        EPROCESS offset (in hex)",
+               "  -p PID, --pid=PID     Operate on these Process IDs (comma-separated)",
+               "  -P, --physical-offset", "                        Display physical offsets"],
+    "cmdline": ["  -o OFFSET, --offset=OFFSET", "  -p PID, --pid=PID     Operate on these PIDs"],
+    "procdump": ["  -D DUMP_DIR, --dump-dir=DUMP_DIR", "  -p PID, --pid=PID     PIDs"],
+}
+PSLIST = {"columns": ["Offset(V)", "Name", "PID", "PPID", "Thds", "Hnds", "Sess", "Wow64",
+                      "Start", "Exit"],
+          "rows": [[18446738026458983216, "System", 4, 0, 87, 547, -1, 0,
+                    "2019-03-22 05:31:55 UTC+0000", ""],
+                   [18446738026469089344, "smss.exe", 252, 4, 2, 30, -1, 0,
+                    "2019-03-22 05:31:55 UTC+0000", ""]]}
+HASHDUMP = {"columns": ["User", "RID", "LM", "NT"], "rows": [["Administrator", 500, "aad3", "31d6"]]}
+
+
+def opt(args, name):
+    return next((a.split("=", 1)[1] for a in args if a.startswith(name + "=")), None)
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if args == ["--info"]:
+        print(INFO)
+        return 0
+    plugin = next((a for a in args if a in ("pslist", "cmdline", "hashdump", "imageinfo",
+                                             "procdump")), "")
+    if "-h" in args:
+        print(GLOBAL + "\n".join(PLUGIN_OPTS.get(plugin, [])))
+        return 0
+    print("Volatility Foundation Volatility Framework 2.6", file=sys.stderr)
+    out, fmt = opt(args, "--output-file"), opt(args, "--output")
+    if plugin == "imageinfo":
+        doc = {"columns": ["Suggested Profile(s)"],
+               "rows": [["Win7SP1x64, Win7SP0x64, Win2008R2SP0x64"]]}
+    elif plugin == "pslist":
+        doc = PSLIST
+    elif plugin == "hashdump":
+        doc = HASHDUMP
+    elif plugin == "cmdline":  # text-only plugin: fails in JSON, works in text
+        if fmt == "json":
+            print("ERROR   : volatility.debug    : Plugin cmdline is unable to produce output "
+                  "in json", file=sys.stderr)
+            return 1
+        with open(out, "w") as fh:
+            fh.write("*" * 72 + "\nSystem pid:      4\n" + "*" * 72
+                     + "\npowershell.exe pid:   4312\nCommand line : powershell -enc AAAA\n")
+        return 0
+    else:
+        print(f"fake vol2: unsupported plugin {plugin}", file=sys.stderr)
+        return 1
+    pid = opt(args, "--pid")
+    if pid and "PID" in doc["columns"]:
+        i = doc["columns"].index("PID")
+        doc = {**doc, "rows": [r for r in doc["rows"] if str(r[i]) == pid]}
+    with open(out, "w") as fh:
+        json.dump(doc, fh)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

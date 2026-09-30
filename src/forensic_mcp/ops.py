@@ -17,9 +17,10 @@ from mcp.types import CallToolResult
 from . import audit, contract, evidence, results, safety, schemas
 from .config import Config, load_tools
 from .engines import volatility3
+from .memory_ops import TYPED_VOL3, MemoryOps
 from .redact import TOKEN, Pseudonymizer, case_for, pseudonymizer_for
 
-REPLAYABLE = {"memory_run"}
+REPLAYABLE = set(TYPED_VOL3) | {"vol3_run", "vol2_run", "vol2_imageinfo"}
 MAX_LISTED = 500
 
 
@@ -45,8 +46,8 @@ def _rows_digest(rows: list[dict[str, Any]]) -> str:
     return hashlib.sha256(audit.canonical(rows).encode()).hexdigest()
 
 
-class Engine:
-    """Operations bound to one Config."""
+class Engine(MemoryOps):
+    """Operations bound to one Config (memory operations in memory_ops.MemoryOps)."""
 
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
@@ -57,14 +58,15 @@ class Engine:
                           duration_s=round(time.monotonic() - t0, 3), outcome=outcome, **extra)
         return ev["audit_id"]
 
-    async def call(self, tool: str, params: dict[str, Any]) -> CallToolResult:
-        """Run op_<tool>, journal it, pseudonymise if required, validate and render."""
+    async def call(self, tool: str, params: dict[str, Any], conf: Any = None) -> CallToolResult:
+        """Run op_<tool>, journal it, pseudonymise if required, validate and render.
+        `conf` = the analyst answer injected by the server resolver (sensitive calls)."""
         t0 = time.monotonic()
         rec: dict[str, Any] = {"tool": tool, "params": params, "argv": [],
                                "engine": "forensic-mcp", "evidence_sha256": None,
                                "result_id": None, "exit_code": None, "output_sha256": None}
         try:
-            out: Outcome = await getattr(self, f"op_{tool}")(params)
+            out: Outcome = await getattr(self, f"op_{tool}")(params, conf)
             payload = out.payload
             if out.pseudo:
                 payload = out.pseudo.redact(payload)
@@ -128,18 +130,19 @@ class Engine:
                              **query)
 
     # ---- operations ----------------------------------------------------------------------
-    async def op_tool_status(self, params: dict[str, Any]) -> Outcome:
+    async def op_tool_status(self, params: dict[str, Any], conf: Any = None) -> Outcome:
         tools = load_tools(self.cfg.tools_file)
         try:
             vol3 = await volatility3.version(self.cfg)
         except Exception as exc:  # report, don't crash the listing
             vol3 = f"error: {exc}"
-        items = [{"tool": t, "installed": True, "exposed": t == "vol3",
-                  "version": vol3 if t == "vol3" else None} for t in sorted(tools)]
+        items = [{"tool": t, "installed": True, "exposed": t in ("vol3", "vol2"),
+                  "version": vol3 if t == "vol3" else ("2.6" if t == "vol2" else None)}
+                 for t in sorted(tools)]
         return self._listing("tool_status", params, items,
-                             f"{len(tools)} tools installed, exposed: vol3 {vol3}")
+                             f"{len(tools)} tools installed, exposed: vol3 {vol3}, vol2 2.6 (EZ tools: task 4.3)")
 
-    async def op_list_evidence(self, params: dict[str, Any]) -> Outcome:
+    async def op_list_evidence(self, params: dict[str, Any], conf: Any = None) -> Outcome:
         base = safety.jail_path(params.get("subdir") or ".", self.cfg.evidence_root)
         root = Path(self.cfg.evidence_root).resolve()
         reg = evidence.load_registry(self.cfg)
@@ -168,7 +171,7 @@ class Engine:
         note = f", {withheld} withheld (client cases, cloud mode)" if withheld else ""
         return self._listing("list_evidence", params, items, f"{len(items)} files{note}")
 
-    async def op_register_evidence(self, params: dict[str, Any]) -> Outcome:
+    async def op_register_evidence(self, params: dict[str, Any], conf: Any = None) -> Outcome:
         path = volatility3.image_path(self.cfg, self._restore_path(params["path"]))
         ps = self._policy(path)
         already = evidence.status(self.cfg, path)[0] != evidence.NOT_REGISTERED
@@ -183,7 +186,7 @@ class Engine:
                                    "verified": evidence.UNCHANGED}
         return out
 
-    async def op_verify_evidence(self, params: dict[str, Any]) -> Outcome:
+    async def op_verify_evidence(self, params: dict[str, Any], conf: Any = None) -> Outcome:
         path = volatility3.image_path(self.cfg, self._restore_path(params["path"]))
         ps = self._policy(path)
         r = evidence.verify_full(self.cfg, path, self.actor)
@@ -195,37 +198,7 @@ class Engine:
                                    "verified": evidence.UNCHANGED if ok else evidence.CHANGED}
         return out
 
-    async def op_memory_list_plugins(self, params: dict[str, Any]) -> Outcome:
-        plugins = await volatility3.list_plugins(self.cfg)
-        needle = (params.get("contains") or "").lower()
-        items = [{"name": k, **v} for k, v in plugins.items() if needle in k.lower()]
-        out = self._listing("memory_list_plugins", params, items, f"{len(items)} vol3 plugins")
-        out.engine = out.payload["engine"] = f"volatility3 {await volatility3.version(self.cfg)}"
-        return out
-
-    async def op_memory_run(self, params: dict[str, Any]) -> Outcome:
-        real = {**params, "path": self._restore_path(params["path"])}
-        path = volatility3.image_path(self.cfg, real["path"])
-        ps = self._policy(path)
-        ev = evidence.check_before_use(self.cfg, path, self.actor)
-        r = await volatility3.run(self.cfg, path, real["plugin"], real.get("pid"), ev["sha256"])
-        q = self._page(r["dir"])
-        engine = f"volatility3 {r['version']}"
-        status = "" if r["exit_code"] == 0 else f" (exit code {r['exit_code']})"
-        extra: dict[str, Any] = {"exit_code": r["exit_code"]}
-        if r["exit_code"] != 0:
-            extra["stderr_tail"] = r["stderr_tail"]
-        payload = contract.build(
-            tool="memory_run", engine=engine, plugin=r["plugin"], parameters=params,
-            evidence=ev, summary=f"{r['row_count']} rows from {r['plugin']}{status}",
-            rows=q["rows"], row_count=r["row_count"], limit=q["limit"],
-            result_id=r["result_id"], truncated=q["truncated"], extra=extra)
-        return Outcome(payload, real, argv=r["argv"], engine=engine, evidence_sha256=ev["sha256"],
-                       result_id=r["result_id"], exit_code=r["exit_code"],
-                       timed_out=r["timed_out"], output_exceeded=r["output_exceeded"],
-                       output_sha256=results.rows_sha256(r["dir"]), pseudo=ps)
-
-    async def op_query_results(self, params: dict[str, Any]) -> Outcome:
+    async def op_query_results(self, params: dict[str, Any], conf: Any = None) -> Outcome:
         d = results.result_dir(self.cfg.output_root, params["result_id"])
         meta = results.read_meta(d)
         src = Path(meta["input_path"]) if meta.get("input_path") else None
@@ -253,7 +226,7 @@ class Engine:
                        evidence_sha256=meta.get("input_sha256"),
                        output_sha256=_rows_digest(q["rows"]), pseudo=ps)
 
-    async def op_list_results(self, params: dict[str, Any]) -> Outcome:
+    async def op_list_results(self, params: dict[str, Any], conf: Any = None) -> Outcome:
         root = Path(self.cfg.output_root)
         items, withheld = [], 0
         for d in sorted(root.iterdir() if root.is_dir() else [], reverse=True):
@@ -275,14 +248,14 @@ class Engine:
         note = f", {withheld} withheld (client cases, cloud mode)" if withheld else ""
         return self._listing("list_results", params, items, f"{len(items)} results{note}")
 
-    async def op_replay(self, params: dict[str, Any]) -> Outcome:
+    async def op_replay(self, params: dict[str, Any], conf: Any = None) -> Outcome:
         orig = audit.read_event(self.cfg.audit_file, int(params["audit_id"]))
         if orig.get("type") != "tool_call" or orig.get("tool") not in REPLAYABLE:
             raise ValueError(f"audit_id {params['audit_id']} is not a replayable tool_call "
                              f"(replayable: {sorted(REPLAYABLE)})")
         if orig.get("outcome") != "ok":
             raise ValueError(f"audit_id {params['audit_id']} did not succeed; nothing to compare")
-        new = await getattr(self, f"op_{orig['tool']}")(orig["params"])
+        new = await getattr(self, f"op_{orig['tool']}")(orig["params"], conf)
         match = new.output_sha256 == orig["output_sha256"]
         item = {"original_audit_id": orig["audit_id"], "original_result_id": orig["result_id"],
                 "new_result_id": new.result_id, "original_output_sha256": orig["output_sha256"],

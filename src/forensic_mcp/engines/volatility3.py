@@ -1,7 +1,8 @@
-"""Volatility 3 engine (fast-track minimal version).
+"""Volatility 3 engine.
 
-No free-form extra args: only the typed `pid` option is passed (global options placed after the
-plugin name are still honoured by vol3, see CLAUDE.md Phase 3 findings).
+No free-form arguments (rule 8): the caller maps typed parameters to options that exist in the
+plugin's own help (`vol <plugin> -h`, parsed by plugin_options). Global options placed after
+the plugin name are still honoured by vol3 (CLAUDE.md §11), so none is ever passed through.
 """
 from __future__ import annotations
 
@@ -67,6 +68,37 @@ async def _help(cfg: Config) -> dict[str, Any]:
 async def list_plugins(cfg: Config) -> dict[str, dict[str, Any]]:
     """All vol3 plugins of the installed version (cached)."""
     return (await _help(cfg))["plugins"]
+
+
+# "  --pid [PID ...]  desc" / "  --offset OFFSET  desc" / "  --dump      desc" (metavar = one
+# space after the option, upper case; the description starts after 2+ spaces).
+_OPTION = re.compile(r"^  (--[a-z][\w-]*)(?: (\[[A-Z_]+(?: \.\.\.)?\]|[A-Z][A-Z_]*)(?=\s|$))?")
+_opt_cache: dict[str, dict[str, bool]] = {}
+
+
+def parse_plugin_options(text: str) -> dict[str, bool]:
+    """{"--pid": True (takes a value), "--dump": False (flag)} from `vol <plugin> -h`."""
+    opts: dict[str, bool] = {}
+    in_opts = False
+    for line in text.splitlines():
+        if line.strip() == "options:":
+            in_opts = True
+            continue
+        m = _OPTION.match(line) if in_opts else None
+        if m and m.group(1) != "--help":
+            opts[m.group(1)] = bool(m.group(2))
+    return opts
+
+
+async def plugin_options(cfg: Config, full: str) -> dict[str, bool]:
+    """Options of one plugin, read from its own help (cached per plugin)."""
+    if full not in _opt_cache:
+        proc = await asyncio.create_subprocess_exec(
+            *vol_cmd(cfg), "-q", full, "-h", stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT)
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
+        _opt_cache[full] = parse_plugin_options(out.decode(errors="replace"))
+    return _opt_cache[full]
 
 
 async def version(cfg: Config) -> str:
@@ -143,20 +175,19 @@ def image_path(cfg: Config, image: str) -> Path:
     return path
 
 
-async def run(cfg: Config, path: Path, plugin: str, pid: int | None,
+async def run(cfg: Config, path: Path, full: str, options: list[str],
               evidence_sha256: str) -> dict[str, Any]:
-    """Run one vol3 plugin on an already jailed and registered image.
-    Returns run facts: result_id, dir, plugin, argv, version, exit_code, timed_out,
-    output_exceeded, duration, row_count, stderr_tail."""
-    if pid is not None and (not isinstance(pid, int) or isinstance(pid, bool) or pid < 0):
-        raise ValueError("pid must be a non-negative integer")
-    full = resolve_plugin(plugin, await list_plugins(cfg))
+    """Run one resolved vol3 plugin on an already jailed and registered image, with options
+    already validated against plugin_options(). Returns run facts: result_id, dir, plugin,
+    argv, version, exit_code, timed_out, output_exceeded, duration, row_count, stderr_tail."""
+    known = await plugin_options(cfg, full)
+    for opt in options:
+        if opt.startswith("-") and opt not in known:
+            raise ValueError(f"{full} has no option {opt}")
     rid, d = results.new_result(cfg.output_root, "vol3_" + full.rsplit(".", 1)[0])
     files = d / "files"
     files.mkdir()
-    argv = [*vol_cmd(cfg), "-q", "-r", "json", "-f", str(path), "-o", str(files), full]
-    if pid is not None:
-        argv += ["--pid", str(pid)]
+    argv = [*vol_cmd(cfg), "-q", "-r", "json", "-f", str(path), "-o", str(files), full, *options]
     start = time.time()
     rr = await runner.run_process(argv, d / "stdout.txt", d / "stderr.txt", cfg.timeout_seconds,
                                   max_output_bytes=cfg.max_output_mb * 1024 * 1024)

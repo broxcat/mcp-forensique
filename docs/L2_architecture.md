@@ -343,4 +343,42 @@ $MFT non exposés, aucun garde-fou de confidentialité actif.
 4. **Épinglage de la chaîne d'approvisionnement** : outils Zimmerman, `uvicorn`, `pyyaml`,
    image `open-webui:main`, sans version ni empreinte ; à épingler avant M3.
 5. **Nettoyage de l'existant** : retrait de `max_upload_gb`, `validate_args` et
-   `FORBIDDEN_FLAGS` (inutilisés) en 4.1.
+   `FORBIDDEN_FLAGS` (inutilisés) en 4.1. *Décidé (J3) et fait en 4.1.*
+
+### Décision J3 — extension de périmètre (30/09/2026, L. Plancke)
+
+**Décision.** Le serveur expose **Volatility 2 et Volatility 3 avec tous leurs plugins** et la
+**suite complète des outils Eric Zimmerman en ligne de commande (17 outils)**. Objectif :
+investiguer une image disque et récupérer tous les artefacts (prefetch, EVTX, $MFT, registre,
+historique de navigation, shellbags, jump lists, SRUM, corbeille…).
+
+**Règles maintenues.**
+- Aucun argument libre (règle 8) : le nom du plugin ou de l'outil vient de la liste découverte
+  (`vol -h`, `--info` de vol2) ou du registre des outils Zimmerman ; chaque option est un
+  paramètre typé (`pid`, `offset`, `key`…) traduit vers l'option réelle du plugin, lue dans son
+  aide (`vol <plugin> -h`), jamais inventée.
+- Volatility 2 : `--plugins` (chargement de code Python arbitraire), `-w/--write` (écriture dans
+  l'image) et `-D/--dump-dir` (écriture de fichiers) restent interdits ; les plugins vol2 qui
+  n'ont de sortie qu'avec `-D` sont refusés.
+- Plugins sensibles (identifiants : `hashdump`, `lsadump`, `cachedump` ; extractions :
+  `dumpfiles`, `procdump`, `pedump`, `--dump`…) : classe **action**, exécutés seulement après
+  confirmation humaine nominative, journalisés dans tous les cas.
+
+**Écarts au CDC.** Les plugins Linux/macOS deviennent accessibles alors que l'analyse
+d'hôtes Linux/macOS reste hors périmètre du CDC : ils ne sont ni testés ni évalués. La surface
+d'attaque augmente (Volatility 2 n'est plus maintenu, plus d'analyseurs de formats hostiles) :
+à traiter dans L7.
+
+**Impact sur le Gantt (proposition, à valider).**
+
+| Tâche | Avant | Proposition |
+|---|---|---|
+| 4.2 Volatility (vol2 + vol3, tous plugins) | J8 | J8 (périmètre élargi) |
+| 4.3a Registre EZ + `evtx_query` (EvtxECmd) + `mft_search` (MFTECmd) | J9 (4.3) | J9 (08/10) |
+| 4.3b Les 15 autres outils EZ (typés) + `timeline` | — | J10 (09/10) |
+| 4.3c Extraction depuis une image disque (modification du Dockerfile, accord préalable) | — | J11 (12/10) |
+| 4.4 Pagination, `record_finding`, test de référence, README — **M4** | J10 | J11–J12 (M4 au 13/10) |
+| P5 Skill playbook | J11–J12 | J13 |
+| P6 Assistant de crise — **M5** gel des fonctionnalités | J13 | J14 (EF-15, priorité C, abandonné) |
+| P7 Évaluation / P8 L7 | J14–J15 / J16 | J15–J16, L7 rédigé en parallèle |
+| P9 Démonstration | J17–J18 | inchangé |

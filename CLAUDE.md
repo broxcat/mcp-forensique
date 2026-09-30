@@ -25,8 +25,16 @@ from the timeline; (5) LLM-specific risks and guardrails documented.
 
 **Out of scope (CDC):** automatic actions on infrastructure (isolation, blocking), Linux/macOS
 host analysis, production SIEM integration, malware reverse engineering.
-Consequently **Volatility 2 and the Zimmerman tools other than EvtxECmd and MFTECmd are not
-exposed** by the server (they stay installed in the image, unused).
+
+**Décision J3 — extension de périmètre (30/09/2026, L. Plancke):** the server exposes
+**Volatility 2 and Volatility 3 with all their plugins** and the **full Eric Zimmerman CLI suite
+(17 tools)**, to investigate a disk image and recover every artefact (prefetch, EVTX, $MFT,
+registry, browser history, shellbags, jump lists, SRUM, recycle bin…). Rule 8 still holds:
+plugin/tool names come from the discovered list or the registry, every option is a typed
+parameter. vol2 `--plugins`, `-w/--write`, `-D/--dump-dir` stay forbidden (code execution /
+writes). Sensitive plugins (credentials, dumps) run only after human confirmation. Linux/macOS
+plugins become reachable although Linux/macOS host analysis stays out of the CDC scope (not
+tested, not evaluated). Gantt impact: see §8 and L2 §12.
 
 ---
 
@@ -34,7 +42,8 @@ exposed** by the server (they stay installed in the image, unused).
 
 ```
 Today: J3 (30/09) — 4.1 done ahead of plan (P3 defensive part still open, see below)
-Current task: 4.1 DONE, waiting for the user; next 4.2 (vol3 typed tools + allowlist) — see §9
+Current task: 4.2 DONE, waiting for the user; next 4.3a (EZ registry, evtx_query, mft_search) —
+  only after the user approves the 4.3 / disk-image plan and the Gantt split (§8, L2 §12)
 Next milestones: M2 architecture validated J4 (01/10, livrable L2) · M3 evidence ready J6 (05/10)
                  · M4 MCP server functional J10 (09/10) · M5 feature freeze J13 (14/10)
 Existing code (built before this CDC-aligned plan, to be reconciled in task 2.1):
@@ -67,6 +76,22 @@ Done: 4.1 (30/09) — socle: new modules schemas.py, contract.py, evidence.py, r
   FORBIDDEN_FLAGS, sha256 cache removed). pytest 31 passed (tests/test_socle.py = 14 new).
   Real sample: memory_run windows.info 1st call 61.5 s (registration hash + vol3), 2nd 3.2 s,
   23 rows, schema OK, verify_report ok (5 lines). Server restarted: /health ok, /mcp 401.
+Done: 4.2 (30/09) — Décision J3 recorded (§1, §8, L2 §12, compliance §5). 19 tools: typed
+  vol_pslist/pstree/cmdline/netscan/malfind/dlllist/printkey, vol3_run (any plugin, typed pid/
+  offset/key/dump checked against `vol <plugin> -h`), vol_list_plugins, vol2_list_plugins,
+  vol2_imageinfo (cached per image sha256 in output/.toolcache), vol2_run (profile from --info,
+  JSON or text fallback, -D plugins refused). Sensitive plugins -> SDK resolver + form
+  elicitation (named analyst), action_request/action_confirmed journaled. Analyzers:
+  rules/process_rules.yaml (7 rules + ioc_match), decode.py, per-image context in
+  output/.analysis/<sha>.json. New modules memory_ops.py, analyzers.py, decode.py,
+  engines/volatility2.py; fake tests/fakebin/vol2. pytest 58 passed.
+  Real check Triage-Memory.mem (vol3 2.28.2 / vol2 2.6, Win7SP1x64), all schema-valid, journal ok:
+  vol_pslist 65 rows 6.4 s; vol_pstree 65 / 5.5 s; vol_cmdline 65 / 5.1 s; vol_netscan 78 /
+  87.4 s; vol_malfind 36 / 94.3 s; vol_dlllist pid 4 0 rows / 5.2 s; vol_printkey Run 12 /
+  8.4 s; vol3_run windows.svcscan 948 / 30.8 s; vol2 pslist 65 / 21.5 s; vol2 cmdline 65 /
+  18.5 s; vol2 netscan 80 / 64.9 s. After FP fixes the only process anomaly is unusual_path on
+  UWkpjFjDzM.exe (PID 3496, AppData\Local\Temp — the known malicious process of the sample);
+  netscan: 2 external_connection medium (OUTLOOK.EXE -> 52.x:443).
 Decisions recorded (user, 30/09): 3 = deny Bash in the analysis workspace (Claude Code setting,
   analyst side, not implemented in this repo); 5 = cleanup approved. Points 1, 2, 4 of L2 §12
   still open (default transport, llm_mode per transport, version pinning).
@@ -131,7 +156,7 @@ Notes:
 |---|---|
 | 1. AI client | Analyst + MCP client: **Claude Code** (cloud LLM) and the same client or **Open WebUI** on a local **Ollama** model (ET-07); skill playbook + crisis assistant |
 | 2. MCP server | `forensic-mcp`, Python 3.12, official SDK `mcp==2.2.0`. **Reference transport: stdio (ET-01)** via `docker exec -i forensic-mcp python -m forensic_mcp --stdio` |
-| 3. Forensic tools | Volatility 3, EvtxECmd, MFTECmd, run as sub-processes with timeout and bounded output (ET-02) |
+| 3. Forensic tools | Volatility 3, EvtxECmd, MFTECmd (CDC) + Volatility 2 and the 15 other EZ tools (Décision J3), run as sub-processes with timeout and bounded output (ET-02) |
 | 4. Storage | `/evidence` read-only mount; `/output` results; append-only JSONL audit journal |
 
 Deployment: Windows analyst PC + **one Linux container** (Debian, Docker Desktop). This is the
@@ -249,6 +274,15 @@ and validate every tool response against it in tests.
 | EF-06 read-only | M | done (verify 4.1) | EF-14 containment suggestions | S | 6.1 |
 | EF-07 lab SIEM query | C | only if time after M5 | EF-15 stakeholder board | C | 6.1 if time |
 | EF-08 collection checklist | M | 5.1 | ET-01…ET-09 | — | see §4, 4.x, 5.x, 7.x |
+| EXT-01 vol2 + all vol3 plugins (Décision J3) | M (user) | 4.2 | EXT-02 17 EZ tools + disk image (Décision J3) | M (user) | 4.3a/b/c |
+
+**Gantt impact of the Décision J3 (proposal, to be approved):** 4.3 is split —
+4.3a (J9, 08/10) EZ registry + EvtxECmd `evtx_query` + MFTECmd `mft_search`;
+4.3b (J10, 09/10) the 15 other EZ tools as typed wrappers + `timeline`;
+4.3c (J11, 12/10) disk-image extraction (needs a Dockerfile change, approval first).
+Then 4.4 → J11–J12 (M4 moves from J10 to J12, 13/10), P5 skill → J13, P6 crisis → J14
+(M5 feature freeze J14, one day late, EF-15 dropped), P7 evaluation → J15–J16 with the L7 draft
+written in parallel, P9 unchanged (J17–J18).
 
 ---
 
@@ -386,7 +420,10 @@ statements and rejects one with a wrong IP.
   cite a wrong EPROCESS/VAD offset. Mitigation: hex strings for ints > 2^53−1.
 - Volatility 2 accepts `--plugins=<dir>` (loads Python code) and `-w` after the plugin name:
   free-form arguments = code execution through prompt injection. Mitigation: typed parameters,
-  per-plugin allowlist, vol2 not exposed.
+  per-plugin allowlist. Since the Décision J3 vol2 IS exposed: `--plugins` (loads arbitrary
+  Python = code execution), `-w/--write` (write support on the image) and `-D/--dump-dir`
+  (writes files) are never passed; vol2 plugins that only work with `-D` are refused.
+  Residual: the attack surface of vol2 itself (unmaintained Python 2 code parsing hostile images).
 - vol3 rejects global options after the plugin but still applies some (log file written).
 - 4698 exists only if "Other Object Access Events" is audited: "no event" ≠ "no persistence".
 - Secret (`WEBUI_SECRET_KEY`) displayed in the coding agent's context when it edited `.env`:
@@ -424,3 +461,15 @@ statements and rejects one with a wrong IP.
   lab "C2" address was first tokenised as internal (`IP_INT`). Mitigation: explicit RFC 1918 list.
 - Pseudonymisation limits (4.1): names recognised only in host/user columns or declared in
   case.toml; IPv6 and error messages not pseudonymised.
+- Human confirmation depends on the client (4.2): MCP 2026-07-28 forbids server-initiated
+  requests, so `ctx.elicit()` fails (`NoBackChannelError`); confirmation must go through the
+  SDK resolver (`Resolve` + `Elicit`, sent as an `input_required` round). A client without form
+  elicitation can never approve: sensitive plugins are then refused (safe default, but a
+  usability cost; Open WebUI support unverified).
+- Rule false positives on the real Win7 sample (4.2): `iexplore.exe` flagged as a look-alike of
+  `explorer.exe` (edit distance 2) and `\??\C:\Windows\system32\conhost.exe` as an unusual path.
+  Fixed (exclusion list, NT prefix), but a rule table produces confident-looking anomalies: an
+  anomaly is a lead to verify, never a finding.
+- Encoded blobs defeat pseudonymisation: the base64 of an encoded PowerShell command still
+  carries the real IP/URL in cloud mode (the server-decoded text is pseudonymised, the raw
+  argument is not).

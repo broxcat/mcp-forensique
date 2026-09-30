@@ -15,12 +15,14 @@ SHA = "a" * 64
 
 async def _run(cfg, plugin, pid=None):
     path = volatility3.image_path(cfg, "mem.raw")
-    return await volatility3.run(cfg, path, plugin, pid, SHA)
+    full = volatility3.resolve_plugin(plugin, await volatility3.list_plugins(cfg))
+    opts = ["--pid", str(pid)] if pid is not None else []
+    return await volatility3.run(cfg, path, full, opts, SHA)
 
 
 async def test_plugins_parsed_and_resolved(cfg) -> None:
     plugins = await volatility3.list_plugins(cfg)
-    assert "windows.netscan.NetScan" in plugins and len(plugins) == 9
+    assert "windows.netscan.NetScan" in plugins and len(plugins) == 12
     assert plugins["windows.malfind.Malfind"]["deprecated"]
     assert await volatility3.version(cfg) == "2.28.2"
     r = volatility3.resolve_plugin
@@ -49,8 +51,9 @@ async def test_run_pid_and_jail(cfg) -> None:
     assert out["row_count"] == 1 and rows[0]["ImageFileName"] == "UWkpjFjDzM.exe"
     with pytest.raises(safety.SafetyError):
         volatility3.image_path(cfg, "../tools.toml")
-    with pytest.raises(ValueError):
-        await _run(cfg, "windows.pslist", pid=-1)
+    with pytest.raises(ValueError, match="no option --offset"):
+        path = volatility3.image_path(cfg, "mem.raw")
+        await volatility3.run(cfg, path, "windows.pslist.PsList", ["--offset", "1"], SHA)
 
 
 async def test_big_int_addresses_are_exact_hex(cfg) -> None:
@@ -73,11 +76,11 @@ async def test_mcp_lists_tools_and_runs(cfg) -> None:
     async with Client(mcp) as client:
         names = sorted(t.name for t in (await client.list_tools()).tools)
         assert names == sorted(server.TOOL_NAMES)
-        r = await client.call_tool("memory_run", {"path": "mem.raw", "plugin": "netscan"})
-        # fake stub fails on netscan: reported as a result with exit code + stderr, not a crash
+        r = await client.call_tool("vol3_run", {"path": "mem.raw", "plugin": "banners"})
+        # fake stub fails on banners: reported as a result with exit code + stderr, not a crash
         assert not r.is_error and r.structured_content["exit_code"] == 1
         assert "unsupported plugin" in r.structured_content["stderr_tail"]
-        r = await client.call_tool("memory_run", {"path": "mem.raw", "plugin": "windows.pslist"})
+        r = await client.call_tool("vol_pslist", {"path": "mem.raw"})
         rid = r.structured_content["result_id"]
         q = await client.call_tool("query_results", {"result_id": rid, "contains": "uwkp"})
         assert q.structured_content["row_count"] == 1
@@ -100,7 +103,7 @@ def test_http_auth_health_and_home(cfg) -> None:
     with TestClient(app, base_url="http://localhost:8000") as c:
         assert c.get("/health").status_code == 200
         home = c.get("/")
-        assert home.status_code == 200 and "memory_run" in home.text
+        assert home.status_code == 200 and "vol3_run" in home.text
         assert c.post("/mcp", json=init, headers=hdrs).status_code == 401
         assert c.post("/mcp", json=init, headers={**hdrs, "Authorization": "Bearer nope"}
                       ).status_code == 401

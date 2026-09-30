@@ -93,6 +93,36 @@
     },
     "anomalies": {"type": "array", "items": {"$ref": "#/$defs/anomaly"}},
     "next_steps": {"type": "array", "items": {"$ref": "#/$defs/next_step"}},
+    "iocs": {
+      "description": "IOCs extracted by the server (e.g. from a decoded PowerShell command).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "value", "_row", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {"enum": ["url", "ip", "domain"]},
+          "value": {"type": "string"},
+          "_row": {"type": "integer", "minimum": 1},
+          "source": {"enum": ["decoded", "cell"]}
+        }
+      }
+    },
+    "decoded": {
+      "description": "Encoded PowerShell decoded by the server (base64 -> UTF-16LE, <= 2 layers).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["_row", "field", "layers", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "_row": {"type": "integer", "minimum": 1},
+          "field": {"type": "string"},
+          "layers": {"type": "integer", "minimum": 1, "maximum": 2},
+          "text": {"type": "string"}
+        }
+      }
+    },
     "truncated": {
       "description": "True when cells or the response were cut (max_cell_chars, max_response_kb).",
       "type": "boolean"
