@@ -1,0 +1,10 @@
+# Files are executed inside a Linux container: keep LF line endings everywhere.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.raw binary
+*.mem binary
+*.vmem binary
+*.dmp binary
+*.evtx binary
+*.zip binary

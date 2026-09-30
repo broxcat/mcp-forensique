@@ -1,0 +1,20 @@
+# Config used inside the container (paths are container paths).
+evidence_root = "/evidence"
+output_root = "/output"
+tools_file = "/app/tools.toml"
+vol3_symbols_dir = "/home/analyst/.cache/volatility3/symbols"
+# Inside the container the server must listen on all interfaces; docker-compose.yml
+# publishes it on the Windows loopback only (127.0.0.1:8000).
+http_host = "0.0.0.0"
+http_port = 8000
+api_token_file = "/app/.secrets/api_token"
+# Host headers accepted on /mcp (DNS-rebinding protection). "forensic:8000" = other containers
+# of this compose project (Open WebUI) reaching the server by its service name.
+allowed_hosts = ["localhost:8000", "127.0.0.1:8000", "forensic:8000"]
+# Browser origins allowed to call /mcp (the Open WebUI page runs on http://localhost:3000).
+allowed_origins = ["http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:3000"]
+max_upload_gb = 64
+timeout_seconds = 1800
+max_rows_returned = 100
+max_cell_chars = 400
+llm_mode = "local"

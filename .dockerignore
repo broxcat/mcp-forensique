@@ -1,0 +1,12 @@
+.venv/
+venv/
+evidence/
+output/
+.secrets/
+.git/
+**/__pycache__/
+*.raw
+*.mem
+*.vmem
+*.dmp
+*.E01

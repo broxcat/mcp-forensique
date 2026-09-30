@@ -1,0 +1,27 @@
+Description:
+  rla version 2026.5.0
+  
+  Author: Eric Zimmerman (saericzimmerman@gmail.com)
+  https://github.com/EricZimmerman/RECmd
+  
+  Note: Enclose all strings containing spaces with double quotes
+  
+  Example: rla.exe -f "C:\Temp\UsrClass 1.dat" --out C:\temp
+  	   rla.exe -d "D:\temp\" --out c:\temp
+  
+
+Usage:
+  rla [options]
+
+Options:
+  -f <f>          File to process. Either this or -d is required
+  -d <d>          Directory to recursively process. Either this or -f is required
+  --out <out>     Directory to save updated hives to. Only dirty hives with logs applied will end up in --out directory
+  --ca            When true, always copy hives to --out directory, even if they aren't dirty
+  --cn            When true, compress names for profile based hives
+  --nop           When true, do not recreate paths where the hives were located
+  --debug         Show debug information during processing
+  --trace         Show trace information during processing
+  -?, -h, --help  Show help and usage information
+  --version       Show version information
+

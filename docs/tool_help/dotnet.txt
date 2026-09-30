@@ -1,0 +1,1 @@
+Microsoft.NETCore.App 9.0.20 [/home/analyst/.dotnet/shared/Microsoft.NETCore.App]

@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""Fake `vol` for unit tests: prints canned help or canned JSON, never reads the image."""
+import json
+import sys
+
+HELP = """Volatility 3 Framework 2.28.2
+usage: vol [-h] [-c CONFIG] [-q] [-f FILE] [-r RENDERER] PLUGIN ...
+
+Plugins:
+  For plugin specific options, run 'vol <plugin> --help'
+
+  PLUGIN
+    banners.Banners     Attempts to identify potential linux banners in an
+                        image
+    linux.pslist.PsList
+                        Lists the processes present in a particular linux
+                        memory image.
+    windows.info.Info   Show OS & kernel details of the memory sample being
+                        analyzed.
+    windows.malfind.Malfind
+                        Lists process memory ranges that potentially contain
+                        injected code (deprecated).
+    windows.malware.malfind.Malfind
+                        Lists process memory ranges that potentially contain
+                        injected code.
+    windows.netscan.NetScan
+                        Scans for network objects present in a particular
+                        windows memory image.
+    windows.pslist.PsList
+                        Lists the processes present in a particular windows
+                        memory image.
+    windows.pstree.PsTree
+                        Plugin for listing processes in a tree based on their
+                        parent process ID.
+
+The following plugins could not be loaded (use -vv to see why):
+volatility3.plugins.yarascan
+"""
+
+PSTREE = [{"PID": 4, "ImageFileName": "System", "__children": [
+    {"PID": 252, "ImageFileName": "smss.exe", "__children": [
+        {"PID": 340, "ImageFileName": "csrss.exe", "__children": []}]}]},
+    {"PID": 500, "ImageFileName": "explorer.exe", "__children": []}]
+PSLIST = [{"PID": 4, "ImageFileName": "System", "Offset(V)": 0xFFFFFA800577BA10,
+           "Threads": 87, "__children": []},
+          {"PID": 3496, "ImageFileName": "UWkpjFjDzM.exe", "Offset(V)": 0xFFFFFA8004E1B060,
+           "Threads": 9, "__children": []}]
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if "-h" in args:
+        print(HELP)
+        return 0
+    plugin = next((a for a in args if a.startswith(("windows.", "linux.", "banners."))), "")
+    if plugin == "windows.pstree.PsTree":
+        rows = PSTREE
+    elif plugin == "windows.pslist.PsList":
+        rows = PSLIST
+        if "--pid" in args:
+            pid = int(args[args.index("--pid") + 1])
+            rows = [r for r in rows if r["PID"] == pid]
+    elif plugin == "windows.info.Info":
+        rows = [{"Variable": "NTBuildLab", "Value": "7601.18741.amd64fre", "__children": []}]
+    else:
+        print(f"fake vol: unsupported plugin {plugin}", file=sys.stderr)
+        return 1
+    print(json.dumps(rows))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

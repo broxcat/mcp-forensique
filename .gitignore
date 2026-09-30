@@ -1,0 +1,14 @@
+.venv/
+forensic-mcp.toml
+output/
+evidence/
+*.raw
+*.mem
+*.vmem
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.env
+.secrets/
+inbox/
+.scratch/

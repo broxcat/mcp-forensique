@@ -1,0 +1,44 @@
+services:
+  forensic:
+    build: .
+    image: forensic-mcp:dev
+    container_name: forensic-mcp
+    init: true
+    working_dir: /app
+    # MCP server over Streamable HTTP (http://localhost:8000/mcp), token in /app/.secrets/api_token.
+    command: ["python", "-m", "forensic_mcp", "--http"]
+    volumes:
+      # Project code, edited from Windows.
+      - ./:/app
+      # Evidence: mounted READ-ONLY at kernel level (the container cannot modify it).
+      # Set EVIDENCE_DIR in .env to your Windows evidence folder, e.g. C:/cases/evidence
+      - ${EVIDENCE_DIR:-./evidence}:/evidence:ro
+      # Results (CSV/JSON): visible on Windows, open them with Timeline Explorer.
+      - ${OUTPUT_DIR:-./output}:/output
+      # Volatility 3 symbol cache, kept between rebuilds.
+      - vol3-cache:/home/analyst/.cache/volatility3
+    ports:
+      # Published on the Windows loopback only: http://localhost:8000 (Phase 7).
+      - "127.0.0.1:8000:8000"
+    cap_drop: [ALL]
+    security_opt:
+      - "no-new-privileges:true"
+
+  webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    ports:
+      - "127.0.0.1:3000:8080"
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?set WEBUI_SECRET_KEY in .env}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - open-webui:/app/backend/data
+    depends_on:
+      - forensic
+
+volumes:
+  vol3-cache:
+  open-webui:

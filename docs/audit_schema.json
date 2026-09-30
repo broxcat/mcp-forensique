@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forensic-mcp.local/schemas/audit.json",
+  "title": "forensic-mcp audit journal line",
+  "description": "One line of /output/audit.jsonl (CLAUDE.md §6; CDC ET-04, objective 3). The line is an envelope; `body` is the canonical JSON text of the event (the hash is computed over these exact characters, so it is kept as a string). Validate the envelope with this schema, then json.loads(body) against #/$defs/event.",
+  "type": "object",
+  "required": ["prev_hash", "body", "hash"],
+  "additionalProperties": false,
+  "properties": {
+    "prev_hash": {"description": "hash of the previous line, 64 zeros for the first line.", "$ref": "#/$defs/sha256"},
+    "body": {
+      "type": "string",
+      "contentMediaType": "application/json",
+      "contentSchema": {"$ref": "#/$defs/event"}
+    },
+    "hash": {"description": "sha256(prev_hash + body), hex.", "$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "utc": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    },
+    "actor": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["server", "llm", "analyst"]},
+        "name": {"description": "Mandatory for analyst (nominative validation).", "type": "string"},
+        "client": {"description": "MCP client name/version, or LLM mode (local/cloud).", "type": "string"}
+      },
+      "if": {"properties": {"kind": {"const": "analyst"}}},
+      "then": {"required": ["kind", "name"]}
+    },
+    "citation": {
+      "type": "object",
+      "required": ["result_id", "_row", "field", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "result_id": {"type": "string"},
+        "_row": {"type": "integer", "minimum": 1},
+        "field": {"type": "string"},
+        "value": {"type": ["string", "integer", "number", "boolean", "null"]}
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": ["audit_id", "ts_utc", "type", "actor"],
+      "properties": {
+        "audit_id": {"description": "1-based sequence number, equals the line number.", "type": "integer", "minimum": 1},
+        "ts_utc": {"$ref": "#/$defs/utc"},
+        "type": {
+          "enum": ["evidence_registered", "evidence_verified", "tool_call", "suggestion",
+                   "validation", "action_request", "action_confirmed", "crisis_event"]
+        },
+        "actor": {"$ref": "#/$defs/actor"},
+        "case": {"description": "Case / host identifier, e.g. WS-042.", "type": "string"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"type": {"enum": ["evidence_registered", "evidence_verified"]}}},
+          "then": {
+            "required": ["path", "size", "sha256", "stage"],
+            "properties": {
+              "path": {"type": "string"},
+              "size": {"type": "integer", "minimum": 0},
+              "sha256": {"$ref": "#/$defs/sha256"},
+              "mtime_ns": {"type": "integer"},
+              "stage": {"enum": ["registration", "before", "after", "quick_check"]},
+              "matches_registration": {"type": "boolean"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"type": {"const": "tool_call"}}},
+          "then": {
+            "required": ["tool", "params", "argv", "engine", "evidence_sha256", "result_id",
+                         "exit_code", "duration_s", "output_sha256"],
+            "properties": {
+              "tool": {"type": "string"},
+              "params": {"type": "object"},
+              "argv": {"type": "array", "items": {"type": "string"}},
+              "engine": {"description": "Tool name and version.", "type": "string"},
+              "evidence_sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+              "result_id": {"type": ["string", "null"]},
+              "exit_code": {"type": ["integer", "null"]},
+              "timed_out": {"type": "boolean"},
+              "duration_s": {"type": "number", "minimum": 0},
+              "output_sha256": {"description": "sha256 of rows.jsonl, compared by replay().", "oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+              "replay_of": {"description": "audit_id of the original call when this is a replay.", "type": "integer", "minimum": 1},
+              "replay_match": {"type": "boolean"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"type": {"const": "suggestion"}}},
+          "then": {
+            "required": ["finding_id", "kind", "text", "citations", "confidence", "cross_check"],
+            "properties": {
+              "finding_id": {"type": "string", "pattern": "^F-[0-9]{4,}$"},
+              "kind": {"enum": ["fact", "hypothesis", "recommendation"]},
+              "text": {"type": "string", "minLength": 1},
+              "citations": {"type": "array", "items": {"$ref": "#/$defs/citation"}},
+              "confidence": {"enum": ["low", "medium", "high"]},
+              "attack": {"type": "array", "items": {"type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$"}},
+              "cross_check": {
+                "type": "object",
+                "required": ["status"],
+                "properties": {
+                  "status": {"enum": ["passed", "failed", "not_applicable"]},
+                  "mismatches": {"type": "array", "items": {"type": "string"}}
+                }
+              },
+              "status": {"enum": ["à valider", "rejected_by_server"]}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"type": {"const": "validation"}}},
+          "then": {
+            "required": ["finding_id", "decision"],
+            "properties": {
+              "finding_id": {"type": "string", "pattern": "^F-[0-9]{4,}$"},
+              "decision": {"enum": ["validated", "rejected"]},
+              "comment": {"type": "string"},
+              "actor": {"properties": {"kind": {"const": "analyst"}}, "required": ["name"]}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"type": {"enum": ["action_request", "action_confirmed"]}}},
+          "then": {
+            "required": ["action_id", "tool", "params"],
+            "properties": {
+              "action_id": {"type": "string"},
+              "tool": {"type": "string"},
+              "params": {"type": "object"},
+              "decision": {"enum": ["approved", "denied", "expired"]},
+              "channel": {"enum": ["elicitation", "approvals_page"]}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"type": {"const": "crisis_event"}}},
+          "then": {
+            "required": ["time_utc", "kind", "description", "owner", "source"],
+            "properties": {
+              "time_utc": {"$ref": "#/$defs/utc"},
+              "kind": {"enum": ["event", "decision", "action"]},
+              "description": {"type": "string", "minLength": 1},
+              "owner": {"type": "string"},
+              "source": {"description": "finding_id, audit_id or free text origin.", "type": "string"}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

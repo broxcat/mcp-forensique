@@ -1,0 +1,24 @@
+Description:
+  SumECmd version 2026.5.0.0
+  
+  Author: Eric Zimmerman (saericzimmerman@gmail.com)
+  https://github.com/EricZimmerman/Sum
+  
+  Examples: SumECmd.exe -d "C:\Temp\sum" --csv "C:\Temp\" 
+  	 
+  	     Short options (single letter) are prefixed with a single dash. Long commands are prefixed with two dashes
+  
+
+Usage:
+  SumECmd [options]
+
+Options:
+  -d <d>          Directory to process, looking for SystemIdentity.mdb, Current.mdb, etc. Required.
+  --csv <csv>     Directory to save CSV formatted results to. Be sure to include the full path in double quotes
+  --wd            Generate CSV with day level details. Default is TRUE
+  --dt <dt>       The custom date/time format to use when displaying time stamps. See https://goo.gl/CNVq0k for options [default: yyyy-MM-dd HH:mm:ss]
+  --debug         Show debug information during processing
+  --trace         Show trace information during processing
+  -?, -h, --help  Show help and usage information
+  --version       Show version information
+
