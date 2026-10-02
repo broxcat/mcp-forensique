@@ -30,8 +30,11 @@ def build(*, tool: str, engine: str, parameters: dict[str, Any], summary: str,
           rows: list[dict[str, Any]], row_count: int, offset: int = 0, limit: int | None = None,
           plugin: str | None = None, evidence: dict[str, Any] | None = None,
           result_id: str | None = None, truncated: bool = False,
-          extra: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Assemble a response; `rows` already carry `_row`. audit_id is set after journaling."""
+          extra: dict[str, Any] | None = None,
+          next_call: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Assemble a response; `rows` already carry `_row`. audit_id is set after journaling.
+    next_call = {"tool", "args"} to repeat for the next page (EF-04); default:
+    query_results(result_id). The offset/limit of the next page are filled in here."""
     limit = max(1, limit if limit is not None else len(rows) or 1)
     end = offset + len(rows)
     columns: list[str] = ["_row"]
@@ -42,11 +45,23 @@ def build(*, tool: str, engine: str, parameters: dict[str, Any], summary: str,
         "parameters": parameters, "timestamp_utc": utc_now().split(".")[0] + "Z",
         "evidence": evidence, "summary": summary, "row_count": row_count, "columns": columns,
         "rows": rows, "page": {"offset": offset, "limit": limit,
-                               "next_offset": end if end < row_count else None},
+                               "next_offset": end if end < row_count else None,
+                               "next_call": _next_call(next_call, result_id, end, limit)
+                               if end < row_count else None},
         "raw_output": raw_output(result_id), "anomalies": [], "next_steps": [],
         "truncated": truncated, "untrusted_notice": NOTICE}
     payload.update(extra or {})
     return payload
+
+
+def _next_call(call: dict[str, Any] | None, result_id: str | None, offset: int,
+               limit: int) -> dict[str, Any] | None:
+    if call is None:
+        if not result_id:
+            return None
+        call = {"tool": "query_results", "args": {"result_id": result_id}}
+    args = {k: v for k, v in call["args"].items() if v not in (None, False, "") and k != "offset"}
+    return {"tool": call["tool"], "args": {**args, "offset": offset, "limit": limit}}
 
 
 def numbered(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -71,6 +86,13 @@ def fit(payload: dict[str, Any], max_kb: int) -> dict[str, Any]:
     page = payload["page"]
     end = page["offset"] + len(rows)
     page["next_offset"] = end if end < payload["row_count"] else None
+    call = page.get("next_call")
+    if page["next_offset"] is None:
+        page["next_call"] = None
+    elif call is not None:
+        call["args"]["offset"] = end
+    else:
+        page["next_call"] = _next_call(None, payload.get("result_id"), end, page["limit"])
     return payload
 
 

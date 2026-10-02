@@ -44,10 +44,10 @@ def register_disk_tools(tool: Callable[[str], Any], run: Callable[..., Any],
         return {k: v for k, v in kw.items()}
 
     @tool("ez_list_tools")
-    async def ez_list_tools() -> Result:
+    async def ez_list_tools(limit: int = 50, offset: int = 0) -> Result:
         """The Eric Zimmerman CLI tools: accepted artefacts, input (-f file / -d folder), output
         (JSON or CSV) and the typed options of each (for ez_run)."""
-        return await run("ez_list_tools", {})
+        return await run("ez_list_tools", {"limit": limit, "offset": offset})
 
     @tool("ez_run")
     async def ez_run(tool: EzTool, path: str, ctx: Context, options: EzOptions | None = None,

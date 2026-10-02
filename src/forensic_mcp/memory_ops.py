@@ -138,7 +138,9 @@ class MemoryOps:
                     + (f" ({', '.join(sorted({a['severity'] for a in analysis['anomalies']}))})"
                        if n_anom else "") + ".",
             rows=q["rows"], row_count=total, limit=q["limit"], result_id=r["result_id"],
-            truncated=q["truncated"], extra=extra)
+            truncated=q["truncated"], extra=extra,
+            next_call=None if pid_filter is None else {"tool": "query_results", "args": {
+                "result_id": r["result_id"], "column": "PID", "equals": str(pid_filter)}})
         return Outcome(payload, real, argv=r["argv"], engine=engine, evidence_sha256=ev["sha256"],
                        result_id=r["result_id"], exit_code=r["exit_code"],
                        timed_out=r["timed_out"], output_exceeded=r["output_exceeded"],

@@ -89,7 +89,10 @@ class EzOps:
         return {**r, "cached": False}
 
     def _ez_outcome(self, tool: str, params: dict, real: dict, ps: Any, ev: dict, r: dict,
-                    q: dict, summary: str, notes: list[str] | None = None) -> Any:
+                    q: dict, summary: str, notes: list[str] | None = None,
+                    repeat: bool = False) -> Any:
+        """repeat=True: server-side filters, so the next page re-runs this tool (cached parse)
+        with the same parameters; otherwise query_results on the result."""
         from .ops import Outcome  # circular at import time
 
         extra: dict[str, Any] = {"exit_code": r["exit_code"]}
@@ -104,7 +107,8 @@ class EzOps:
         payload = contract.build(
             tool=tool, engine=engine, plugin=r["plugin"], parameters=params, evidence=ev,
             summary=summary, rows=q["rows"], row_count=q["matched"], offset=q["offset"],
-            limit=q["limit"], result_id=r["result_id"], truncated=q["truncated"], extra=extra)
+            limit=q["limit"], result_id=r["result_id"], truncated=q["truncated"], extra=extra,
+            next_call={"tool": tool, "args": dict(params)} if repeat else None)
         return Outcome(payload, real, argv=r["argv"], engine=engine, evidence_sha256=ev["sha256"],
                        result_id=r["result_id"], exit_code=r["exit_code"],
                        timed_out=r["timed_out"], output_exceeded=r["output_exceeded"],
@@ -184,7 +188,8 @@ class EzOps:
         label = f"preset {preset}" if preset else (f"IDs {ids}" if ids else "all events")
         return self._ez_outcome("evtx_query", params, real, ps, ev, r, q,
                                 f"{q['matched']} events ({label})"
-                                + (" — parse reused" if r.get("cached") else ""), notes)
+                                + (" — parse reused" if r.get("cached") else ""), notes,
+                                repeat=True)
 
     async def _cached_full(self, tool: str, ev: dict) -> dict[str, Any] | None:
         cache = Path(self.cfg.output_root) / ".toolcache" / "ez_parse.json"
@@ -222,7 +227,7 @@ class EzOps:
                        limit=real.get("limit") or 50, offset=real.get("offset") or 0)
         return self._ez_outcome("mft_search", params, real, ps, ev, r, q,
                                 f"{q['matched']} $MFT entries of {r['row_count']}"
-                                + (" — parse reused" if r.get("cached") else ""))
+                                + (" — parse reused" if r.get("cached") else ""), repeat=True)
 
     async def op_timeline(self, params: dict[str, Any], conf: Any = None) -> Any:
         from .ops import Outcome

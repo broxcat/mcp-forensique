@@ -42,8 +42,8 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 
 ```
 Today: J5 (02/10) — 4.3a/b/c done (P3 defensive part still open, see below)
-Current task: 4.3 DONE incl. option A for the Windows-only EZ tools (02/10), waiting for the
-  user; next 4.4
+Current task: 4.4 DONE (02/10) — milestone M4 reached on fixtures; waiting for the user
+  (commit of 4.4 not done yet); next P5 (5.1 skill playbook)
 Next milestones: M2 architecture validated J4 (01/10, livrable L2) · M3 evidence ready J6 (05/10)
                  · M4 MCP server functional J10 (09/10) · M5 feature freeze J13 (14/10)
 Existing code (built before this CDC-aligned plan, to be reconciled in task 2.1):
@@ -148,12 +148,32 @@ Done: option A for Windows-only EZ tools (02/10, decision L. Plancke) — engine
   -DryRun, timeout); import_ops.py: ez_import (manifest format, output hashes, input digest,
   `imported_from_windows` journal event added to docs/audit_schema.json, cached per manifest);
   prefetch_query / browser_history / new srum_query read imports (raw artefact -> refused with
-  the next step). 37 MCP tools. pytest 105 passed (tests/test_import.py,
+  the next step). 36 MCP tools (CORRECTED: "37" was written by mistake in the commit fe96106
+  message). pytest 105 passed (tests/test_import.py,
   tests/export_helpers.py). Real checks: PS script dry runs + refusals on Windows; folder digest
   PS == Python; real script run with a compiled stand-in PECmd.exe (.scratch only) -> export
   imported by the container (rows, journal ok); real bstrings on Security.evtx via ez_run.
   NOT verified: a real Windows run of PECmd/SQLECmd/WxTCmd/SrumECmd/SumECmd (no EZ install on
   this PC, no artefacts) and therefore their real JSON/CSV columns.
+Done: 4.4 (02/10) — EF-04: page.next_call on every response (same tool + filters for
+  query_results / evtx_query / mft_search / shortcuts / disk_list / netscan pid; else
+  query_results on the result), limit/offset on list tools, contract.fit keeps next_call aligned
+  (output_schema page.next_call). findings_ops.py: record_finding (kind, text, citations
+  result_id+row+field+value, confidence, attack) with automatic cross-check (exact / numeric
+  hex-decimal / UTC time / substring of a cell >= 64 chars / field "decoded" = server-decoded
+  PowerShell; tokens restored in cloud mode; ATT&CK only from the rule table; no citation =
+  rejected), journaled as `suggestion` (accepted "à valider" or "rejected_by_server"; audit
+  schema citation _row may be 0 for an invalid row); list_findings from the journal.
+  tests/scenario_ws042/ (fixtures + vol stub + make_fixtures.py): the §10 reference
+  conversation end to end — 2 anomalies with ATT&CK, decoded URL, IOC, ioc_match on netscan
+  _row 3, UTC timeline (PowerShell 14:30:07 < task 14:32:07), 5 true findings accepted, 7 false
+  rejected, every call + suggestion journaled. ET-09 meta-test (each of the 38 tools called by
+  a test). README.md (FR). 38 MCP tools. pytest 112 passed.
+  Real checks: stdio from Windows through the running container (`docker exec -i forensic-mcp
+  python -m forensic_mcp --stdio`): initialize + tools/list = 38 tools; record_finding on the
+  real Triage-Memory pslist (UWkpjFjDzM.exe row 63: true finding accepted, wrong PPID and wrong
+  Offset(V) rejected with the real cell value); pslist paging 50/65 + next_call. NOTE: these
+  3 findings (F-0001..F-0003) went into the REAL journal /output/audit.jsonl (§11).
 Decisions recorded (user, 30/09): 3 = deny Bash in the analysis workspace (Claude Code setting,
   analyst side, not implemented in this repo); 5 = cleanup approved. Points 1, 2, 4 of L2 §12
   still open (default transport, llm_mode per transport, version pinning).
@@ -606,6 +626,17 @@ statements and rejects one with a wrong IP.
   not prevented.
 - The EVTX dev samples are real logs of an analyst PC (SIDs, account names, a 1102 log clearing
   on 28/09): real personal data even in "dev" samples; classify them (case.toml).
+- Agent error (4.4): the real-sample check of record_finding wrote 3 test findings (F-0001 to
+  F-0003, "UWkpjFjDzM.exe check (…)", 1 accepted "à valider", 2 rejected) into the real case
+  journal /output/audit.jsonl. Append-only means they cannot be removed; an analyst must reject
+  F-0001 (the agent never validates). Lesson: real checks that write findings must use a
+  temporary output root; a hash-chained journal also keeps the mistakes.
+- record_finding limits: a substring citation is accepted only in cells of 64+ characters
+  (command lines, payloads), so a partial value like "14:32:07" alone is rejected — the LLM
+  must cite the whole cell value; the cross-check proves the value is in the row, not that the
+  statement drawn from it is right (interpretation stays "à valider").
+- Agent error (4.3d): the commit message and STATUS said "37 MCP tools"; the real count was 36.
+  Caught by the ET-09 test that asserts the number of exposed tools.
 - Encoded blobs defeat pseudonymisation: the base64 of an encoded PowerShell command still
   carries the real IP/URL in cloud mode (the server-decoded text is pseudonymised, the raw
   argument is not).

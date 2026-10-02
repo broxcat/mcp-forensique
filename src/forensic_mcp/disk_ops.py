@@ -33,7 +33,7 @@ class DiskOps:
 
     def _outcome(self, tool: str, params: dict, real: dict, ps: Any, ev: dict, rid: str, d: Path,
                  argv: list[str], exit_code: int, q: dict, summary: str, notes: list[str],
-                 error: str | None = None) -> Any:
+                 error: str | None = None, repeat: bool = False) -> Any:
         from .ops import Outcome  # circular at import time
 
         extra: dict[str, Any] = {"exit_code": exit_code}
@@ -43,7 +43,7 @@ class DiskOps:
             tool=tool, engine="The Sleuth Kit 4.11.1", plugin=tool, parameters=params,
             evidence=ev, summary=summary, rows=q["rows"], row_count=q["matched"],
             offset=q["offset"], limit=q["limit"], result_id=rid, truncated=q["truncated"],
-            extra=extra)
+            extra=extra, next_call={"tool": tool, "args": dict(params)} if repeat else None)
         return Outcome(payload, real, argv=argv, engine="The Sleuth Kit 4.11.1",
                        evidence_sha256=ev["sha256"], result_id=rid, exit_code=exit_code,
                        output_sha256=results.rows_sha256(d), pseudo=ps, error=error)
@@ -114,7 +114,8 @@ class DiskOps:
                        offset=real.get("offset") or 0)
         notes = [] if code == 0 else [(d / "stderr.txt").read_text(errors="replace")[-300:]]
         return self._outcome("disk_list", params, real, ps, ev, rid, d, argv, code, q,
-                             f"{q['matched']} entries (partition_offset {sector})", notes)
+                             f"{q['matched']} entries (partition_offset {sector})", notes,
+                             repeat=True)
 
     async def op_disk_extract(self, params: dict[str, Any], conf: Any = None) -> Any:
         real, path, ps, ev = self._image(params)

@@ -1,0 +1,41 @@
+[
+ {
+  "Offset": 1,
+  "Proto": "TCPv4",
+  "LocalAddr": "0.0.0.0",
+  "LocalPort": 135,
+  "ForeignAddr": "0.0.0.0",
+  "ForeignPort": 0,
+  "State": "LISTENING",
+  "PID": 600,
+  "Owner": "svchost.exe",
+  "Created": null,
+  "__children": []
+ },
+ {
+  "Offset": 2,
+  "Proto": "TCPv4",
+  "LocalAddr": "10.0.0.42",
+  "LocalPort": 49700,
+  "ForeignAddr": "10.0.0.10",
+  "ForeignPort": 445,
+  "State": "ESTABLISHED",
+  "PID": 4,
+  "Owner": "System",
+  "Created": null,
+  "__children": []
+ },
+ {
+  "Offset": 3,
+  "Proto": "TCPv4",
+  "LocalAddr": "10.0.0.42",
+  "LocalPort": 49710,
+  "ForeignAddr": "203.0.113.10",
+  "ForeignPort": 443,
+  "State": "ESTABLISHED",
+  "PID": 4312,
+  "Owner": "powershell.exe",
+  "Created": "2026-10-06T14:30:09+00:00",
+  "__children": []
+ }
+]

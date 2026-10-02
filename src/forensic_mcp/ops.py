@@ -20,6 +20,7 @@ from .engines import volatility3
 from .artefact_ops import ArtefactOps
 from .disk_ops import DiskOps
 from .ez_ops import EzOps
+from .findings_ops import FindingsOps
 from .import_ops import ImportOps
 from .memory_ops import TYPED_VOL3, MemoryOps
 from .redact import TOKEN, Pseudonymizer, case_for, pseudonymizer_for
@@ -51,7 +52,7 @@ def _rows_digest(rows: list[dict[str, Any]]) -> str:
     return hashlib.sha256(audit.canonical(rows).encode()).hexdigest()
 
 
-class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, ImportOps):
+class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, ImportOps, FindingsOps):
     """Operations bound to one Config (memory operations in memory_ops.MemoryOps)."""
 
     def __init__(self, cfg: Config) -> None:
@@ -124,10 +125,14 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, ImportOps):
 
     def _listing(self, tool: str, params: dict[str, Any], items: list[dict[str, Any]],
                  summary: str, **kw: Any) -> Outcome:
-        rows = contract.numbered(items[: self.cfg.max_rows_returned])
+        limit = max(1, min(int(params.get("limit") or self.cfg.max_rows_returned),
+                           self.cfg.max_rows_returned))
+        offset = max(0, int(params.get("offset") or 0))
+        rows = contract.numbered(items)[offset:offset + limit]  # _row stable over the full list
         payload = contract.build(tool=tool, engine="forensic-mcp", parameters=params,
                                  summary=summary, rows=rows, row_count=len(items),
-                                 limit=self.cfg.max_rows_returned)
+                                 offset=offset, limit=limit,
+                                 next_call={"tool": tool, "args": dict(params)})
         return Outcome(payload, params, output_sha256=_rows_digest(items), **kw)
 
     def _page(self, d: Path, **query: Any) -> dict[str, Any]:
@@ -228,7 +233,8 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, ImportOps):
             tool="query_results", engine=engine, plugin=meta.get("plugin"), parameters=params,
             evidence=ev, summary=f"{q['matched']} matching rows", rows=q["rows"],
             row_count=q["matched"], offset=q["offset"], limit=q["limit"],
-            result_id=d.name, truncated=q["truncated"])
+            result_id=d.name, truncated=q["truncated"],
+            next_call={"tool": "query_results", "args": dict(params)})
         return Outcome(payload, real, engine=engine, result_id=d.name,
                        evidence_sha256=meta.get("input_sha256"),
                        output_sha256=_rows_digest(q["rows"]), pseudo=ps)

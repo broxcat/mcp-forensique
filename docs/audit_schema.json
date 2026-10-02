@@ -39,7 +39,7 @@
       "additionalProperties": false,
       "properties": {
         "result_id": {"type": "string"},
-        "_row": {"type": "integer", "minimum": 1},
+        "_row": {"type": "integer", "minimum": 0, "description": "0 = the cited row was not a valid _row (finding rejected)"},
         "field": {"type": "string"},
         "value": {"type": ["string", "integer", "number", "boolean", "null"]}
       }

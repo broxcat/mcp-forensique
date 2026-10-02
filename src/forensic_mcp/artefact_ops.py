@@ -109,7 +109,7 @@ class ArtefactOps:
         cached = " — parse reused" if r.get("cached") else ""
         return self._ez_outcome(name, params, real, ps, ev, r, q,
                                 f"{q['matched']} of {r['row_count']} {spec['tool']} rows{cached}",
-                                r.get("notes"))
+                                r.get("notes"), repeat=True)
 
     async def op_prefetch_query(self, params: dict[str, Any], conf: Any = None) -> Any:
         return await self._shortcut("prefetch_query", params)

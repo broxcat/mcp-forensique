@@ -73,7 +73,16 @@
       "properties": {
         "offset": {"type": "integer", "minimum": 0},
         "limit": {"type": "integer", "minimum": 1},
-        "next_offset": {"description": "Null when this is the last page.", "type": ["integer", "null"], "minimum": 0}
+        "next_offset": {"description": "Null when this is the last page.", "type": ["integer", "null"], "minimum": 0},
+        "next_call": {
+          "description": "Call to make for the next page (EF-04): same tool and filters, or query_results on the result; null on the last page.",
+          "oneOf": [
+            {"type": "null"},
+            {"type": "object", "required": ["tool", "args"], "additionalProperties": false,
+             "properties": {"tool": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+                            "args": {"type": "object", "required": ["offset", "limit"]}}}
+          ]
+        }
       }
     },
     "raw_output": {

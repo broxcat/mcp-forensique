@@ -59,7 +59,11 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
                  ("disk_list", {**m, "partition_offset": 206848}),
                  ("disk_extract", {**m, "partition_offset": 206848, "targets": ["mft"]}),
                  ("query_results", {"result_id": rid, "limit": 1}), ("list_results", {}),
-                 ("replay", {"audit_id": aid})]
+                 ("replay", {"audit_id": aid}),
+                 ("record_finding", {"kind": "fact", "text": "System is PID 4", "confidence": "high",
+                                     "citations": [{"result_id": rid, "row": 1, "field": "PID",
+                                                    "value": 4}]}),
+                 ("list_findings", {})]
         seen = {"vol3_run"}
         for tool, args in calls:
             r = await c.call_tool(tool, args)
