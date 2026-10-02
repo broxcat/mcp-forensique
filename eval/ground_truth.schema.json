@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forensic-mcp.local/eval/ground_truth.schema.json",
+  "title": "Ground truth of the lab scenario (L3, task 3.2) — scored in P7",
+  "description": "status=template allows empty fields; status=filled requires every step to be documented by the team (timestamps UTC, ATT&CK confirmed, procedure reference, at least one expected fact).",
+  "type": "object",
+  "required": ["format", "case", "status", "filled_by", "scenario_played_utc", "hosts", "steps"],
+  "additionalProperties": false,
+  "properties": {
+    "format": {"const": "forensic-mcp/ground-truth/1"},
+    "case": {"$ref": "#/$defs/host"},
+    "status": {"enum": ["template", "filled"]},
+    "filled_by": {"type": "array", "items": {"type": "string", "minLength": 2}},
+    "scenario_played_utc": {
+      "type": "object", "required": ["start", "end"], "additionalProperties": false,
+      "properties": {"start": {"$ref": "#/$defs/utc_or_null"}, "end": {"$ref": "#/$defs/utc_or_null"}}
+    },
+    "hosts": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["name", "role", "timezone", "clock_offset_seconds"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string"},
+          "role": {"type": "string", "minLength": 1},
+          "timezone": {"type": "string"},
+          "clock_offset_seconds": {"type": ["number", "null"]}
+        }
+      }
+    },
+    "steps": {"type": "array", "minItems": 5, "items": {"$ref": "#/$defs/step"}}
+  },
+  "if": {"properties": {"status": {"const": "filled"}}},
+  "then": {
+    "properties": {
+      "filled_by": {"minItems": 1},
+      "scenario_played_utc": {"properties": {"start": {"$ref": "#/$defs/utc"}, "end": {"$ref": "#/$defs/utc"}}},
+      "hosts": {"items": {"properties": {"name": {"$ref": "#/$defs/host"}, "timezone": {"minLength": 1}}}},
+      "steps": {"items": {"$ref": "#/$defs/filled_step"}}
+    }
+  },
+  "$defs": {
+    "host": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "utc": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"},
+    "utc_or_null": {"anyOf": [{"$ref": "#/$defs/utc"}, {"type": "null"}]},
+    "attack": {"type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$"},
+    "ioc": {
+      "type": "object", "required": ["type", "value"], "additionalProperties": false,
+      "properties": {
+        "type": {"enum": ["ip", "domain", "url", "sha256", "file_path", "process", "registry_key",
+                          "scheduled_task", "service", "account"]},
+        "value": {"type": "string", "minLength": 1}
+      }
+    },
+    "fact": {
+      "type": "object", "required": ["description", "artefact", "tool"], "additionalProperties": false,
+      "properties": {
+        "description": {"type": "string", "minLength": 3},
+        "artefact": {"enum": ["memory", "evtx", "mft", "registry", "prefetch", "amcache", "shimcache",
+                              "lnk", "jumplist", "recyclebin", "browser", "srum", "disk_image", "other"]},
+        "evidence_path": {"description": "Relative to the evidence root, e.g. WS-042/kape/C/Windows/System32/winevt/Logs/Security.evtx.",
+                          "type": "string", "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+$"},
+        "tool": {"description": "forensic-mcp tool expected to show the fact (checked against the server's tool list by a test).",
+                 "type": "string", "pattern": "^[a-z0-9_]+$"},
+        "field": {"type": ["string", "null"]},
+        "value": {"type": ["string", "number", "null"]},
+        "result_id": {"description": "Result of a reference run that shows the fact (null until then).", "type": ["string", "null"]},
+        "row": {"description": "_row of that result (null until then).", "type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": ["step", "cdc_step", "host", "attack", "timestamp_utc", "procedure_ref", "iocs", "expected_facts"],
+      "additionalProperties": false,
+      "properties": {
+        "step": {"type": "integer", "minimum": 1},
+        "cdc_step": {"type": "string", "minLength": 1},
+        "host": {"type": "string"},
+        "attack": {"type": "array", "items": {"$ref": "#/$defs/attack"}, "uniqueItems": true},
+        "timestamp_utc": {"$ref": "#/$defs/utc_or_null"},
+        "procedure_ref": {"description": "Filled by the human team only.", "type": "string"},
+        "iocs": {"type": "array", "items": {"$ref": "#/$defs/ioc"}},
+        "expected_facts": {"type": "array", "items": {"$ref": "#/$defs/fact"}}
+      }
+    },
+    "filled_step": {
+      "properties": {
+        "host": {"$ref": "#/$defs/host"},
+        "attack": {"minItems": 1},
+        "timestamp_utc": {"$ref": "#/$defs/utc"},
+        "procedure_ref": {"minLength": 1},
+        "expected_facts": {"minItems": 1}
+      }
+    }
+  }
+}

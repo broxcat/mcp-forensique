@@ -1,0 +1,71 @@
+# Vérité terrain du scénario (L3, tâche 3.2) — MODÈLE à remplir par l'équipe humaine
+# (L. Plancke, W. Triffault) APRÈS avoir joué le scénario. L'assistant ne remplit aucun champ.
+# Schéma : eval/ground_truth.schema.json (vérifié par tests/test_lab_eval.py).
+# Sert à la notation (P7, eval/score.py) : rappel / précision des IOC et des étapes,
+# comparaison des constats (record_finding) aux faits attendus ci-dessous.
+#
+# Règles :
+#  - horodatages en UTC ISO-8601 avec Z (ex. 2026-10-05T14:32:07Z) ; noter le fuseau de chaque hôte ;
+#  - identifiants ATT&CK confirmés par l'équipe d'après les tests réellement joués ;
+#  - chaque fait attendu indique l'artefact et l'outil du serveur qui doivent le montrer ;
+#    result_id / row sont remplis après une exécution de référence (sinon null) ;
+#  - procedure_ref : référence du test officiel joué (rempli par l'équipe, jamais par l'assistant).
+format: forensic-mcp/ground-truth/1
+case: WS-042
+status: template          # template -> filled (quand toutes les étapes sont renseignées)
+filled_by: []             # noms des personnes qui ont rempli ce fichier
+scenario_played_utc:
+  start: null
+  end: null
+hosts:
+  - name: WS-042
+    role: victime principale
+    timezone: ""          # fuseau Windows (tzutil /g)
+    clock_offset_seconds: null
+  - name: ""
+    role: second hôte (étape RDP)
+    timezone: ""
+    clock_offset_seconds: null
+steps:
+  - step: 1
+    cdc_step: "Macro Office → PowerShell encodé"
+    host: WS-042
+    attack: []            # ex. [T1566.001] — confirmé par l'équipe
+    timestamp_utc: null
+    procedure_ref: ""     # rempli par l'équipe humaine
+    iocs: []              # éléments {type, value} ; type : ip, domain, url, sha256, file_path,
+                          # process, registry_key, scheduled_task, service, account
+    expected_facts: []    # éléments {description, artefact, evidence_path, tool, field, value,
+                          # result_id, row}
+  - step: 2
+    cdc_step: "Persistance : tâche planifiée + clé Run"
+    host: WS-042
+    attack: []
+    timestamp_utc: null
+    procedure_ref: ""
+    iocs: []
+    expected_facts: []
+  - step: 3
+    cdc_step: "Vol d'identifiants + RDP vers un second hôte"
+    host: WS-042
+    attack: []
+    timestamp_utc: null
+    procedure_ref: ""
+    iocs: []
+    expected_facts: []
+  - step: 4
+    cdc_step: "Archive dans un dossier temporaire"
+    host: WS-042
+    attack: []
+    timestamp_utc: null
+    procedure_ref: ""
+    iocs: []
+    expected_facts: []
+  - step: 5
+    cdc_step: "Collecte"
+    host: WS-042
+    attack: []
+    timestamp_utc: null
+    procedure_ref: ""
+    iocs: []
+    expected_facts: []
