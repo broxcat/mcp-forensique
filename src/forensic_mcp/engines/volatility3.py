@@ -169,7 +169,7 @@ def _write_rows(d: Path) -> int:
 
 def image_path(cfg: Config, image: str) -> Path:
     """Jail the image path and require a regular file."""
-    path = safety.jail_path(image, cfg.evidence_root)
+    path = safety.jail_input(image, cfg.evidence_root, cfg.output_root)
     if not path.is_file():
         raise FileNotFoundError(f"not a file under the evidence root: {image}")
     return path

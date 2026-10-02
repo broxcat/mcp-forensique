@@ -1,32 +1,65 @@
 #!/usr/bin/env python3
 """Fake Eric Zimmerman tool for unit tests: `ez <dir>/<Tool>.dll <args>`.
-Writes canned CSV output where the real tool would (--csv dir, -o file, --out dir)."""
+Writes canned output where the real tool would: --json dir (one object per line + UTF-8 BOM, as
+verified on the real EvtxECmd), --csv dir, -o file (bstrings), --out dir (rla)."""
 import csv
+import json
 import os
 import sys
 
 EVTX = [  # golden scenario: PowerShell at 14:30, scheduled task UpdateSvc 2 min later
-    {"TimeCreated": "2026-10-06 14:28:00.0000000", "EventId": "4624", "Channel": "Security",
+    {"TimeCreated": "2026-10-06T14:28:00.0000000+00:00", "EventId": 4624, "Channel": "Security",
      "Computer": "WS-042", "UserName": "WS-042\\alice", "RemoteHost": "10.0.0.7",
      "MapDescription": "Successful logon", "PayloadData1": "LogonType 3", "Payload": "x"},
-    {"TimeCreated": "2026-10-06 14:30:05.0000000", "EventId": "4104",
+    {"TimeCreated": "2026-10-06T14:30:05.0000000+00:00", "EventId": 4104,
      "Channel": "Microsoft-Windows-PowerShell/Operational", "Computer": "WS-042",
      "MapDescription": "Script block", "PayloadData1": "IEX (New-Object Net.WebClient)"},
-    {"TimeCreated": "2026-10-06 14:32:07.0000000", "EventId": "4698", "Channel": "Security",
+    {"TimeCreated": "2026-10-06T14:32:07.0000000+00:00", "EventId": 4698, "Channel": "Security",
      "Computer": "WS-042", "MapDescription": "A scheduled task was created",
      "PayloadData1": "TaskName: \\UpdateSvc"},
-    {"TimeCreated": "2026-10-06 14:40:00.0000000", "EventId": "7045", "Channel": "System",
+    {"TimeCreated": "2026-10-06T14:40:00.0000000+00:00", "EventId": 7045, "Channel": "System",
      "Computer": "WS-042", "MapDescription": "A service was installed", "PayloadData1": "upd"},
 ]
-MFT = [
-    {"EntryNumber": "1201", "SequenceNumber": "3", "InUse": "True", "ParentPath": ".\\Users\\Public",
-     "FileName": "upd.exe", "Extension": ".exe", "FileSize": "73802", "IsDirectory": "False",
-     "Created0x10": "2026-10-06 14:31:00.0000000", "LastModified0x10": "2026-10-06 14:31:00.0000000"},
-    {"EntryNumber": "88", "SequenceNumber": "1", "InUse": "True",
-     "ParentPath": ".\\Windows\\System32", "FileName": "kernel32.dll", "Extension": ".dll",
-     "FileSize": "1", "IsDirectory": "False", "Created0x10": "2019-03-01 10:00:00.0000000",
-     "LastModified0x10": "2019-03-01 10:00:00.0000000"},
-]
+JSON_ROWS = {
+    "MFTECmd": [
+        {"EntryNumber": 1201, "SequenceNumber": 3, "InUse": True, "ParentPath": ".\\Users\\Public",
+         "FileName": "upd.exe", "Extension": ".exe", "FileSize": 73802, "IsDirectory": False,
+         "Created0x10": "2026-10-06T14:31:00.0000000+00:00",
+         "LastModified0x10": "2026-10-06T14:31:00.0000000+00:00"},
+        {"EntryNumber": 88, "SequenceNumber": 1, "InUse": True, "ParentPath": ".\\Windows\\System32",
+         "FileName": "kernel32.dll", "Extension": ".dll", "FileSize": 1, "IsDirectory": False,
+         "Created0x10": "2019-03-01T10:00:00.0000000+00:00",
+         "LastModified0x10": "2019-03-01T10:00:00.0000000+00:00"}],
+    "PECmd": [{"SourceFilename": "C:\\Windows\\Prefetch\\PSEXESVC.EXE-AD70946C.pf",
+               "ExecutableName": "PSEXESVC.EXE", "RunCount": 2,
+               "LastRun": "2026-10-06T14:35:00.0000000+00:00",
+               "PreviousRun0": "2026-10-05T09:00:00.0000000+00:00"},
+              {"SourceFilename": "C:\\Windows\\Prefetch\\CALC.EXE-3FBEF7FD.pf",
+               "ExecutableName": "CALC.EXE", "RunCount": 1,
+               "LastRun": "2025-01-01T08:00:00.0000000+00:00"}],
+    "LECmd": [{"SourceFile": "C:\\Users\\alice\\Recent\\invoice.docm.lnk",
+               "LocalPath": "\\\\WS-042\\share\\invoice.docm",
+               "TargetCreated": "2026-10-06T14:20:00.0000000+00:00"}],
+    "JLECmd": [{"SourceFile": "1b4dd67f29cb1962.automaticDestinations-ms",
+                "Path": "C:\\Users\\Public\\upd.exe",
+                "LastModified": "2026-10-06T14:33:00.0000000+00:00"}],
+    "SQLECmd": [{"URL": "http://203.0.113.10/a.ps1", "Title": "",
+                 "LastVisitTime": "2026-10-06T14:29:50.0000000+00:00"},
+                {"URL": "https://intranet.example/home", "Title": "Home",
+                 "LastVisitTime": "2026-10-01T08:00:00.0000000+00:00"}],
+    "RecentFileCacheParser": [{"SourceFile": "RecentFileCache.bcf",
+                               "SourceFileName": "c:\\users\\public\\upd.exe"}],
+    "RECmd": [{"KeyPath": "Microsoft\\Windows\\CurrentVersion\\Run", "ValueName": "UpdateSvc",
+               "ValueData": "C:\\Users\\Public\\upd.exe"}],
+}
+CSV_ROWS = {
+    "AppCompatCacheParser": [{"ControlSet": "1", "Path": "C:\\Users\\Public\\upd.exe",
+                              "LastModifiedTimeUTC": "2026-10-06 14:31:00", "Executed": "Yes"},
+                             {"ControlSet": "1", "Path": "C:\\Windows\\notepad.exe",
+                              "LastModifiedTimeUTC": "2019-01-01 00:00:00", "Executed": "NA"}],
+    "RBCmd": [{"SourceName": "$IABC123.txt", "FileName": "C:\\Users\\alice\\secret.xlsx",
+               "DeletedOn": "2026-10-06 14:50:00"}],
+}
 
 
 def arg(args, flag):
@@ -42,26 +75,40 @@ def write_csv(path, rows):
         w.writerows(rows)
 
 
+def write_jsonl(path, rows):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8-sig") as fh:  # BOM, like the real EvtxECmd
+        for r in rows:
+            fh.write(json.dumps(r) + "\n")
+
+
 def main() -> int:
     tool = os.path.splitext(os.path.basename(sys.argv[1]))[0]
     args = sys.argv[2:]
     src = arg(args, "-f") or arg(args, "-d")
-    out = arg(args, "--csv")
+    jdir, cdir = arg(args, "--json"), arg(args, "--csv")
     if "silent" in (src or ""):  # mimics the real bstrings 2026.5.0 on Linux: exit 0, no output
         print("input from stdin or file")
         return 0
-    if tool == "EvtxECmd":
+    if "crash" in (src or ""):  # mimics the real SQLECmd on Linux: exit 0 + empty JSON file
+        if jdir:
+            write_jsonl(os.path.join(jdir, f"{tool}_Output.json"), [])
+        print("Unhandled exception: System.DllNotFoundException: Unable to load shared library "
+              "'SQLite.Interop.dll' or one of its dependencies.")
+        return 0
+    if tool == "EvtxECmd" and jdir:
         inc = arg(args, "--inc")
-        rows = [r for r in EVTX if not inc or r["EventId"] in inc.split(",")]
-        write_csv(os.path.join(out, "20261006_EvtxECmd_Output.csv"), rows)
-    elif tool == "MFTECmd":
-        write_csv(os.path.join(out, "20261006_MFTECmd_$MFT_Output.csv"), MFT)
+        rows = [r for r in EVTX if not inc or str(r["EventId"]) in inc.split(",")]
+        write_jsonl(os.path.join(jdir, "20261006_EvtxECmd_Output.json"), rows)
+    elif tool in JSON_ROWS and jdir:
+        write_jsonl(os.path.join(jdir, f"20261006_{tool}_Output.json"), JSON_ROWS[tool])
     elif tool == "AmcacheParser":  # several CSVs, like the real tool
-        write_csv(os.path.join(out, "Amcache_UnassociatedFileEntries.csv"),
-                  [{"SHA1": "aa", "FullPath": "c:\\users\\public\\upd.exe"}])
-        write_csv(os.path.join(out, "Amcache_ProgramEntries.csv"), [{"Name": "Office"}])
-    elif tool == "RECmd" and "--bn" not in args:
-        print(f"Key: {arg(args, '--kn')}\nValue: UpdateSvc  C:\\Users\\Public\\upd.exe")
+        write_csv(os.path.join(cdir, "Amcache_UnassociatedFileEntries.csv"),
+                  [{"SHA1": "0000" + "ab" * 20, "FullPath": "c:\\users\\public\\upd.exe",
+                    "Name": "upd.exe", "FileKeyLastWriteTimestamp": "2026-10-06 14:31:10"}])
+        write_csv(os.path.join(cdir, "Amcache_ProgramEntries.csv"), [{"Name": "Office"}])
+    elif tool in CSV_ROWS and cdir:
+        write_csv(os.path.join(cdir, f"{tool}_Output.csv"), CSV_ROWS[tool])
     elif tool == "bstrings":
         with open(arg(args, "-o"), "w") as fh:
             fh.write("hello world\nhttp://203.0.113.10/a.ps1\n")
@@ -72,9 +119,12 @@ def main() -> int:
     elif tool == "SrumECmd" and not os.path.basename(src or "").lower().startswith("srudb"):
         print("fake SrumECmd: not a SRUDB.dat", file=sys.stderr)
         return 1
-    elif out:
-        write_csv(os.path.join(out, f"{tool}_Output.csv"),
-                  [{"Tool": tool, "SourceFile": src, "Args": " ".join(args)}])
+    elif cdir or jdir:
+        row = {"Tool": tool, "SourceFile": src, "Args": " ".join(args)}
+        if jdir:
+            write_jsonl(os.path.join(jdir, f"{tool}_Output.json"), [row])
+        else:
+            write_csv(os.path.join(cdir, f"{tool}_Output.csv"), [row])
     else:
         print(f"fake ez: no output option for {tool}", file=sys.stderr)
         return 1

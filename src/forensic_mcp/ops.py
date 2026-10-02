@@ -17,6 +17,8 @@ from mcp.types import CallToolResult
 from . import audit, contract, evidence, results, safety, schemas
 from .config import Config, load_tools
 from .engines import volatility3
+from .artefact_ops import ArtefactOps
+from .disk_ops import DiskOps
 from .ez_ops import EzOps
 from .memory_ops import TYPED_VOL3, MemoryOps
 from .redact import TOKEN, Pseudonymizer, case_for, pseudonymizer_for
@@ -48,7 +50,7 @@ def _rows_digest(rows: list[dict[str, Any]]) -> str:
     return hashlib.sha256(audit.canonical(rows).encode()).hexdigest()
 
 
-class Engine(MemoryOps, EzOps):
+class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps):
     """Operations bound to one Config (memory operations in memory_ops.MemoryOps)."""
 
     def __init__(self, cfg: Config) -> None:
@@ -144,7 +146,7 @@ class Engine(MemoryOps, EzOps):
                   "version": vol3 if t == "vol3" else ("2.6" if t == "vol2" else None)}
                  for t in sorted(tools)]
         return self._listing("tool_status", params, items,
-                             f"{len(tools)} tools installed, exposed: vol3 {vol3}, vol2 2.6, 17 EZ tools")
+                             f"{len(tools)} tools installed, exposed: vol3 {vol3}, vol2 2.6, 17 EZ tools, sleuthkit (disk_*)")
 
     async def op_list_evidence(self, params: dict[str, Any], conf: Any = None) -> Outcome:
         base = safety.jail_path(params.get("subdir") or ".", self.cfg.evidence_root)

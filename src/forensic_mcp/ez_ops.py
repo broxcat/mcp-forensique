@@ -14,6 +14,8 @@ from . import contract, evidence, results, safety, timeline
 from .engines import zimmerman
 from .timeline import to_utc
 
+# Bumped when the parse output changes (4.3b: CSV -> JSON) so older cached parses are not reused.
+PARSE_FORMAT = "rows-v2-json"
 PRESETS_FILE = Path(__file__).resolve().parents[2] / "rules" / "evtx_presets.yaml"
 EVTX_COLUMNS = ["TimeCreated", "EventId", "Channel", "Computer", "UserName", "RemoteHost",
                 "MapDescription", "PayloadData1", "PayloadData2", "PayloadData3",
@@ -49,7 +51,7 @@ class EzOps:
 
     def _ez_input(self, params: dict[str, Any]) -> tuple[dict[str, Any], Path, Any, dict]:
         real = {**params, "path": self._restore_path(str(params["path"]))}
-        path = safety.jail_path(real["path"], self.cfg.evidence_root)
+        path = safety.jail_input(real["path"], self.cfg.evidence_root, self.cfg.output_root)
         if not path.exists():
             raise FileNotFoundError(f"not found under the evidence root: {params['path']}")
         ps = self._policy(path if path.is_file() else path / "_")
@@ -60,7 +62,8 @@ class EzOps:
         return real, path, ps, ev
 
     def _jail(self, p: str) -> Path:
-        path = safety.jail_path(self._restore_path(p), self.cfg.evidence_root)
+        path = safety.jail_input(self._restore_path(p), self.cfg.evidence_root,
+                                  self.cfg.output_root)
         if not path.is_file():
             raise FileNotFoundError(f"not a file under the evidence root: {p}")
         evidence.check_before_use(self.cfg, path, self.actor)
@@ -70,7 +73,7 @@ class EzOps:
         """Run once per (tool, evidence digest, options); later calls reuse the result."""
         cache = Path(self.cfg.output_root) / ".toolcache" / "ez_parse.json"
         data = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
-        key = json.dumps([tool, ev["sha256"], argv])
+        key = json.dumps([PARSE_FORMAT, tool, ev["sha256"], argv])
         rid = data.get(key)
         d = Path(self.cfg.output_root) / rid if rid else None
         if d is not None and d.is_dir() and results.read_meta(d).get("exit_code") == 0:
@@ -183,7 +186,7 @@ class EzOps:
     async def _cached_full(self, tool: str, ev: dict) -> dict[str, Any] | None:
         cache = Path(self.cfg.output_root) / ".toolcache" / "ez_parse.json"
         data = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
-        rid = data.get(json.dumps([tool, ev["sha256"], []]))
+        rid = data.get(json.dumps([PARSE_FORMAT, tool, ev["sha256"], []]))
         d = Path(self.cfg.output_root) / rid if rid else None
         if d is None or not d.is_dir():
             return None

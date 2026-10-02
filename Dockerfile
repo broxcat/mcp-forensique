@@ -57,6 +57,16 @@ RUN cd "$HOME/forensic-tools" \
 # Volatility 3 downloads Windows symbols here on first use (persisted by a named volume).
 RUN mkdir -p "$HOME/.cache/volatility3/symbols"
 
+# Task 4.3c (approved 02/10/2026): disk images read as files, no mount (cap_drop ALL, no FUSE).
+# The Sleuth Kit (mmls, fls, icat; built with libewf2 -> E01) and ewf-tools (ewfinfo, ewfverify).
+# Versions pinned to the bookworm amd64 binaries (binNMU "+b1", not the source version shown on
+# packages.debian.org). Separate last layer so the layers above stay cached.
+USER root
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends sleuthkit=4.11.1+dfsg-1+b1 ewf-tools=20140813-1+b1 \
+ && rm -rf /var/lib/apt/lists/*
+USER analyst
+
 WORKDIR /app
 ENV PYTHONPATH=/app/src \
     FORENSIC_MCP_CONFIG=/app/forensic-mcp.docker.toml

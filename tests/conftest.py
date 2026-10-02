@@ -31,4 +31,5 @@ def cfg(tmp_path: Path) -> Config:
     volatility2._cache.clear()
     return Config(evidence_root=ev, output_root=tmp_path / "output", tools_file=tools,
                   api_token_file=tmp_path / "secrets" / "api_token", timeout_seconds=30,
+                  sleuthkit_dir=FAKEBIN / "disk", sleuthkit_prefix=[sys.executable],
                   allowed_hosts=["localhost:8000", "127.0.0.1:8000"])

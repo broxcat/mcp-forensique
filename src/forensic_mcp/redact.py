@@ -53,6 +53,9 @@ class Case:
 def case_for(cfg: Config, path: Path | None) -> Case:
     """Nearest case.toml between the evidence file and the evidence root; default otherwise."""
     root = Path(cfg.evidence_root).resolve()
+    src = source_image(cfg, path) if path else None
+    if src is not None:  # a file extracted by disk_extract: case of its source image
+        path = src
     d = Path(path).resolve().parent if path else root
     while d.is_relative_to(root):
         f = d / "case.toml"
@@ -71,6 +74,19 @@ def case_for(cfg: Config, path: Path | None) -> Case:
             break
         d = d.parent
     return Case("default", cfg.default_classification)
+
+
+def source_image(cfg: Config, path: Path | str) -> Path | None:
+    """For a file under output_root/<disk_extract id>/extracted/: the disk image it came from
+    (meta.json input_path); None for anything else."""
+    p, out = Path(path).resolve(), Path(cfg.output_root).resolve()
+    if not p.is_relative_to(out):
+        return None
+    meta = out / p.relative_to(out).parts[0] / "meta.json"
+    if not meta.is_file():
+        return None
+    m = json.loads(meta.read_text(encoding="utf-8"))
+    return Path(m["input_path"]) if m.get("tool") == "disk_extract" and m.get("input_path") else None
 
 
 def pseudonymizer_for(cfg: Config, case: Case) -> "Pseudonymizer | None":

@@ -49,8 +49,16 @@ def load_registry(cfg: Config) -> dict[str, Any]:
 
 
 def relpath(cfg: Config, path: Path) -> str:
-    """Path relative to the evidence root (the registry key)."""
-    return str(Path(path).resolve().relative_to(Path(cfg.evidence_root).resolve()))
+    """Registry key: path relative to the evidence root, or "@<result_id>/<path>" for a file
+    copied by disk_extract (second read-only root, task 4.3c)."""
+    p = Path(path).resolve()
+    root = Path(cfg.evidence_root).resolve()
+    if p == root or p.is_relative_to(root):
+        return str(p.relative_to(root))
+    rel = p.relative_to(Path(cfg.output_root).resolve())  # ValueError if outside both roots
+    if len(rel.parts) < 2 or rel.parts[1] != "extracted":
+        raise ValueError(f"not an evidence path: {path}")
+    return "@" + rel.parts[0] + ("/" + "/".join(rel.parts[2:]) if len(rel.parts) > 2 else "")
 
 
 def register(cfg: Config, path: Path, actor: dict[str, Any]) -> dict[str, Any]:
@@ -69,6 +77,21 @@ def register(cfg: Config, path: Path, actor: dict[str, Any]) -> dict[str, Any]:
                           stage="registration")
         data[rel] = {"size": st.st_size, "mtime_ns": st.st_mtime_ns, "sha256": digest,
                      "registered_utc": ev["ts_utc"], "audit_id": ev["audit_id"]}
+        return data[rel]
+
+
+def register_derived(cfg: Config, path: Path, digest: str, actor: dict[str, Any],
+                     **provenance: Any) -> dict[str, Any]:
+    """Register a file copied out of an image by disk_extract (already hashed): journaled as
+    evidence_registered with its provenance (source image, inode…), kept in the registry."""
+    rel = relpath(cfg, path)
+    st = path.stat()
+    with _locked(cfg) as data:
+        ev = audit.append(cfg.audit_file, "evidence_registered", actor, path=rel,
+                          size=st.st_size, mtime_ns=st.st_mtime_ns, sha256=digest,
+                          stage="registration", **provenance)
+        data[rel] = {"size": st.st_size, "mtime_ns": st.st_mtime_ns, "sha256": digest,
+                     "registered_utc": ev["ts_utc"], "audit_id": ev["audit_id"], **provenance}
         return data[rel]
 
 

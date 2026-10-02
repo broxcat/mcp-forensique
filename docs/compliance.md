@@ -1,21 +1,21 @@
 # Matrice de conformité CDC ↔ forensic-mcp
 
-Mise à jour : J5 (02/10/2026), tâche 4.3 (outils Eric Zimmerman, EVTX, $MFT, timeline ; Décision J3). Les statuts décrivent le **code** ;
+Mise à jour : J5 (02/10/2026), tâches 4.3b (complément) et 4.3c (images disque) ; Décision J3. Les statuts décrivent le **code** ;
 la conception est dans [`L2_architecture.md`](L2_architecture.md) (sa matrice §10 est l'état
 au J4, jalon M2). À tenir à jour à la fin de chaque tâche (règle 1 de `CLAUDE.md`).
 
 Statuts : **fait** · **partiel** · **manquant** · **hors périmètre**.
 Les intitulés ET-xx sont repris de `CLAUDE.md` (§4, §8, §9) ; le CDC n'est pas versionné
 dans le dépôt, les intitulés sont à vérifier contre le CDC du 26/09/2026.
-Tests : `tests/test_disk.py` (4.3), `tests/test_memory.py` + `tests/test_rules.py` (4.2), `tests/test_socle.py` (4.1), `tests/test_fasttrack.py`, `tests/test_phase2.py` — 85 tests.
+Tests : `tests/test_disk.py` + `tests/test_artefacts_disk.py` (4.3), `tests/test_memory.py` + `tests/test_rules.py` (4.2), `tests/test_socle.py` (4.1), `tests/test_fasttrack.py`, `tests/test_phase2.py` — 99 tests.
 
 ## 1. Exigences fonctionnelles (EF)
 
 | ID | Prio | Exigence | Statut | Code | Test | Écart / tâche |
 |---|---|---|---|---|---|---|
 | EF-01 | M | Plugins Volatility 3 | fait | `memory_ops.py` (`vol_pslist`, `vol_pstree`, `vol_cmdline`, `vol_netscan`, `vol_malfind`, `vol_dlllist`, `vol_printkey`, `vol3_run`, `vol_list_plugins`), `engines/volatility3.py` (`plugin_options` lu dans `vol <plugin> -h`), `analyzers.py`, `decode.py`, `rules/process_rules.yaml` | `test_memory.py` (un test par outil), `test_rules.py` (une fixture par règle) ; contrôle réel sur `Triage-Memory.mem` (STATUS) | Test de référence complet `tests/scenario_ws042/` : 4.4. |
-| EF-02 | M | Filtrage EVTX | partiel | `ez_ops.op_evtx_query` (presets `rules/evtx_presets.yaml` : logons, rdp, execution, persistence, log_clearing ; `--inc` pour les IDs, dates et texte côté serveur ; parse unique réutilisée ; preset vide ⇒ journal et politique d'audit requis, log présent / absent) | `test_disk.py::test_evtx_query_presets_inc_then_reuse`, `::test_evtx_empty_preset_explains_requirements` | **Aucun .evtx réel sous /evidence** : noms de colonnes EvtxECmd non vérifiés sur données réelles (fournir un échantillon, M3). |
-| EF-03 | M | Recherche $MFT | partiel | `ez_ops.op_mft_search` (MFTECmd, parse unique, filtres chemin / extension / plage UTC sur 8 horodatages) | `test_disk.py::test_mft_search` | **Aucun $MFT réel sous /evidence** : colonnes MFTECmd non vérifiées sur données réelles (M3). |
+| EF-02 | M | Filtrage EVTX | fait | `ez_ops.op_evtx_query` (EvtxECmd `--json`, presets `rules/evtx_presets.yaml`, `--inc`, dates et texte côté serveur, parse unique versionnée, preset vide ⇒ journal et politique d'audit requis) | `test_disk.py::test_evtx_*` ; **contrôle réel** sur `Security.evtx` et `PowerShell-Operational.evtx` (STATUS) | Format JSON réel vérifié (JSONL + BOM, §11). |
+| EF-03 | M | Recherche $MFT | partiel | `ez_ops.op_mft_search` (MFTECmd `--json`, parse unique, filtres chemin / extension / plage UTC) ; `disk_extract` sait extraire `$MFT` d'une image | `test_disk.py::test_mft_search`, `test_artefacts_disk.py::test_disk_extract_hashes_journals_and_chains` | **Aucun $MFT réel** : sortie JSON de MFTECmd non vérifiée (M3). |
 | EF-04 | M | Résultats paginés + lien vers la sortie brute | partiel | `contract.build` (`page.next_offset`, `raw_output`), `results.query` (streaming, `matched`), `query_results(offset, limit)` | `test_socle.py::test_every_tool_response_matches_contract`, `::test_response_size_is_bounded` | `memory_run` + `query_results` paginés ; les outils de liste sont tronqués à `max_rows_returned` sans paramètre `offset`. → 4.4 |
 | EF-05 | M | SHA-256 des preuves journalisé | fait | `evidence.py` (enregistrement avant analyse, contrôle rapide, re-hachage), `register_evidence`, `verify_evidence` | `test_socle.py::test_registration_before_analysis_and_change_detected` | Hash « après » dans le rapport exporté : 4.4 / 6.1. |
 | EF-06 | M | Lecture seule des preuves | fait | `docker-compose.yml` (`/evidence:ro`), `safety.jail_path` | Phase 1 : `touch /evidence/x` → *Read-only file system* ; `test_phase2.py::test_jail_*` | Aucune seconde racine ajoutée en 4.1. |
@@ -41,7 +41,7 @@ Tests : `tests/test_disk.py` (4.3), `tests/test_memory.py` + `tests/test_rules.p
 | ET-06 | Skill au format SKILL.md | manquant | — | — | `skills/playbook-poste-compromis/`. → P5 |
 | ET-07 | LLM cloud et LLM local | partiel | `llm_mode` appliqué par `redact.pseudonymizer_for` ; service `webui` (Open WebUI + Ollama) | `test_socle.py::test_*_cloud_mode` | Serveur MCP pas encore enregistré dans Open WebUI ; mode déclaré, pas détecté (L2 §12 point 2). → 5.2 |
 | ET-08 | Machine d'analyse Linux | fait | `Dockerfile`, `docker-compose.yml` | Phase 1 : `check_tools.py` 20/20 | Justification : L2 §5. Épinglage des versions à faire (L2 §12 point 4). |
-| ET-09 | ≥ 1 test unitaire par outil exposé | partiel | 85 tests ; faux `vol`, `vol2`, `ez` dans `tests/fakebin/` | `test_disk.py::test_ez_run_each_tool` (les 17 outils EZ), `test_memory.py` (un test par outil mémoire), `test_socle.py` (les 24 outils MCP) | Test de référence `tests/scenario_ws042/` : 4.4. |
+| ET-09 | ≥ 1 test unitaire par outil exposé | partiel | 99 tests ; faux `vol`, `vol2`, `ez`, `disk/{mmls,fls,icat}` dans `tests/fakebin/` | `test_socle.py` (les 34 outils MCP), `test_disk.py::test_ez_run_each_tool` (17 outils EZ), `test_artefacts_disk.py` (7 raccourcis + 3 outils disque) | Test de référence `tests/scenario_ws042/` : 4.4. |
 
 ## 3. Garde-fous (CDC §5)
 
@@ -79,7 +79,7 @@ sur le Gantt (4.3 découpée en 4.3a/4.3b/4.3c, M4 → J12, M5 → J14) : L2 §1
 | ID | Prio | Exigence | Statut | Tâche |
 |---|---|---|---|---|
 | EXT-01 | M (décision) | vol2 + tous les plugins vol3, options typées, plugins sensibles confirmés | fait | 4.2 : `vol3_run`, `vol2_list_plugins`, `vol2_imageinfo` (cache par hash), `vol2_run` ; vol2 `--plugins`, `-w`, `-D` jamais passés, plugins vol2 à `-D` refusés |
-| EXT-02 | M (décision) | 17 outils EZ + extraction depuis image disque | partiel | 4.3a/b faits : `engines/zimmerman.py` (registre unique vérifié contre `docs/tool_help`), `ez_list_tools`, `ez_run` (options typées), `evtx_query`, `mft_search`, `timeline` ; détection des échecs silencieux (bstrings 2026.5.0 inutilisable sous Linux). 4.3c (image disque) : conception proposée, Dockerfile **non modifié**, en attente d'accord (L2 §12). |
+| EXT-02 | M (décision) | Outils EZ en ligne de commande + extraction depuis image disque | partiel | 4.3b : registre de 17 outils (Hasher : aucune version Linux/.NET 9), sorties JSON/CSV par outil, options typées, raccourcis typés ; 4.3c : sleuthkit + ewf-tools (raw, E01, VMDK, VHD), `disk_info`, `disk_list`, `disk_extract`, seconde racine en lecture seule. **6 outils EZ inutilisables sous Linux** (bstrings, PECmd, SQLECmd, WxTCmd, SrumECmd, SumECmd) : prefetch, historique navigateur, Timeline Windows, SRUM et UAL non disponibles dans le conteneur — décision requise (§11). |
 
 ## 6. Écarts de périmètre et éléments hérités
 
@@ -92,5 +92,7 @@ sur le Gantt (4.3 découpée en 4.3a/4.3b/4.3c, M4 → J12, M5 → J14) : L2 §1
 | `memory_run(path, plugin, pid)` générique | Tout plugin exécutable (ex. résultats `windows.registry.hashdump` et `windows.dumpfiles` du 29/09 dans `output/`) | **Remplacé** en 4.2 par `vol3_run` (options typées) avec confirmation humaine des plugins sensibles. |
 | Noms d'outils (`memory_list_plugins`) | Différaient de la cible | **Renommés** en 4.2 (`vol_list_plugins`). |
 | Versions non épinglées | Outils Zimmerman, `uvicorn`, `pyyaml`, `open-webui:main` | Épingler avant M3 (L2 §12 point 4), après accord. |
+| Hasher | Seul outil CLI EZ absent : aucune version .NET 9 (net9/net6 : 403/404) | Non intégré ; son rôle (hachage) est couvert par `register_evidence` / `verify_evidence`. |
+| Outils EZ Windows-only | bstrings, PECmd, SQLECmd, WxTCmd, SrumECmd, SumECmd refusent ou plantent sous Linux, code retour 0 | `known_issue` + marqueurs de plantage ⇒ `tool_error` ; alternative à décider. |
 | Écriture concurrente du journal | Serveurs HTTP et stdio simultanés | **Fait** : verrou `flock` (4.1). |
 | Contrôle rapide journalisé | L2 §9.3 prévoyait un `evidence_verified` à chaque appel | Implémenté : journalisé seulement en cas d'écart ; chaque `tool_call` porte le `evidence_sha256` vérifié (journal plus compact). |

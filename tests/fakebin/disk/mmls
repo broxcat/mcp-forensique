@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""Fake mmls: a GPT-like table (same layout as the real tool); 'nopart' images: no table."""
+import sys
+
+if "nopart" in sys.argv[-1]:
+    print("Cannot determine partition type", file=sys.stderr)
+    sys.exit(1)
+print("""GUID Partition Table (EFI)
+Offset Sector: 0
+Units are in 512-byte sectors
+
+      Slot      Start        End          Length       Description
+000:  Meta      0000000000   0000000000   0000000001   Safety Table
+001:  -------   0000000000   0000002047   0000002048   Unallocated
+002:  000       0000002048   0000206847   0000204800   EFI system partition
+003:  001       0000206848   0041940991   0041734144   Basic data partition""")

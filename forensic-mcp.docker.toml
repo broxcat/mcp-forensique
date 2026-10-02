@@ -21,4 +21,8 @@ max_response_kb = 64
 max_output_mb = 1024
 # Classification used when no case.toml applies (lab | internal | client).
 default_classification = "internal"
+# Task 4.3c: The Sleuth Kit binaries (Debian package sleuthkit) and the size bound of one
+# file extracted from a disk image.
+sleuthkit_dir = "/usr/bin"
+max_extract_file_mb = 8192
 llm_mode = "local"

@@ -64,6 +64,10 @@ class MemoryOps:
             if tool == "replay":
                 orig = audit.read_event(self.cfg.audit_file, int(params["audit_id"]))
                 return await self.sensitive_reason(orig.get("tool", ""), orig.get("params", {}))
+            if tool == "disk_extract":
+                from .engines.sleuthkit import SENSITIVE_TARGETS
+                return ("credential hives (SAM/SECURITY)"
+                        if set(params.get("targets") or []) & SENSITIVE_TARGETS else None)
             if params.get("dump"):
                 return "extraction (--dump)"
             if tool == "vol3_run":

@@ -9,8 +9,8 @@ from forensic_mcp import audit, schemas, server
 from forensic_mcp.engines import zimmerman
 
 pytestmark = pytest.mark.anyio
-FORBIDDEN = {"--sync", "--vss", "-l", "--maps", "--appIds", "-w", "-b", "--fs", "--fr",
-             "--saveTo", "--dumpTo", "--blobdir", "--dd", "--dr", "--json", "--xml", "--html"}
+FORBIDDEN = zimmerman.FORBIDDEN | {"--dr"}  # + MFTECmd --dr (writes resident files)
+OPTIONS = {"RECmd": {"batch": "Kroll_Batch.reb"}}  # RECmd needs batch or key
 # (tool, evidence path relative to WS-042/, kind) — one artefact per tool
 SAMPLES = {
     "EvtxECmd": "logs/Security.evtx", "MFTECmd": "C/$MFT",
@@ -56,34 +56,48 @@ def _last_call(cfg):
 
 
 def test_registry_has_17_tools_and_every_flag_is_in_the_saved_help() -> None:
-    assert len(zimmerman.REGISTRY) == 17
+    assert len(zimmerman.REGISTRY) == 17 and "Hasher" not in zimmerman.REGISTRY  # no Linux build
     assert zimmerman.verify_registry() == []
     for name, t in zimmerman.REGISTRY.items():
         used = {*t.inputs, *t.fixed, t.output, *(o.flag for o in t.options.values())}
         assert not used & FORBIDDEN, name
+        assert {o.kind for o in t.options.values()} <= {
+            "bool", "int", "ids", "date", "enum_batch", "regpath", "evidence_path"}, name
+    assert "-o" not in {o.flag for o in zimmerman.REGISTRY["PECmd"].options.values()}
+    json_tools = {"EvtxECmd", "MFTECmd", "PECmd", "LECmd", "JLECmd", "RecentFileCacheParser",
+                  "SQLECmd", "RECmd"}
+    assert {n for n, t in zimmerman.REGISTRY.items() if t.output == "--json"} == json_tools
+
+
+def test_verify_registry_catches_an_invented_flag(monkeypatch) -> None:
+    fake = zimmerman.Tool(("-f",), "x", {"bad": zimmerman.Opt("--no-such-flag", "bool", "x")})
+    monkeypatch.setitem(zimmerman.REGISTRY, "EvtxECmd", fake)
+    assert zimmerman.verify_registry() == ["EvtxECmd --no-such-flag"]
 
 
 @pytest.mark.parametrize("tool", sorted(SAMPLES))
 async def test_ez_run_each_tool(case, tool) -> None:
-    r = await _call(case, "ez_run", {"tool": tool, "path": "WS-042/" + SAMPLES[tool]})
+    r = await _call(case, "ez_run", {"tool": tool, "path": "WS-042/" + SAMPLES[tool],
+                                     "options": OPTIONS.get(tool)})
     assert isinstance(r, dict), r
     assert r["row_count"] >= 1 and r["engine"].startswith(tool)
     argv = _last_call(case)["argv"]
     assert ("-d" if SAMPLES[tool].endswith("/") else "-f") in argv
-    assert zimmerman.REGISTRY[tool].output in argv and not set(argv) & FORBIDDEN
+    assert zimmerman.output_flag(tool, argv) in argv and not set(argv) & FORBIDDEN
     if tool != "SrumECmd":
         assert r["exit_code"] == 0
 
 
 async def test_ez_run_output_shapes(case) -> None:
     amc = await _call(case, "ez_run", {"tool": "AmcacheParser", "path": "WS-042/" + SAMPLES["AmcacheParser"]})
-    assert {row["_csv"] for row in amc["rows"]} == {"Amcache_ProgramEntries.csv",
+    assert {row["_file"] for row in amc["rows"]} == {"Amcache_ProgramEntries.csv",
                                                    "Amcache_UnassociatedFileEntries.csv"}
     kn = await _call(case, "ez_run", {"tool": "RECmd", "path": "WS-042/" + SAMPLES["RECmd"],
-                                      "options": {"key": "Software\\Microsoft\\Windows\\CurrentVersion\\Run"}})
-    assert kn["rows"][0]["line"].startswith("Key:")  # console mode -> one row per line
+                                      "options": {"key": "Microsoft\\Windows\\CurrentVersion\\Run"}})
+    assert kn["rows"][0]["ValueName"] == "UpdateSvc"  # --kn -> JSON
+    assert "--json" in _last_call(case)["argv"] and "--csv" not in _last_call(case)["argv"]
     bs = await _call(case, "ez_run", {"tool": "bstrings", "path": "WS-042/" + SAMPLES["bstrings"],
-                                      "options": {"min_length": 5, "search": "http"}})
+                                      "options": {"min_length": 5}})
     assert bs["rows"][1]["string"] == "http://203.0.113.10/a.ps1"
     rla = await _call(case, "ez_run", {"tool": "rla", "path": "WS-042/" + SAMPLES["rla"]})
     assert rla["rows"][0]["file"] == "SYSTEM"
@@ -95,16 +109,17 @@ async def test_ez_typed_options_and_refusals(case) -> None:
                                       "options": {"batch": "Kroll_Batch.reb"}})
     argv = _last_call(case)["argv"]
     assert argv[argv.index("--bn") + 1].endswith("BatchExamples/Kroll_Batch.reb") and ok["row_count"]
+    assert "--csv" in argv and "--json" not in argv  # batch -> CSV
     bad = [await _call(case, "ez_run", args) for args in (
         {"tool": "RECmd", "path": hive, "options": {"batch": "../../etc/passwd"}},
         {"tool": "RECmd", "path": hive, "options": {"sync": True}},
-        {"tool": "RECmd", "path": hive, "options": {"search_all": "--sync"}},
-        {"tool": "EvtxECmd", "path": "WS-042/logs/Security.evtx", "options": {"event_ids": ["4624"]}},
+        {"tool": "RECmd", "path": hive, "options": {"key": "--sync"}},
+        {"tool": "EvtxECmd", "path": "WS-042/logs/Security.evtx", "options": {"event_ids": [70000]}},
         {"tool": "MFTECmd", "path": "WS-042/C/$MFT", "options": {"mft_path": "../tools.toml"}},
         {"tool": "SBECmd", "path": "WS-042/Users/alice/NTUSER.DAT"},
         {"tool": "PECmd", "path": "../tools.toml"})]
     assert "unknown RECmd batch" in bad[0] and "no option 'sync'" in bad[1]
-    assert "no leading '-'" in bad[2] and "event IDs" in bad[3]
+    assert "must be a registry path" in bad[2] and "event IDs" in bad[3]
     assert "outside evidence root" in bad[4] and "takes -d" in bad[5]
     assert "EVIDENCE_DIR" in bad[6]
     outcomes = [e["outcome"] for e in audit.iter_events(case.audit_file) if e["type"] == "tool_call"]
@@ -134,6 +149,18 @@ async def test_silent_failure_is_a_tool_error_not_zero_rows(case) -> None:
     assert last["outcome"] == "tool_error" and "input from stdin or file" in last["error"]
 
 
+async def test_crash_with_exit_0_and_empty_file_is_a_tool_error(case) -> None:
+    p = Path(case.evidence_root) / "WS-042" / "crash-History"
+    p.write_bytes(b"x")
+    r = await _call(case, "browser_history", {"path": "WS-042/crash-History"})
+    assert r["row_count"] == 0 and "TOOL ERROR" in r["notes"][0]
+    last = _last_call(case)
+    assert last["outcome"] == "tool_error" and "SQLite.Interop.dll" in last["error"]
+    listing = await _call(case, "ez_list_tools", {})
+    issues = {x["tool"] for x in listing["rows"] if x["known_issue"]}
+    assert issues == {"bstrings", "PECmd", "SQLECmd", "WxTCmd", "SrumECmd", "SumECmd"}
+
+
 async def test_ez_list_tools(case) -> None:
     r = await _call(case, "ez_list_tools", {})
     assert r["row_count"] == 17 and "(all present)" in r["summary"]
@@ -144,16 +171,16 @@ async def test_ez_list_tools(case) -> None:
 async def test_evtx_query_presets_inc_then_reuse(case) -> None:
     p = "WS-042/logs/Security.evtx"
     per = await _call(case, "evtx_query", {"path": p, "preset": "persistence"})
-    assert [r["EventId"] for r in per["rows"]] == ["4698", "7045"]
+    assert [r["EventId"] for r in per["rows"]] == [4698, 7045]  # int in real JSON
     assert per["rows"][0]["PayloadData1"].endswith("UpdateSvc")
     assert "--inc" in _last_call(case)["argv"]          # IDs filtered by EvtxECmd itself
     full = await _call(case, "evtx_query", {"path": p, "contains": "alice"})
-    assert full["row_count"] == 1 and full["rows"][0]["EventId"] == "4624"
+    assert full["row_count"] == 1 and full["rows"][0]["EventId"] == 4624
     again = await _call(case, "evtx_query", {"path": p, "preset": "execution", "limit": 1})
     assert "parse reused" in again["summary"] and again["page"]["next_offset"] is None
     win = await _call(case, "evtx_query", {"path": p, "start": "2026-10-06T14:30:00Z",
                                            "end": "2026-10-06T14:35:00Z"})
-    assert [r["EventId"] for r in win["rows"]] == ["4104", "4698"]
+    assert [r["EventId"] for r in win["rows"]] == [4104, 4698]
 
 
 async def test_evtx_empty_preset_explains_requirements(case) -> None:

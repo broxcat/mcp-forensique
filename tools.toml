@@ -99,3 +99,8 @@ ok = true
 cmd = ["/home/analyst/.dotnet/dotnet", "/home/analyst/forensic-tools/ez/rla/rla.dll"]
 path = "/home/analyst/forensic-tools/ez/rla/rla.dll"
 ok = true
+
+[tools.Hasher]
+cmd = []
+path = ""
+ok = false

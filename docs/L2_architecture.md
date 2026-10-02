@@ -383,7 +383,7 @@ d'attaque augmente (Volatility 2 n'est plus maintenu, plus d'analyseurs de forma
 | P7 Évaluation / P8 L7 | J14–J15 / J16 | J15–J16, L7 rédigé en parallèle |
 | P9 Démonstration | J17–J18 | inchangé |
 
-### Proposition 4.3c — extraction depuis une image disque (à valider, Dockerfile non modifié)
+### Décision 4.3c — extraction depuis une image disque (option A retenue le 02/10/2026, réalisée)
 
 **Constaté dans le conteneur (02/10/2026).** Utilisateur `analyst` (uid 1000), capacités Linux
 toutes à 0 (`CapEff`, `CapBnd`), pas de `/dev/fuse` : **aucun montage possible** (ni `mount`,
@@ -409,3 +409,26 @@ ActivitiesCache.db) : `fls` localise les inodes, `icat` copie chaque fichier ver
 reçoit une seconde racine en lecture seule (`/output/*/extracted`) pour que `ez_run`,
 `evtx_query` et `mft_search` lisent ces extraits. Besoin : `apt-get install sleuthkit
 ewf-tools` dans le `Dockerfile` (versions épinglées), après accord.
+
+**Réalisé (02/10/2026).** Dernière couche du `Dockerfile` : `sleuthkit=4.11.1+dfsg-1+b1` et
+`ewf-tools=20140813-1+b1` (versions binaires amd64 ; la page Debian affiche la version source
+sans `+b1`, d'où un premier échec de construction). Formats lus : raw, AFF, E01, VMDK, VHD.
+Outils `disk_info`, `disk_list(path, partition_offset, path_contains, deleted)`,
+`disk_extract(path, targets, partition_offset, include_deleted)` avec 19 cibles fixes ; la
+cible `sam_security` (ruches SAM/SECURITY, matériel d'authentification) exige la confirmation
+nominative de l'analyste. Les extraits sont désignés `@<result_id>/<chemin>` ; la jail
+n'accepte cette seconde racine que dans `/output/<id>/extracted`. Contrôle réel : `mmls`,
+`fls` et `icat` réels sur une image FAT12 construite pour le test.
+
+### Limite constatée — outils Eric Zimmerman sous Linux (02/10/2026)
+
+Six des 17 outils en ligne de commande ne fonctionnent pas dans le conteneur Linux, vérifié
+avec les binaires réels : **bstrings** (ne traite rien), **PECmd** (refus au démarrage :
+décompression Windows), **SQLECmd** et **WxTCmd** (bibliothèque native `SQLite.Interop.dll`
+absente), **SrumECmd** et **SumECmd** (base ESE propre à Windows). **Hasher** n'existe pas en
+.NET 9. Tous rendent le code retour 0 : le serveur détecte ces cas (`known_issue`, marqueurs de
+plantage) et les journalise en `tool_error`, jamais en « 0 ligne ». Conséquence : prefetch,
+historique de navigation, Timeline Windows, SRUM et UAL ne sont pas exploitables dans le
+conteneur. **À décider :** analyseurs Python équivalents (nouvelles dépendances, par exemple
+`sqlite3` de la bibliothèque standard pour les navigateurs), exécution de ces outils sur un
+poste Windows, ou retrait de ces artefacts du périmètre.

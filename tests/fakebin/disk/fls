@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""Fake fls -r -p -o <sector> <image>: real line format 'type inode:<TAB>path'."""
+import sys
+
+args = sys.argv[1:]
+if args[args.index("-o") + 1] != "206848":
+    print("Cannot determine file system type", file=sys.stderr)
+    sys.exit(1)
+print("""r/r 0-128-6:\t$MFT
+d/d 11-144-4:\t$Extend
+r/r 38-128-4:\t$Extend/$UsnJrnl:$J
+d/d 64-144-2:\tWindows
+r/r 1201-128-1:\tWindows/System32/config/SYSTEM
+r/r 1202-128-1:\tWindows/System32/config/SAM
+r/r 1203-128-1:\tWindows/System32/winevt/Logs/Security.evtx
+r/r 1204-128-1:\tWindows/Prefetch/PSEXESVC.EXE-AD70946C.pf
+r/r * 1205-128-1:\tWindows/Prefetch/DELETED.EXE-11111111.pf
+r/r 1206-128-1:\tUsers/alice/NTUSER.DAT
+r/r 1207-128-1:\tUsers/alice/Documents/report.docx""")

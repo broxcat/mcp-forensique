@@ -41,9 +41,9 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 ## 2. STATUS (update at the end of every task)
 
 ```
-Today: J5 (02/10) — 4.3a/b done (P3 defensive part still open, see below)
-Current task: 4.3 DONE except 4.3c (disk image), waiting for the user: approve option A
-  (apt sleuthkit + ewf-tools) or B (pip dissect.target) in L2 §12 before any Dockerfile change
+Today: J5 (02/10) — 4.3a/b/c done (P3 defensive part still open, see below)
+Current task: 4.3 DONE (4.3b completed + 4.3c), waiting for the user; decision needed on the 6
+  EZ tools that do not run on Linux (§11); next 4.4
 Next milestones: M2 architecture validated J4 (01/10, livrable L2) · M3 evidence ready J6 (05/10)
                  · M4 MCP server functional J10 (09/10) · M5 feature freeze J13 (14/10)
 Existing code (built before this CDC-aligned plan, to be reconciled in task 2.1):
@@ -115,6 +115,30 @@ Done: 4.3a/b (02/10) — engines/zimmerman.py: ONE registry of the 17 EZ tools (
   mount/ewfmount; available without install: Debian bookworm sleuthkit 4.11.1 (libewf2 -> E01),
   ewf-tools 20140813; PyPI dissect.target 3.25.1 (AGPL, 12 deps). Design + options in L2 §12.
   Nothing installed; Dockerfile untouched.
+Done: 4.3b completion + 4.3c (02/10) — scripts/check_tools_18.py (imports the unchanged
+  check_tools.py, adds Hasher): 20/21, Hasher FAIL = no .NET 9 build (403/404), not registered.
+  Registry: JSON for EvtxECmd/MFTECmd/PECmd/LECmd/JLECmd/RecentFileCacheParser/SQLECmd/RECmd --kn,
+  CSV otherwise (RECmd --bn); option kinds bool/int/ids/date/enum_batch + regpath (no leading
+  '-') + evidence_path; free-text options removed (RECmd --sa/--sk/--sv/--sd, bstrings --ls/--lr,
+  PECmd -k); FORBIDDEN set in zimmerman.FORBIDDEN; AppCompatCacheParser only with -f; RECmd needs
+  batch or key; known_issue for 6 tools; crash markers -> tool_error; parse cache key versioned.
+  Shortcuts (artefact_ops.py): prefetch_query, browser_history, shimcache_query, amcache_query,
+  lnk_query, jumplist_query, recyclebin_query. 4.3c: Dockerfile last layer sleuthkit
+  4.11.1+dfsg-1+b1 + ewf-tools 20140813-1+b1 (formats raw/aff/ewf/vmdk/vhd), help in
+  docs/tool_help/{mmls,fls,icat,ewfinfo,ewfverify}.txt (scripts/capture_disk_help.sh);
+  engines/sleuthkit.py + disk_ops.py: disk_info (mmls), disk_list (fls -r -p, parsed once),
+  disk_extract (19 fixed targets, icat, sha256 + 0444 + evidence_registered with source image
+  and inode; sam_security needs confirmation); second read-only jail root "@<result_id>/…"
+  (safety.jail_input); case and timeline follow the source image. server_disk.py. 34 MCP tools.
+  pytest 99 passed (test_artefacts_disk.py new).
+  Real checks: evtx_query on real Security.evtx (logons 2007 rows 8.0 s, log_clearing 1,
+  persistence 0 + notes "4698 log present / 106 TaskScheduler ABSENT", 4688 65 rows) and
+  PowerShell-Operational.evtx (execution 3083, contains Invoke-WebRequest 5); real
+  mmls/fls/icat on a FAT12 image built in /tmp (no partition table note, 8 fls entries, TEST.PF
+  extracted 0444 + journaled, chained @path); SQLECmd: Maps loaded (93) then SQLite.Interop
+  crash; PECmd/WxTCmd/SrumECmd/SumECmd/bstrings refuse or crash on Linux (§11); MFTECmd, RECmd,
+  AmcacheParser, AppCompatCacheParser, LECmd, JLECmd, RBCmd, RecentFileCacheParser, rla start
+  on Linux (garbage input only: their real output is NOT verified, no sample).
 Decisions recorded (user, 30/09): 3 = deny Bash in the analysis workspace (Claude Code setting,
   analyst side, not implemented in this repo); 5 = cleanup approved. Points 1, 2, 4 of L2 §12
   still open (default transport, llm_mode per transport, version pinning).
@@ -361,7 +385,11 @@ Human builds and attacks; agent prepares documents and helpers only.
   1102/104); when a preset finds nothing, say which log or audit policy was required.
   `mft_search(path, path_contains, extension, start, end, time_field)` with MFTECmd (parse once,
   then streaming filters). `timeline(case, around, window_minutes)` merging memory process times
-  and EVTX/MFT events in UTC.
+  and EVTX/MFT events in UTC. **Split by the Décision J3 (done 02/10):** 4.3a registry +
+  evtx_query + mft_search + timeline; 4.3b the other EZ tools (JSON/CSV per tool, typed options)
+  + typed shortcuts prefetch_query, browser_history, shimcache_query, amcache_query, lnk_query,
+  jumplist_query, recyclebin_query; 4.3c disk images (sleuthkit + ewf-tools): disk_info,
+  disk_list, disk_extract, second read-only jail root "@<result_id>/…". Linux limits: §11.
 - **4.4 Pagination, tests, README (J10):** EF-04 paging on every tool; `record_finding`
   (fact / hypothesis / recommendation, citations, confidence, **automatic cross-check**);
   `list_findings`; golden scenario test `tests/scenario_ws042/` (§10); ≥ 1 unit test per exposed
@@ -505,6 +533,43 @@ statements and rejects one with a wrong IP.
   are assumed (projection falls back to full rows if they differ). Verify at M3.
 - Disk images in a hardened container: no capabilities and no FUSE, so no mount/ewfmount; only
   file-reading parsers (sleuthkit, dissect) can work — they parse hostile images in-process.
+- Real EZ JSON format (4.3b, verified 02/10 on the real Security.evtx, 4,464 events): EvtxECmd
+  `--json` writes ONE JSON OBJECT PER LINE (JSONL), not an array, with a UTF-8 BOM; empty fields
+  are omitted; EventId is an int (a string in CSV); TimeCreated = "2026-09-28T17:19:20.2825544
+  +00:00". `--fj` replaces the record by a raw {"Event": …} tree (normalised fields lost): not
+  used. NOT verified on a real file (no sample): MFTECmd, PECmd, LECmd, JLECmd,
+  RecentFileCacheParser, SQLECmd, RECmd --kn JSON, nor the CSV tools (AmcacheParser,
+  AppCompatCacheParser, SBECmd, RBCmd, RECmd --bn) — the reader accepts JSONL, an array or one
+  object, and the shortcut filters fall back to the whole row when a column is missing.
+- 6 of the 17 EZ CLI tools do NOT work on Linux (verified 02/10 with the real binaries):
+  bstrings (processes nothing), PECmd ("decompression specific Windows libraries", at start-up,
+  every input), SQLECmd and WxTCmd (missing SQLite.Interop.dll), SrumECmd and SumECmd (ESE =
+  Windows-only). Hasher has no .NET 9 build at all (404). All exit 0. So prefetch, browser
+  history, Windows Timeline, SRUM and UAL are NOT available in the container: the Décision J3
+  scope is only partly reachable on Linux. Mitigation: known_issue in the registry + crash
+  markers -> tool_error; alternatives need a decision (Python parsers, Windows host).
+- EZ exit codes carry no signal: every tool exits 0 on garbage input, on a crash ("Unhandled
+  exception") and when refusing the platform. Only the output and the console text tell.
+- SQLECmd crashed AND left an empty JSON file: the "no output = silent failure" check missed it
+  (a file existed). Mitigation: crash/refusal markers in stdout/stderr -> tool_error.
+- Cached parses outlived a format change: after CSV -> JSON, evtx_query reused old CSV parses
+  (EventId as text, other time format) mixed with JSON ones. Mitigation: versioned cache key.
+- Calls rejected by the SDK's own schema validation (wrong JSON types) never reach Engine.call,
+  so they are not journaled; the SDK also coerces "4624" -> 4624. "100 % journaled" means 100 %
+  of the calls that reach the server.
+- A registry-path pattern accepted a leading '-' (RECmd key "--sync" would have been an option);
+  caught by a refusal test. Every string that reaches argv must forbid a leading '-'.
+- Debian version pins: packages.debian.org shows the SOURCE version (4.11.1+dfsg-1); the amd64
+  binary is a binNMU (4.11.1+dfsg-1+b1), so the first pinned build failed. Agent error: the
+  background build was reported OK from `tail`'s exit code; check the build's own status.
+- Git Bash on Windows rewrote the argument /opt/venv/bin/vol into "C:/Program Files/Git/opt/…"
+  passed to the container: check_tools marked vol3 FAIL and rewrote tools.toml (restored by a
+  re-run with MSYS_NO_PATHCONV=1).
+- Extracted files (disk_extract) are 0444 and journaled with source image + inode, but their
+  folder stays writable by the container user: tampering is detected (registry quick check),
+  not prevented.
+- The EVTX dev samples are real logs of an analyst PC (SIDs, account names, a 1102 log clearing
+  on 28/09): real personal data even in "dev" samples; classify them (case.toml).
 - Encoded blobs defeat pseudonymisation: the base64 of an encoded PowerShell command still
   carries the real IP/URL in cloud mode (the server-decoded text is pseudonymised, the raw
   argument is not).

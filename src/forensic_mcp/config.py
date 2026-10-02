@@ -31,6 +31,9 @@ class Config:
     max_output_mb: int = 1024          # stdout+stderr bound of one tool run (ET-02)
     llm_mode: str = "local"            # "local" (Ollama) or "cloud"
     default_classification: str = "internal"  # when no case.toml applies
+    sleuthkit_dir: Path = Path("/usr/bin")    # mmls, fls, icat (task 4.3c)
+    sleuthkit_prefix: list[str] = field(default_factory=list)  # e.g. [python] for test stubs
+    max_extract_file_mb: int = 8192           # bound of one file copied by disk_extract
 
     @property
     def audit_file(self) -> Path:
@@ -38,7 +41,8 @@ class Config:
         return Path(self.output_root) / "audit.jsonl"
 
 
-_PATH_KEYS = {"evidence_root", "output_root", "tools_file", "vol3_symbols_dir", "api_token_file"}
+_PATH_KEYS = {"evidence_root", "output_root", "tools_file", "vol3_symbols_dir", "api_token_file",
+              "sleuthkit_dir"}
 
 
 def load_config(path: str | Path | None = None) -> Config:

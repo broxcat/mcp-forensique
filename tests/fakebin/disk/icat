@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+"""Fake icat -o <sector> <image> <inode>: file content on stdout."""
+import sys
+
+inode = sys.argv[-1]
+if inode == "1202-128-1":
+    sys.stdout.write("regf SAM hive")
+elif inode.startswith(("0-", "38-", "120")):
+    sys.stdout.write(f"content of {inode}")
+else:
+    print(f"icat: error reading {inode}", file=sys.stderr)
+    sys.exit(1)
