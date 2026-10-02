@@ -72,10 +72,13 @@ Après chaque étape, rappeler à l'analyste ce qui reste dans `checklist_status
 - « Aucun événement » ne veut pas dire « aucune activité » : lire les `notes` du serveur (journal
   absent, politique d'audit désactivée) avant de conclure.
 
-Les règles détaillées et l'interprétation des artefacts seront complétées en 5.2
-(`references/regles_citation.md`, `references/interpretation_artefacts.md`).
+Règles complètes et exemple : [règles de citation](references/regles_citation.md). Avant de
+qualifier une ligne de suspecte, consulter l'[interprétation des artefacts](references/interpretation_artefacts.md)
+(normal / suspect / pièges).
 
 ## Références
 
 - [Checklist de collecte](references/checklist_collecte.md) — EF-08
 - [Arbre de triage](references/arbre_triage.md) — EF-09
+- [Interprétation des artefacts](references/interpretation_artefacts.md) — normal ou suspect, pièges
+- [Règles de citation](references/regles_citation.md) — EF-10, EF-11

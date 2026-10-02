@@ -91,6 +91,26 @@ async def test_playbook_prompt() -> None:
         playbook.render("../x")
 
 
+def test_references_5_2_use_real_tools_and_allowed_attack_ids() -> None:
+    interp = (REFS / "interpretation_artefacts.md").read_text(encoding="utf-8")
+    rules = (REFS / "regles_citation.md").read_text(encoding="utf-8")
+    tools = {t for line in interp.splitlines() if line.startswith("**Outils :**")
+             for t in re.findall(r"`([a-z0-9_]+)`", line)}
+    tools |= set(re.findall(r"\*\*Outils :\*\* `([a-z_]+)`", interp))
+    assert len(tools) >= 15 and tools <= set(server.TOOL_NAMES), tools - set(server.TOOL_NAMES)
+    for text in (interp, rules):  # the skill never teaches an ID record_finding would reject
+        ids = set(re.findall(r"T\d{4}(?:\.\d{3})?", text))
+        assert ids and ids <= known_attack_ids(), ids - known_attack_ids()
+    # the documented matching rules are the server's
+    from forensic_mcp.findings_ops import PARTIAL_MIN_CELL, PARTIAL_MIN_VALUE
+    assert f"≥ {PARTIAL_MIN_CELL} caractères" in rules and f"≥ {PARTIAL_MIN_VALUE}" in rules
+    for kind in ("`fact`", "`hypothesis`", "`recommendation`", "`high`", "`medium`", "`low`"):
+        assert kind in rules
+    skill = (ROOT / "skills" / "playbook-poste-compromis" / "SKILL.md").read_text(encoding="utf-8")
+    for ref in REFS.glob("*.md"):
+        assert f"references/{ref.name}" in skill, ref.name
+
+
 def test_skill_frontmatter() -> None:
     skill = (ROOT / "skills" / "playbook-poste-compromis" / "SKILL.md").read_text(encoding="utf-8")
     front = yaml.safe_load(skill.split("---")[1])

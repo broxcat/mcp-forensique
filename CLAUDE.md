@@ -42,8 +42,9 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 
 ```
 Today: J5 (02/10) — 4.3a/b/c done (P3 defensive part still open, see below)
-Current task: 5.1 DONE (02/10); 3.1 defensive part in progress (request L. Plancke 02/10);
-  then 5.2 (citation rules, artefact interpretation, trials with both LLM modes)
+Current task: 5.2 agent part DONE (02/10), waiting for the user: trials with both LLM modes
+  are human (docs/essais_skill.md); next 6.1. NOT COMMITTED: 3.1/3.2 defensive part,
+  disk_extract_file, 5.2 (commit not requested yet)
 PENDING ANALYST ACTION: F-0001 (à valider), F-0002 and F-0003 (rejetés par le serveur) in the
   real journal await the analyst's decision (L. Plancke: reject with the reason "finding de
   test", via `docker exec -it forensic-mcp python -m forensic_mcp validate`). The agent never
@@ -66,11 +67,40 @@ Done: 2.2 (30/09) — L2 completed: §5 Docker deployment vs ET-08, §6 HTTP/Ope
   (risk, design, test, status, task), §12 open points for review. audit_schema: tool_call gets
   `outcome` (ok/tool_error/timeout/refused) + `error`. compliance.md aligned (statuses checked
   equal by .scratch/check_l2.py). No feature code. pytest 17 passed.
-3.1: NOT done. Two attempts were stopped by a safety classifier while writing the scenario step
-  table; attack procedures are written by the humans. docs/L3_scenario.md is a partial,
-  UNTRACKED draft (never committed): the humans decide to finish or delete it. Defensive items
-  still to do on request: lab/prepare_victim.ps1, lab/check_logging.ps1, eval/ground_truth
-  template+schema+test, scripts/register_evidence.py.
+3.1/3.2 defensive part DONE (02/10, request L. Plancke; earlier attempts were stopped by a
+  safety classifier on the step table: the agent writes NO attack step, ever). docs/L3_scenario.md
+  (FR skeleton: objectives, topology, WS-042 sheet, logging table, CDC steps with EMPTY ATT&CK /
+  procedure / time columns, collection order + evidence layout, custody, session sheet, roles);
+  lab/prepare_victim.ps1 (logging only: 10 audit subcategories by GUID, legacy override off,
+  4688 command line, 4104/4103, TaskScheduler log, log sizes, optional local Sysmon with
+  signature check, -WhatIf) and lab/check_logging.ps1 (read-only, auditpol /backup numeric
+  Setting Value = language-independent, OK/FAIL/WARN, -OutFile JSON, exit 0/1/2); ASCII only
+  (PS 5.1). eval/ground_truth.yaml (template, every team field empty) + ground_truth.schema.json
+  (template vs filled via if/then; facts = artefact, evidence_path, tool, field, value,
+  result_id, row). custody.py + scripts/register_evidence.py (before / --after, analyst actor,
+  manifest 0444 in /output/manifests/, exit 0/1/2; never loaded by the server). pytest 132
+  passed (tests/test_lab_eval.py, 8). Real checks: both .ps1 parse with 0 errors (PS 5.1
+  parser) and refuse non-admin with exit 2 (verified on this PC, not admin). NOT verified: the
+  admin path of both scripts (prepare_victim must never run on the analyst PC; to run on a lab
+  VM), register_evidence.py on real lab evidence (M3).
+Done: disk_extract_file (02/10, request + approval L. Plancke, outside the CDC, EXT-02) —
+  files picked by inode from the cached disk_list listing (refused without one), deleted files
+  included, 1-20 integer inodes, shared _extract with disk_extract (sha256, 0444,
+  evidence_registered with image + inode), credential hives still need confirmation
+  (sensitive_reason). 41 MCP tools; pytest 133 passed. Real use: not-so-fat.dd (CTF image,
+  FAT, no partition table, auto-registered sha256 d9a2cdd3…): 2 deleted entries; extracted
+  flag.zip (inode 6, 241 B, sha256 35611abb…) and ziEuYrJW (inode 4, 0 B) — result
+  20261002-212117-disk_extract_file-f70d61. The zip is NOT opened: no archive tool; the user
+  then dropped the CTF request ("oublie ce que je viens de dire"); the tool is kept.
+Done: 5.2 agent part (02/10) — references/interpretation_artefacts.md (memory: processes,
+  command lines, network, malfind, Run keys; EVTX table by event ID; disk: $MFT, prefetch,
+  Amcache/ShimCache, LNK/jump lists/recycle bin, browser/SRUM; normal / suspect / pitfalls,
+  ATT&CK only from the tree) and references/regles_citation.md (no statement without
+  record_finding, kinds, confidence scale, citation form, the server's matching rules and
+  rejections, absences, à valider, example with placeholder rows); SKILL.md links all 4
+  references; docs/essais_skill.md (trial sheet cloud/local, human). Prompt = 24.4 k chars.
+  pytest 134 passed (test_playbook.py: tools in the docs exist, ATT&CK IDs accepted, documented
+  thresholds = findings_ops constants).
 Done: 4.1 (30/09) — socle: new modules schemas.py, contract.py, evidence.py, redact.py, ops.py
   (Engine.call wraps every tool); audit.py rewritten (typed events, audit_id, ts_utc, flock,
   verify_report = chain + sequence + schema, head_hash); runner output bound (max_output_mb);
@@ -699,3 +729,18 @@ statements and rejects one with a wrong IP.
   "made-up" ID (T1003.001) became a legitimate ID. Anti-hallucination tests must pick IDs that
   are outside every server table, and the tables themselves need review (they define what the
   model may claim).
+- Lab logging scripts (3.1, 02/10): auditpol subcategory NAMES are localised ("Création du
+  processus" on a French Windows), so the scripts use GUIDs and read the numeric "Setting Value"
+  of `auditpol /backup`. And with $ErrorActionPreference = "Stop", `Write-Error` throws: the
+  documented exit code 2 ("not administrator") came out as 1 — found by running the scripts
+  non-admin. A logging check that reports wrongly makes "no event" look like "no activity".
+- Absences cannot be findings (5.2): record_finding needs a cited row, so "no 4698 in
+  Security.evtx" cannot be journaled as a suggestion nor appear in the report; the skill tells
+  the assistant to present it as an observation with the result_id and the server's note. A
+  negative result is still evidence: a gap for objective 3 (100 % of suggestions traced).
+- Skill documentation can drift from the server: the first citation example in
+  regles_citation.md cited vol_pstree rows 2/3 for an anomaly the reference case raises on
+  vol_pslist, with made-up row numbers — the doc itself taught the invented-row-number error.
+  Mitigation: placeholders instead of row numbers, tests tying documented thresholds/IDs/tools to
+  the code. The full prompt (SKILL.md + 4 references) is 24.4 k characters: a small local
+  model's context may truncate it.
