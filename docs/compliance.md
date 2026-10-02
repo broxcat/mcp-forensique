@@ -62,11 +62,11 @@ Conception, risque couvert et test d'acceptation de chaque garde-fou : L2 §10.
 
 | Objectif | Mesuré par | Tâche |
 |---|---|---|
-| O1 : −30 % de temps de triage initial | `eval/score.py` (horodatages du journal) | P7 |
-| O2 : ≥ 80 % des IOC / étapes retrouvés | `eval/score.py` vs `eval/ground_truth.yaml` (modèle + schéma `eval/ground_truth.schema.json` faits, `test_lab_eval.py` ; à remplir par l'équipe après le scénario) | 3.2, P7 |
+| O1 : −30 % de temps de triage initial | `eval/score.py` (délais depuis le journal) + durée de la session classique relevée par l'équipe ; protocole dans `docs/L6_evaluation.md` (brouillon) — **À MESURER** | P7 |
+| O2 : ≥ 80 % des IOC / étapes retrouvés | `eval/score.py` (fait, `test_score.py` sur le cas synthétique WS-042) vs `eval/ground_truth.yaml` (modèle + schéma faits, `test_lab_eval.py` ; à remplir par l'équipe après le scénario) — **À MESURER** | 3.2, P7 |
 | O3 : 100 % des appels et suggestions tracés | `tool_call` automatique + `record_finding` + `verify_audit` (**fait**, vérifié par `scenario_ws042`) | 4.1, 4.4 |
 | O4 : sitrep conforme en < 10 min | `sitrep_draft` chronométré (génération 0,14 s mesurée ; `generation_s` dans meta.json) ; le délai réel (chronologie → sitrep relu et conforme) est mesuré par l'équipe en P7 | 6.1, P7 |
-| O5 : risques LLM et garde-fous documentés | L2 (matrice), L7 | P8 |
+| O5 : risques LLM et garde-fous documentés | L2 (matrice) ; `docs/L7_note_risques.md` (brouillon du 03/10 : 10 risques, chacun avec cas observé, parade, résiduel ; à compléter après L6) | P8 |
 
 ## 5. Décision J3 — extension de périmètre (30/09/2026, L. Plancke)
 

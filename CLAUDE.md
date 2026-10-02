@@ -41,10 +41,20 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 ## 2. STATUS (update at the end of every task)
 
 ```
-Today: J6 (03/10). Current task: 6.1 DONE (03/10) — FEATURE FREEZE (M5) after this, waiting
-  for the user; next P7 (eval/score.py, L6 draft) per §9. Human: trials with both LLM modes
-  (docs/essais_skill.md), lab + attack + ground truth (L3), F-0001..F-0003 decisions.
-  Pushed: 5.3 = aa73e84.
+Today: J6 (03/10). Current task: P7 agent part DONE (03/10), waiting for the user. Feature
+  freeze (M5) since 6.1 (5fb5e21). Human: lab + attack + ground truth (L3), timed sessions
+  classic / cloud / local (L6 protocol), trials of the skill, F-0001..F-0003 decisions.
+Done: P7 agent part (03/10) — (1) hardening b4ca110: base image digest, requirements.lock,
+  .NET 9.0.20, SHA-256 of every download (rules/ez_zips.sha256, TOFU), Open WebUI by digest,
+  .dockerignore .env, templates/analysis-workspace (no Bash/PowerShell/Edit/Write, no direct
+  reads of evidence/output/secrets, only mcp__forensic__*); max_upload_gb/validate_args/
+  FORBIDDEN_FLAGS were already gone (4.1); image rebuilt BUILD_EXIT=0, 19 hashes OK, tools
+  20/21, help texts unchanged, 146 tests. (2) eval/score.py dea8498 (tests/test_score.py on
+  the synthetic WS-042 case + fixture ground truth: facts 4/6, IOC 3/4, steps 3/5, 7/12
+  rejected; a recommendation citing a fact row does not count as finding it). (3)
+  docs/L6_evaluation.md draft (plan, protocol A classic / B cloud / C local, biases, metric
+  definitions, every result "À MESURER", dev measurements labelled as such; test: no number in
+  the results section). (4) docs/L7_note_risques.md draft (10 risks from §11). pytest 150.
 PENDING ANALYST ACTION: F-0001 (à valider), F-0002 and F-0003 (rejetés par le serveur) in the
   real journal await the analyst's decision (L. Plancke: reject with the reason "finding de
   test", via `docker exec -it forensic-mcp python -m forensic_mcp validate`). The agent never
