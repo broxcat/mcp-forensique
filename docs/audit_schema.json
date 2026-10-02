@@ -52,7 +52,8 @@
         "ts_utc": {"$ref": "#/$defs/utc"},
         "type": {
           "enum": ["evidence_registered", "evidence_verified", "tool_call", "suggestion",
-                   "validation", "action_request", "action_confirmed", "crisis_event"]
+                   "validation", "action_request", "action_confirmed", "crisis_event",
+                   "imported_from_windows"]
         },
         "actor": {"$ref": "#/$defs/actor"},
         "case": {"description": "Case / host identifier, e.g. WS-042.", "type": "string"}
@@ -143,6 +144,29 @@
               "params": {"type": "object"},
               "decision": {"enum": ["approved", "denied", "expired"]},
               "channel": {"enum": ["elicitation", "approvals_page"]}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"type": {"const": "imported_from_windows"}}},
+          "then": {
+            "required": ["tool", "tool_version", "export_path", "manifest_sha256", "input_path",
+                         "input_sha256", "outputs", "result_id"],
+            "properties": {
+              "tool": {"type": "string"},
+              "tool_version": {"type": ["string", "null"]},
+              "export_path": {"type": "string"},
+              "manifest_sha256": {"$ref": "#/$defs/sha256"},
+              "input_path": {"type": "string"},
+              "input_sha256": {"$ref": "#/$defs/sha256"},
+              "outputs": {"type": "array", "items": {"type": "object",
+                          "required": ["file", "sha256"],
+                          "properties": {"file": {"type": "string"},
+                                         "sha256": {"$ref": "#/$defs/sha256"}}}},
+              "argv": {"type": "array", "items": {"type": "string"}},
+              "exit_code": {"type": ["integer", "null"]},
+              "started_utc": {"type": ["string", "null"]},
+              "result_id": {"type": "string"}
             }
           }
         },

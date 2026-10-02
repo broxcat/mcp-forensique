@@ -20,6 +20,7 @@ from .engines import volatility3
 from .artefact_ops import ArtefactOps
 from .disk_ops import DiskOps
 from .ez_ops import EzOps
+from .import_ops import ImportOps
 from .memory_ops import TYPED_VOL3, MemoryOps
 from .redact import TOKEN, Pseudonymizer, case_for, pseudonymizer_for
 
@@ -50,7 +51,7 @@ def _rows_digest(rows: list[dict[str, Any]]) -> str:
     return hashlib.sha256(audit.canonical(rows).encode()).hexdigest()
 
 
-class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps):
+class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, ImportOps):
     """Operations bound to one Config (memory operations in memory_ops.MemoryOps)."""
 
     def __init__(self, cfg: Config) -> None:

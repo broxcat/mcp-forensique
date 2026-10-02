@@ -429,6 +429,19 @@ absente), **SrumECmd** et **SumECmd** (base ESE propre à Windows). **Hasher** n
 .NET 9. Tous rendent le code retour 0 : le serveur détecte ces cas (`known_issue`, marqueurs de
 plantage) et les journalise en `tool_error`, jamais en « 0 ligne ». Conséquence : prefetch,
 historique de navigation, Timeline Windows, SRUM et UAL ne sont pas exploitables dans le
-conteneur. **À décider :** analyseurs Python équivalents (nouvelles dépendances, par exemple
-`sqlite3` de la bibliothèque standard pour les navigateurs), exécution de ces outils sur un
-poste Windows, ou retrait de ces artefacts du périmètre.
+conteneur.
+
+**Décision (02/10/2026, L. Plancke) — option A : exécution sous Windows puis import.**
+Causes réelles vérifiées : PECmd, SrumECmd et SumECmd testent le système d'exploitation au
+démarrage et refusent Linux (API de décompression Windows ; base ESE `esent.dll`) ; SQLECmd et
+WxTCmd dépendent de `SQLite.Interop.dll`, absent pour Linux. bstrings n'en fait pas partie : il
+lisait l'entrée standard redirigée ; il fonctionne dans le conteneur avec un pseudo-terminal.
+Les cinq outils sont marqués `windows_only` : le serveur ne les lance jamais et indique la
+marche à suivre. L'analyste exécute `scripts/run_ez_windows.ps1` sur le poste Windows (même
+registre `rules/ez_registry.json`, options typées, entrée sous la racine des preuves) ; le
+script écrit `evidence/<HÔTE>/ez_out/<Outil>_<UTC>/` avec un manifeste (outil, version,
+empreinte de l'exécutable, empreinte de l'entrée, ligne de commande, dates UTC). L'outil MCP
+`ez_import` vérifie le manifeste, les empreintes des sorties et celle de l'entrée, normalise
+les lignes (`_row`) et journalise l'événement `imported_from_windows`. **Écart assumé** à
+l'architecture « tout dans le conteneur » (ET-08) : ces artefacts sont analysés sur le poste
+Windows ; le serveur ne peut pas prouver quel binaire a réellement tourné (risque résiduel, L7).

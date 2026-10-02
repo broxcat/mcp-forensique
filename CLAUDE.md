@@ -42,8 +42,8 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 
 ```
 Today: J5 (02/10) — 4.3a/b/c done (P3 defensive part still open, see below)
-Current task: 4.3 DONE (4.3b completed + 4.3c), waiting for the user; decision needed on the 6
-  EZ tools that do not run on Linux (§11); next 4.4
+Current task: 4.3 DONE incl. option A for the Windows-only EZ tools (02/10), waiting for the
+  user; next 4.4
 Next milestones: M2 architecture validated J4 (01/10, livrable L2) · M3 evidence ready J6 (05/10)
                  · M4 MCP server functional J10 (09/10) · M5 feature freeze J13 (14/10)
 Existing code (built before this CDC-aligned plan, to be reconciled in task 2.1):
@@ -139,6 +139,21 @@ Done: 4.3b completion + 4.3c (02/10) — scripts/check_tools_18.py (imports the 
   crash; PECmd/WxTCmd/SrumECmd/SumECmd/bstrings refuse or crash on Linux (§11); MFTECmd, RECmd,
   AmcacheParser, AppCompatCacheParser, LECmd, JLECmd, RBCmd, RecentFileCacheParser, rla start
   on Linux (garbage input only: their real output is NOT verified, no sample).
+Done: option A for Windows-only EZ tools (02/10, decision L. Plancke) — engines/ez_registry.py
+  (registry moved out of zimmerman.py; runtime="windows_only" for PECmd, SQLECmd, WxTCmd,
+  SrumECmd, SumECmd with verified causes; bstrings runs on Linux with tty_stdin);
+  rules/ez_registry.json (scripts/export_ez_registry.py, sync test); scripts/run_ez_windows.ps1
+  (typed options from the registry, inputs jailed under the evidence root, export
+  evidence/<HOST>/ez_out/<Tool>_<UTC>/{out/,manifest.json}, input digest, exe hash + signature,
+  -DryRun, timeout); import_ops.py: ez_import (manifest format, output hashes, input digest,
+  `imported_from_windows` journal event added to docs/audit_schema.json, cached per manifest);
+  prefetch_query / browser_history / new srum_query read imports (raw artefact -> refused with
+  the next step). 37 MCP tools. pytest 105 passed (tests/test_import.py,
+  tests/export_helpers.py). Real checks: PS script dry runs + refusals on Windows; folder digest
+  PS == Python; real script run with a compiled stand-in PECmd.exe (.scratch only) -> export
+  imported by the container (rows, journal ok); real bstrings on Security.evtx via ez_run.
+  NOT verified: a real Windows run of PECmd/SQLECmd/WxTCmd/SrumECmd/SumECmd (no EZ install on
+  this PC, no artefacts) and therefore their real JSON/CSV columns.
 Decisions recorded (user, 30/09): 3 = deny Bash in the analysis workspace (Claude Code setting,
   analyst side, not implemented in this repo); 5 = cleanup approved. Points 1, 2, 4 of L2 §12
   still open (default transport, llm_mode per transport, version pinning).
@@ -541,13 +556,34 @@ statements and rejects one with a wrong IP.
   RecentFileCacheParser, SQLECmd, RECmd --kn JSON, nor the CSV tools (AmcacheParser,
   AppCompatCacheParser, SBECmd, RBCmd, RECmd --bn) — the reader accepts JSONL, an array or one
   object, and the shortcut filters fall back to the whole row when a column is missing.
-- 6 of the 17 EZ CLI tools do NOT work on Linux (verified 02/10 with the real binaries):
-  bstrings (processes nothing), PECmd ("decompression specific Windows libraries", at start-up,
-  every input), SQLECmd and WxTCmd (missing SQLite.Interop.dll), SrumECmd and SumECmd (ESE =
-  Windows-only). Hasher has no .NET 9 build at all (404). All exit 0. So prefetch, browser
-  history, Windows Timeline, SRUM and UAL are NOT available in the container: the Décision J3
-  scope is only partly reachable on Linux. Mitigation: known_issue in the registry + crash
-  markers -> tool_error; alternatives need a decision (Python parsers, Windows host).
+- 5 of the 17 EZ CLI tools do NOT run on Linux — root causes verified 02/10 on the binaries
+  (CORRECTED: a first note said 6; bstrings was a different problem, see next bullet):
+  PECmd, SrumECmd, SumECmd = explicit `IsOSPlatform` check at start-up then a self-refusal
+  (PECmd: Windows decompression API for Win8+ compressed prefetch; SrumECmd/SumECmd: ESE =
+  Windows' esent.dll); SQLECmd, WxTCmd = System.Data.SQLite whose native SQLite.Interop.dll is
+  not shipped for Linux (crash). Hasher has no .NET 9 build (404). All exit 0. Decision
+  (option A, 02/10): registry runtime="windows_only", ez_run refuses them without starting
+  them; the analyst runs scripts/run_ez_windows.ps1 on Windows and the server imports the export
+  (ez_import). DEVIATION from the container-only architecture (ET-08): these artefacts are
+  parsed on the analyst's Windows PC, outside the hardened container; the server only verifies
+  and normalises the result.
+- bstrings was NOT Windows-only: it calls Console.IsInputRedirected and, with stdin=/dev/null
+  (runner), reads stdin instead of -f ("input from stdin or file", exit 0, no output). Fixed by
+  giving it a pseudo-terminal as stdin (runner tty_stdin); verified on the real Security.evtx.
+  Lesson: a "doesn't work on Linux" label must be backed by the real cause, not the symptom.
+- Windows export trust boundary (option A): the manifest is written by the script on the analyst
+  PC. The server verifies the output hashes against the manifest and the input digest against
+  the evidence still under /evidence, and records tool version, exe SHA-256 and Authenticode
+  status, but cannot prove which binary really ran: someone able to write the export folder can
+  forge a consistent manifest. Residual risk; mitigations: exe hash + signature in the manifest,
+  analyst name, import journaled.
+- PowerShell 5.1 pitfalls found by the end-to-end test of run_ez_windows.ps1: $PSScriptRoot is
+  empty inside param() defaults; StrictMode makes absent JSON properties throw (raw message
+  instead of "unknown option"); Start-Process -PassThru + WaitForExit(timeout) leaves ExitCode
+  $null unless $p.Handle is read first (an export without exit code was produced, now refused).
+- Same digest in two languages: input folder digest computed by PowerShell and by Python must
+  match byte for byte (ordinal sort, '/' separators, NUL, UTF-8 without BOM); verified equal on
+  a test folder (space in a name, sub-folder, hidden file skipped).
 - EZ exit codes carry no signal: every tool exits 0 on garbage input, on a crash ("Unhandled
   exception") and when refusing the platform. Only the output and the console text tell.
 - SQLECmd crashed AND left an empty JSON file: the "no output = silent failure" check missed it

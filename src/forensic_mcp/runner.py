@@ -7,6 +7,7 @@ import signal
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 POLL_SECONDS = 0.25
 
@@ -39,15 +40,31 @@ def _truncate(stdout_path: Path, stderr_path: Path, limit: int) -> None:
 
 async def run_process(argv: list[str], stdout_path: Path, stderr_path: Path, timeout: float,
                       env: dict[str, str] | None = None,
-                      max_output_bytes: int | None = None) -> RunResult:
+                      max_output_bytes: int | None = None,
+                      tty_stdin: bool = False) -> RunResult:
     """Run argv, stream stdout/stderr to files; kill the process group on timeout or when
-    stdout+stderr grow beyond max_output_bytes (checked every POLL_SECONDS)."""
+    stdout+stderr grow beyond max_output_bytes (checked every POLL_SECONDS).
+    tty_stdin: give the tool a pseudo-terminal as stdin (nothing is ever written to it), for
+    tools that read stdin when it is redirected (bstrings checks Console.IsInputRedirected)."""
     start = time.monotonic()
     deadline = start + timeout
+    master, slave = os.openpty() if tty_stdin else (None, None)
+    try:
+        return await _run(argv, stdout_path, stderr_path, deadline, start, env,
+                          max_output_bytes, asyncio.subprocess.DEVNULL if slave is None else slave)
+    finally:
+        for fd in (slave, master):
+            if fd is not None:
+                os.close(fd)
+
+
+async def _run(argv: list[str], stdout_path: Path, stderr_path: Path, deadline: float,
+               start: float, env: dict[str, str] | None, max_output_bytes: int | None,
+               stdin: Any) -> RunResult:
     timed_out = exceeded = False
     with open(stdout_path, "wb") as out, open(stderr_path, "wb") as err:
         proc = await asyncio.create_subprocess_exec(
-            *argv, stdout=out, stderr=err, stdin=asyncio.subprocess.DEVNULL,
+            *argv, stdout=out, stderr=err, stdin=stdin,
             start_new_session=True, env={**os.environ, **(env or {})})
         while proc.returncode is None:
             try:

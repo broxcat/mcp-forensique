@@ -1,0 +1,404 @@
+{
+ "format": "forensic-mcp/ez-registry/1",
+ "forbidden": [
+  "--appIds",
+  "--blobdir",
+  "--csvf",
+  "--dd",
+  "--do",
+  "--dt",
+  "--dumpTo",
+  "--fr",
+  "--fs",
+  "--html",
+  "--jsonf",
+  "--maps",
+  "--pretty",
+  "--saveTo",
+  "--sync",
+  "--vss",
+  "--xml",
+  "-b",
+  "-fr",
+  "-fs",
+  "-l",
+  "-w"
+ ],
+ "regpath_pattern": "^[A-Za-z0-9_.{}()$&@#+][A-Za-z0-9_ .{}()$&@#+-]*(\\\\[A-Za-z0-9_ .{}()$&@#+-]+)*$",
+ "tools": {
+  "EvtxECmd": {
+   "runtime": "linux",
+   "inputs": [
+    "-f",
+    "-d"
+   ],
+   "output": "--json",
+   "fixed": [],
+   "artefacts": "*.evtx (file or folder)",
+   "known_issue": "",
+   "options": {
+    "event_ids": {
+     "flag": "--inc",
+     "kind": "ids",
+     "help": "Event IDs to keep"
+    },
+    "exclude_ids": {
+     "flag": "--exc",
+     "kind": "ids",
+     "help": "Event IDs to drop"
+    },
+    "start": {
+     "flag": "--sd",
+     "kind": "date",
+     "help": "UTC start (ISO-8601)"
+    },
+    "end": {
+     "flag": "--ed",
+     "kind": "date",
+     "help": "UTC end (ISO-8601)"
+    }
+   }
+  },
+  "MFTECmd": {
+   "runtime": "linux",
+   "inputs": [
+    "-f"
+   ],
+   "output": "--json",
+   "fixed": [],
+   "artefacts": "$MFT, $J, $Boot, $SDS, $I30",
+   "known_issue": "",
+   "options": {
+    "mft_path": {
+     "flag": "-m",
+     "kind": "evidence_path",
+     "help": "$MFT used to resolve parent paths of a $J"
+    },
+    "short_names": {
+     "flag": "--sn",
+     "kind": "bool",
+     "help": "include DOS 8.3 names"
+    },
+    "all_timestamps": {
+     "flag": "--at",
+     "kind": "bool",
+     "help": "all 0x30 timestamps"
+    },
+    "recover_slack": {
+     "flag": "--rs",
+     "kind": "bool",
+     "help": "recover slack space of FILE records"
+    }
+   }
+  },
+  "PECmd": {
+   "runtime": "windows_only",
+   "inputs": [
+    "-f",
+    "-d"
+   ],
+   "output": "--json",
+   "fixed": [
+    "-q"
+   ],
+   "artefacts": "*.pf prefetch",
+   "known_issue": "Windows only: explicit OS check (IsOSPlatform) at start-up for every input, '…decompression specific Windows libraries' (Win8+ prefetch is compressed with the Windows decompression API; exit 0)",
+   "options": {}
+  },
+  "RECmd": {
+   "runtime": "linux",
+   "inputs": [
+    "-f",
+    "-d"
+   ],
+   "output": "--json",
+   "fixed": [],
+   "artefacts": "registry hives (SYSTEM, SOFTWARE, SAM, SECURITY, NTUSER.DAT, UsrClass.dat, Amcache.hve) + .LOG1/.LOG2; needs batch OR key",
+   "known_issue": "",
+   "options": {
+    "batch": {
+     "flag": "--bn",
+     "kind": "enum_batch",
+     "help": "batch file shipped with RECmd (CSV output)"
+    },
+    "key": {
+     "flag": "--kn",
+     "kind": "regpath",
+     "help": "key path, e.g. Microsoft\\Windows\\CurrentVersion\\Run (JSON)"
+    },
+    "value": {
+     "flag": "--vn",
+     "kind": "regpath",
+     "help": "value name under key"
+    },
+    "allow_missing_logs": {
+     "flag": "--nl",
+     "kind": "bool",
+     "help": "accept dirty hives without transaction logs"
+    }
+   }
+  },
+  "AmcacheParser": {
+   "runtime": "linux",
+   "inputs": [
+    "-f"
+   ],
+   "output": "--csv",
+   "fixed": [],
+   "artefacts": "Amcache.hve",
+   "known_issue": "",
+   "options": {
+    "include_programs": {
+     "flag": "-i",
+     "kind": "bool",
+     "help": "include file entries for Programs entries"
+    },
+    "ignore_logs": {
+     "flag": "--nl",
+     "kind": "bool",
+     "help": "ignore transaction logs for dirty hives"
+    }
+   }
+  },
+  "AppCompatCacheParser": {
+   "runtime": "linux",
+   "inputs": [
+    "-f"
+   ],
+   "output": "--csv",
+   "fixed": [],
+   "artefacts": "SYSTEM hive (ShimCache); -f mandatory, never the live registry",
+   "known_issue": "",
+   "options": {
+    "control_set": {
+     "flag": "-c",
+     "kind": "int",
+     "help": "ControlSet to parse (default: all)"
+    },
+    "sort_desc": {
+     "flag": "-t",
+     "kind": "bool",
+     "help": "sort last modified descending"
+    },
+    "ignore_logs": {
+     "flag": "--nl",
+     "kind": "bool",
+     "help": "ignore transaction logs for dirty hives"
+    }
+   }
+  },
+  "LECmd": {
+   "runtime": "linux",
+   "inputs": [
+    "-f",
+    "-d"
+   ],
+   "output": "--json",
+   "fixed": [
+    "-q"
+   ],
+   "artefacts": "*.lnk",
+   "known_issue": "",
+   "options": {
+    "removable_only": {
+     "flag": "-r",
+     "kind": "bool",
+     "help": "only lnk files pointing to removable drives"
+    },
+    "all_files": {
+     "flag": "--all",
+     "kind": "bool",
+     "help": "process all files, not only *.lnk"
+    }
+   }
+  },
+  "JLECmd": {
+   "runtime": "linux",
+   "inputs": [
+    "-f",
+    "-d"
+   ],
+   "output": "--json",
+   "fixed": [
+    "-q"
+   ],
+   "artefacts": "*.automaticDestinations-ms, *.customDestinations-ms",
+   "known_issue": "",
+   "options": {
+    "all_files": {
+     "flag": "--all",
+     "kind": "bool",
+     "help": "process all files"
+    },
+    "lnk_details": {
+     "flag": "--ld",
+     "kind": "bool",
+     "help": "more information about lnk files"
+    },
+    "lnk_full": {
+     "flag": "--fd",
+     "kind": "bool",
+     "help": "full information about lnk files"
+    }
+   }
+  },
+  "SBECmd": {
+   "runtime": "linux",
+   "inputs": [
+    "-d"
+   ],
+   "output": "--csv",
+   "fixed": [],
+   "artefacts": "folder with NTUSER.DAT / UsrClass.dat (ShellBags)",
+   "known_issue": "",
+   "options": {
+    "dedupe": {
+     "flag": "--dedupe",
+     "kind": "bool",
+     "help": "remove duplicate hives"
+    },
+    "allow_missing_logs": {
+     "flag": "--nl",
+     "kind": "bool",
+     "help": "accept dirty hives without logs"
+    }
+   }
+  },
+  "SrumECmd": {
+   "runtime": "windows_only",
+   "inputs": [
+    "-f",
+    "-d"
+   ],
+   "output": "--csv",
+   "fixed": [],
+   "artefacts": "SRUDB.dat (+ SOFTWARE hive)",
+   "known_issue": "Windows only: explicit OS check (IsOSPlatform) at start-up, then 'Non-Windows platforms not supported…' — the ESE database needs Windows' esent.dll (exit 0)",
+   "options": {
+    "software_hive": {
+     "flag": "-r",
+     "kind": "evidence_path",
+     "help": "SOFTWARE hive (recommended)"
+    }
+   }
+  },
+  "SQLECmd": {
+   "runtime": "windows_only",
+   "inputs": [
+    "-f",
+    "-d"
+   ],
+   "output": "--json",
+   "fixed": [
+    "--noblob"
+   ],
+   "artefacts": "SQLite databases (browser history: Chromium, Firefox, Edge; Windows databases)",
+   "known_issue": "Windows only: uses System.Data.SQLite, whose native SQLite.Interop.dll is not shipped for Linux (crash 'Unable to load shared library SQLite.Interop.dll', exit 0, empty output)",
+   "options": {
+    "hunt": {
+     "flag": "--hunt",
+     "kind": "bool",
+     "help": "identify SQLite files by header, not by name"
+    },
+    "dedupe": {
+     "flag": "--dedupe",
+     "kind": "bool",
+     "help": "deduplicate files by SHA-1"
+    }
+   }
+  },
+  "WxTCmd": {
+   "runtime": "windows_only",
+   "inputs": [
+    "-f"
+   ],
+   "output": "--csv",
+   "fixed": [],
+   "artefacts": "ActivitiesCache.db (Windows Timeline)",
+   "known_issue": "Windows only: uses System.Data.SQLite, whose native SQLite.Interop.dll is not shipped for Linux (crash 'Unable to load shared library SQLite.Interop.dll', exit 0, empty output)",
+   "options": {}
+  },
+  "RBCmd": {
+   "runtime": "linux",
+   "inputs": [
+    "-f",
+    "-d"
+   ],
+   "output": "--csv",
+   "fixed": [
+    "-q"
+   ],
+   "artefacts": "Recycle Bin $I* files, INFO2",
+   "known_issue": "",
+   "options": {}
+  },
+  "RecentFileCacheParser": {
+   "runtime": "linux",
+   "inputs": [
+    "-f"
+   ],
+   "output": "--json",
+   "fixed": [
+    "-q"
+   ],
+   "artefacts": "RecentFileCache.bcf",
+   "known_issue": "",
+   "options": {}
+  },
+  "SumECmd": {
+   "runtime": "windows_only",
+   "inputs": [
+    "-d"
+   ],
+   "output": "--csv",
+   "fixed": [],
+   "artefacts": "folder with SystemIdentity.mdb, Current.mdb, {GUID}.mdb (UAL)",
+   "known_issue": "Windows only: explicit OS check (IsOSPlatform) at start-up, then 'Non-Windows platforms not supported…' — the ESE database needs Windows' esent.dll (exit 0)",
+   "options": {}
+  },
+  "bstrings": {
+   "runtime": "linux",
+   "inputs": [
+    "-f",
+    "-d"
+   ],
+   "output": "-o",
+   "fixed": [
+    "-q",
+    "-s"
+   ],
+   "artefacts": "any file (strings)",
+   "known_issue": "",
+   "options": {
+    "min_length": {
+     "flag": "-m",
+     "kind": "int",
+     "help": "minimum string length"
+    },
+    "max_length": {
+     "flag": "-x",
+     "kind": "int",
+     "help": "maximum string length"
+    }
+   }
+  },
+  "rla": {
+   "runtime": "linux",
+   "inputs": [
+    "-f",
+    "-d"
+   ],
+   "output": "--out",
+   "fixed": [],
+   "artefacts": "dirty registry hives + transaction logs (replays the logs)",
+   "known_issue": "",
+   "options": {
+    "copy_all": {
+     "flag": "--ca",
+     "kind": "bool",
+     "help": "copy clean hives too"
+    }
+   }
+  }
+ }
+}

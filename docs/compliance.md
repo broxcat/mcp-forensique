@@ -1,13 +1,13 @@
 # Matrice de conformité CDC ↔ forensic-mcp
 
-Mise à jour : J5 (02/10/2026), tâches 4.3b (complément) et 4.3c (images disque) ; Décision J3. Les statuts décrivent le **code** ;
+Mise à jour : J5 (02/10/2026), option A pour les outils EZ Windows-only (décision L. Plancke) ; Décision J3. Les statuts décrivent le **code** ;
 la conception est dans [`L2_architecture.md`](L2_architecture.md) (sa matrice §10 est l'état
 au J4, jalon M2). À tenir à jour à la fin de chaque tâche (règle 1 de `CLAUDE.md`).
 
 Statuts : **fait** · **partiel** · **manquant** · **hors périmètre**.
 Les intitulés ET-xx sont repris de `CLAUDE.md` (§4, §8, §9) ; le CDC n'est pas versionné
 dans le dépôt, les intitulés sont à vérifier contre le CDC du 26/09/2026.
-Tests : `tests/test_disk.py` + `tests/test_artefacts_disk.py` (4.3), `tests/test_memory.py` + `tests/test_rules.py` (4.2), `tests/test_socle.py` (4.1), `tests/test_fasttrack.py`, `tests/test_phase2.py` — 99 tests.
+Tests : `tests/test_import.py` (option A), `tests/test_disk.py` + `tests/test_artefacts_disk.py` (4.3), `tests/test_memory.py` + `tests/test_rules.py` (4.2), `tests/test_socle.py` (4.1), `tests/test_fasttrack.py`, `tests/test_phase2.py` — 105 tests.
 
 ## 1. Exigences fonctionnelles (EF)
 
@@ -41,7 +41,7 @@ Tests : `tests/test_disk.py` + `tests/test_artefacts_disk.py` (4.3), `tests/test
 | ET-06 | Skill au format SKILL.md | manquant | — | — | `skills/playbook-poste-compromis/`. → P5 |
 | ET-07 | LLM cloud et LLM local | partiel | `llm_mode` appliqué par `redact.pseudonymizer_for` ; service `webui` (Open WebUI + Ollama) | `test_socle.py::test_*_cloud_mode` | Serveur MCP pas encore enregistré dans Open WebUI ; mode déclaré, pas détecté (L2 §12 point 2). → 5.2 |
 | ET-08 | Machine d'analyse Linux | fait | `Dockerfile`, `docker-compose.yml` | Phase 1 : `check_tools.py` 20/20 | Justification : L2 §5. Épinglage des versions à faire (L2 §12 point 4). |
-| ET-09 | ≥ 1 test unitaire par outil exposé | partiel | 99 tests ; faux `vol`, `vol2`, `ez`, `disk/{mmls,fls,icat}` dans `tests/fakebin/` | `test_socle.py` (les 34 outils MCP), `test_disk.py::test_ez_run_each_tool` (17 outils EZ), `test_artefacts_disk.py` (7 raccourcis + 3 outils disque) | Test de référence `tests/scenario_ws042/` : 4.4. |
+| ET-09 | ≥ 1 test unitaire par outil exposé | partiel | 105 tests ; faux `vol`, `vol2`, `ez`, `disk/*`, exports Windows factices (`tests/export_helpers.py`) | `test_socle.py` (les 37 outils MCP), `test_disk.py` (12 outils EZ Linux + refus des 5 Windows-only), `test_import.py` | Test de référence `tests/scenario_ws042/` : 4.4. |
 
 ## 3. Garde-fous (CDC §5)
 
@@ -79,7 +79,7 @@ sur le Gantt (4.3 découpée en 4.3a/4.3b/4.3c, M4 → J12, M5 → J14) : L2 §1
 | ID | Prio | Exigence | Statut | Tâche |
 |---|---|---|---|---|
 | EXT-01 | M (décision) | vol2 + tous les plugins vol3, options typées, plugins sensibles confirmés | fait | 4.2 : `vol3_run`, `vol2_list_plugins`, `vol2_imageinfo` (cache par hash), `vol2_run` ; vol2 `--plugins`, `-w`, `-D` jamais passés, plugins vol2 à `-D` refusés |
-| EXT-02 | M (décision) | Outils EZ en ligne de commande + extraction depuis image disque | partiel | 4.3b : registre de 17 outils (Hasher : aucune version Linux/.NET 9), sorties JSON/CSV par outil, options typées, raccourcis typés ; 4.3c : sleuthkit + ewf-tools (raw, E01, VMDK, VHD), `disk_info`, `disk_list`, `disk_extract`, seconde racine en lecture seule. **6 outils EZ inutilisables sous Linux** (bstrings, PECmd, SQLECmd, WxTCmd, SrumECmd, SumECmd) : prefetch, historique navigateur, Timeline Windows, SRUM et UAL non disponibles dans le conteneur — décision requise (§11). |
+| EXT-02 | M (décision) | Outils EZ en ligne de commande + extraction depuis image disque | partiel | 12 outils EZ exécutés dans le conteneur (bstrings compris, stdin TTY) ; **5 outils Windows-only** (PECmd, SQLECmd, WxTCmd, SrumECmd, SumECmd) exécutés sous Windows par `scripts/run_ez_windows.ps1` puis importés par `ez_import` (option A) ; `prefetch_query`, `browser_history`, `srum_query` lisent ces imports ; images disque (4.3c) faites. Non vérifié : exécution Windows réelle de ces 5 outils (aucune installation EZ ni artefact sur le poste). |
 
 ## 6. Écarts de périmètre et éléments hérités
 
@@ -93,6 +93,6 @@ sur le Gantt (4.3 découpée en 4.3a/4.3b/4.3c, M4 → J12, M5 → J14) : L2 §1
 | Noms d'outils (`memory_list_plugins`) | Différaient de la cible | **Renommés** en 4.2 (`vol_list_plugins`). |
 | Versions non épinglées | Outils Zimmerman, `uvicorn`, `pyyaml`, `open-webui:main` | Épingler avant M3 (L2 §12 point 4), après accord. |
 | Hasher | Seul outil CLI EZ absent : aucune version .NET 9 (net9/net6 : 403/404) | Non intégré ; son rôle (hachage) est couvert par `register_evidence` / `verify_evidence`. |
-| Outils EZ Windows-only | bstrings, PECmd, SQLECmd, WxTCmd, SrumECmd, SumECmd refusent ou plantent sous Linux, code retour 0 | `known_issue` + marqueurs de plantage ⇒ `tool_error` ; alternative à décider. |
+| Outils EZ Windows-only | PECmd, SQLECmd, WxTCmd, SrumECmd, SumECmd refusent ou plantent sous Linux (causes vérifiées : test d'OS explicite, ESE `esent.dll`, `SQLite.Interop.dll` absent) ; bstrings n'en faisait pas partie (stdin redirigé) | **Option A (02/10)** : `runtime="windows_only"`, jamais lancés dans le conteneur ; exécution sous Windows (`scripts/run_ez_windows.ps1`, mêmes options typées) puis `ez_import` (manifeste, hashes des sorties et de l'entrée, événement `imported_from_windows`). **Écart à l'architecture conteneur (ET-08)** : ces artefacts sont analysés sur le poste Windows ; risque résiduel : un manifeste cohérent peut être forgé par qui peut écrire l'export (§11). |
 | Écriture concurrente du journal | Serveurs HTTP et stdio simultanés | **Fait** : verrou `flock` (4.1). |
 | Contrôle rapide journalisé | L2 §9.3 prévoyait un `evidence_verified` à chaque appel | Implémenté : journalisé seulement en cas d'écart ; chaque `tool_call` porte le `evidence_sha256` vérifié (journal plus compact). |

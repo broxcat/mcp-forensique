@@ -75,7 +75,10 @@ def test_verify_registry_catches_an_invented_flag(monkeypatch) -> None:
     assert zimmerman.verify_registry() == ["EvtxECmd --no-such-flag"]
 
 
-@pytest.mark.parametrize("tool", sorted(SAMPLES))
+WINDOWS_ONLY = {"PECmd", "SQLECmd", "WxTCmd", "SrumECmd", "SumECmd"}
+
+
+@pytest.mark.parametrize("tool", sorted(set(SAMPLES) - WINDOWS_ONLY))
 async def test_ez_run_each_tool(case, tool) -> None:
     r = await _call(case, "ez_run", {"tool": tool, "path": "WS-042/" + SAMPLES[tool],
                                      "options": OPTIONS.get(tool)})
@@ -84,8 +87,19 @@ async def test_ez_run_each_tool(case, tool) -> None:
     argv = _last_call(case)["argv"]
     assert ("-d" if SAMPLES[tool].endswith("/") else "-f") in argv
     assert zimmerman.output_flag(tool, argv) in argv and not set(argv) & FORBIDDEN
-    if tool != "SrumECmd":
-        assert r["exit_code"] == 0
+    assert r["exit_code"] == 0
+
+
+@pytest.mark.parametrize("tool", sorted(WINDOWS_ONLY))
+async def test_windows_only_tools_are_refused_not_run(case, tool) -> None:
+    assert set(zimmerman.windows_only()) == WINDOWS_ONLY
+    before = {p.name for p in Path(case.output_root).glob("*") if p.is_dir()}
+    r = await _call(case, "ez_run", {"tool": tool, "path": "WS-042/" + SAMPLES[tool]})
+    assert isinstance(r, str) and "does not run on Linux" in r
+    assert "scripts/run_ez_windows.ps1" in r and "ez_import" in r
+    assert _last_call(case)["outcome"] == "refused"
+    after = {p.name for p in Path(case.output_root).glob("*") if p.is_dir()}
+    assert not [n for n in after - before if n.startswith(("20", "ez_"))]  # nothing executed
 
 
 async def test_ez_run_output_shapes(case) -> None:
@@ -140,9 +154,9 @@ async def test_ez_run_on_a_folder_registers_every_file(case) -> None:
 
 
 async def test_silent_failure_is_a_tool_error_not_zero_rows(case) -> None:
-    p = Path(case.evidence_root) / "WS-042" / "silent.db"
+    p = Path(case.evidence_root) / "WS-042" / "silent.lnk"
     p.write_bytes(b"x")
-    r = await _call(case, "ez_run", {"tool": "WxTCmd", "path": "WS-042/silent.db"})
+    r = await _call(case, "ez_run", {"tool": "LECmd", "path": "WS-042/silent.lnk"})
     assert r["row_count"] == 0 and r["exit_code"] == 0
     assert "silent failure" in r["notes"][0] and "does NOT mean 'not present'" in r["notes"][0]
     last = _last_call(case)
@@ -150,15 +164,19 @@ async def test_silent_failure_is_a_tool_error_not_zero_rows(case) -> None:
 
 
 async def test_crash_with_exit_0_and_empty_file_is_a_tool_error(case) -> None:
-    p = Path(case.evidence_root) / "WS-042" / "crash-History"
+    p = Path(case.evidence_root) / "WS-042" / "crash.lnk"
     p.write_bytes(b"x")
-    r = await _call(case, "browser_history", {"path": "WS-042/crash-History"})
+    r = await _call(case, "lnk_query", {"path": "WS-042/crash.lnk"})
     assert r["row_count"] == 0 and "TOOL ERROR" in r["notes"][0]
     last = _last_call(case)
     assert last["outcome"] == "tool_error" and "SQLite.Interop.dll" in last["error"]
     listing = await _call(case, "ez_list_tools", {})
     issues = {x["tool"] for x in listing["rows"] if x["known_issue"]}
-    assert issues == {"bstrings", "PECmd", "SQLECmd", "WxTCmd", "SrumECmd", "SumECmd"}
+    assert issues == WINDOWS_ONLY  # bstrings runs on Linux with a TTY stdin
+    rows = {x["tool"]: x for x in listing["rows"]}
+    assert rows["PECmd"]["runtime"] == "windows_only"
+    assert rows["PECmd"]["how_to_run"].startswith("exécuter sous Windows")
+    assert rows["bstrings"]["runtime"] == "linux"
 
 
 async def test_ez_list_tools(case) -> None:

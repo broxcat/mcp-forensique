@@ -27,7 +27,10 @@ DISK_TOOLS = {"ez_list_tools": "read", "ez_run": "read", "evtx_query": "read",
               "mft_search": "read", "timeline": "read", "prefetch_query": "read",
               "browser_history": "read", "shimcache_query": "read", "amcache_query": "read",
               "lnk_query": "read", "jumplist_query": "read", "recyclebin_query": "read",
-              "disk_info": "read", "disk_list": "read", "disk_extract": "action_on_demand"}
+              "disk_info": "read", "disk_list": "read", "disk_extract": "action_on_demand",
+              "ez_import": "journal", "srum_query": "read"}
+SrumTable = Literal["network_usage", "app_resource", "network_connections", "energy",
+                    "push_notifications", "app_timeline", "vfu"]
 
 
 def register_disk_tools(tool: Callable[[str], Any], run: Callable[..., Any],
@@ -94,8 +97,9 @@ def register_disk_tools(tool: Callable[[str], Any], run: Callable[..., Any],
     async def prefetch_query(path: str, ctx: Context, executable_contains: str | None = None,
                              start: str | None = None, end: str | None = None,
                              limit: int = 50, offset: int = 0) -> Result:
-        """Prefetch (*.pf file or folder, PECmd): executions, filtered by executable name and a
-        UTC window on LastRun / PreviousRun0-6. Example: "was psexec run?"."""
+        """Prefetch (PECmd runs on Windows only: pass the export folder made by
+        scripts/run_ez_windows.ps1): executions filtered by executable name and a UTC window on
+        LastRun / PreviousRun0-6. Example: "was psexec run?"."""
         return await run("prefetch_query", window(path=path, executable_contains=executable_contains,
                                                   start=start, end=end, limit=limit,
                                                   offset=offset), ctx)
@@ -104,8 +108,8 @@ def register_disk_tools(tool: Callable[[str], Any], run: Callable[..., Any],
     async def browser_history(path: str, ctx: Context, url_contains: str | None = None,
                               start: str | None = None, end: str | None = None,
                               limit: int = 50, offset: int = 0) -> Result:
-        """Browser history (Chromium/Edge History, Firefox places.sqlite; file or folder,
-        SQLECmd maps), filtered by URL/title text and a UTC visit window."""
+        """Browser history (SQLECmd runs on Windows only: pass the export folder made by
+        scripts/run_ez_windows.ps1), filtered by URL/title text and a UTC visit window."""
         return await run("browser_history", window(path=path, url_contains=url_contains,
                                                    start=start, end=end, limit=limit,
                                                    offset=offset), ctx)
@@ -159,6 +163,26 @@ def register_disk_tools(tool: Callable[[str], Any], run: Callable[..., Any],
         return await run("recyclebin_query", window(path=path, name_contains=name_contains,
                                                     start=start, end=end, limit=limit,
                                                     offset=offset), ctx)
+
+    @tool("ez_import")
+    async def ez_import(tool: EzTool, path: str, ctx: Context, limit: int = 50,
+                        offset: int = 0) -> Result:
+        """Import an export made on Windows by scripts/run_ez_windows.ps1 (folder
+        evidence/<HOST>/ez_out/<Tool>_<time>/ with manifest.json), for the tools that do not run
+        on Linux (PECmd, SQLECmd, WxTCmd, SrumECmd, SumECmd). Verifies the manifest, the output
+        hashes and the input hash, then normalises the rows (_row) and journals the import."""
+        return await run("ez_import", {"tool": tool, "path": path, "limit": limit,
+                                       "offset": offset}, ctx)
+
+    @tool("srum_query")
+    async def srum_query(path: str, ctx: Context, app_contains: str | None = None,
+                         table: SrumTable | None = None, start: str | None = None,
+                         end: str | None = None, limit: int = 50, offset: int = 0) -> Result:
+        """SRUM (SrumECmd, run on Windows then imported: pass the export folder): per-app
+        network and resource usage, filtered by application text, table and UTC window."""
+        return await run("srum_query", window(path=path, app_contains=app_contains, table=table,
+                                              start=start, end=end, limit=limit,
+                                              offset=offset), ctx)
 
     @tool("disk_info")
     async def disk_info(path: str, ctx: Context) -> Result:

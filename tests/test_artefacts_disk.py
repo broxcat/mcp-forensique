@@ -6,6 +6,7 @@ import pytest
 from mcp import Client
 from mcp.types import ElicitResult
 
+from export_helpers import jsonl, make_export
 from forensic_mcp import audit, safety, schemas, server
 
 pytestmark = pytest.mark.anyio
@@ -43,19 +44,31 @@ def _events(cfg, type_):
 
 
 # ---- typed shortcuts (one test each) --------------------------------------------------------
+PF_ROWS = [{"ExecutableName": "PSEXESVC.EXE", "RunCount": 2,
+            "LastRun": "2026-10-06T14:35:00.0000000+00:00"},
+           {"ExecutableName": "CALC.EXE", "RunCount": 1,
+            "LastRun": "2025-01-01T08:00:00.0000000+00:00"}]
+
+
 async def test_prefetch_query(case) -> None:
-    r = await _call(case, "prefetch_query", {"path": "WS-042/prefetch",
-                                             "executable_contains": "psexe",
+    raw = await _call(case, "prefetch_query", {"path": "WS-042/prefetch"})
+    assert "does not run on Linux" in raw and "run_ez_windows.ps1" in raw
+    exp = make_export(case.evidence_root, "WS-042", "PECmd", "WS-042/prefetch",
+                      {"20261006_PECmd_Output.json": jsonl(PF_ROWS)})
+    r = await _call(case, "prefetch_query", {"path": exp, "executable_contains": "psexe",
                                              "start": "2026-10-06T00:00:00Z"})
     assert r["row_count"] == 1 and r["rows"][0]["ExecutableName"] == "PSEXESVC.EXE"
-    assert r["rows"][0]["_row"] == 1 and "--json" in _events(case, "tool_call")[-1]["argv"]
+    assert r["rows"][0]["_row"] == 1 and r["notes"][0].startswith("imported from Windows: PECmd")
 
 
 async def test_browser_history(case) -> None:
-    r = await _call(case, "browser_history", {"path": "WS-042/History", "url_contains": "203.0.113"})
+    exp = make_export(case.evidence_root, "WS-042", "SQLECmd", "WS-042/History", {
+        "20261006_SQLECmd_Output.json": jsonl([
+            {"URL": "http://203.0.113.10/a.ps1", "LastVisitTime": "2026-10-06T14:29:50+00:00"},
+            {"URL": "https://intranet.example/home", "LastVisitTime": "2026-10-01T08:00:00+00:00"}])})
+    r = await _call(case, "browser_history", {"path": exp, "url_contains": "203.0.113"})
     assert r["row_count"] == 1 and r["rows"][0]["URL"] == "http://203.0.113.10/a.ps1"
-    win = await _call(case, "browser_history", {"path": "WS-042/History",
-                                                "start": "2026-10-01T00:00:00Z",
+    win = await _call(case, "browser_history", {"path": exp, "start": "2026-10-01T00:00:00Z",
                                                 "end": "2026-10-02T00:00:00Z"})
     assert win["row_count"] == 1 and "parse reused" in win["summary"]
 
@@ -127,8 +140,8 @@ async def test_disk_extract_hashes_journals_and_chains(case) -> None:
     assert (Path(case.output_root) / rid / "extracted" / "$Extend" / "$UsnJrnl_$J").exists()
     reg = [e for e in _events(case, "evidence_registered") if e["path"] == pf["path"]][0]
     assert reg["inode"] == "1204-128-1" and reg["source_image"] == IMG and reg["sha256"] == pf["sha256"]
-    chained = await _call(case, "prefetch_query", {"path": pf["path"]})
-    assert chained["evidence"]["path"] == pf["path"] and chained["row_count"] >= 1
+    chained = await _call(case, "mft_search", {"path": paths["$MFT"]["path"]})
+    assert chained["evidence"]["path"] == paths["$MFT"]["path"] and chained["row_count"] >= 1
     ev = await _call(case, "evtx_query", {"path": f"@{rid}/Windows/System32/winevt/Logs/Security.evtx",
                                           "preset": "persistence"})
     assert ev["row_count"] == 2
@@ -151,7 +164,7 @@ async def test_second_jail_root_only_accepts_extractions(case) -> None:
     out = case.output_root
     assert safety.jail_input(f"@{rid}/$MFT", case.evidence_root, out).name == "$MFT"
     for bad in (f"@{rid}/../meta.json", "@20261002-000000-vol3_windows.pslist-abcdef/x",
-                "@../../etc/passwd", f"@{rid}"[:-1] + "0/$MFT"):
+                "@../../etc/passwd", f"@{rid[:-1]}{'1' if rid[-1] == '0' else '0'}/$MFT"):
         with pytest.raises(safety.SafetyError):
             safety.jail_input(bad, case.evidence_root, out)
     refused = await _call(case, "mft_search", {"path": f"@{rid}/../rows.jsonl"})

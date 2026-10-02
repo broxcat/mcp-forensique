@@ -116,7 +116,10 @@ class EzOps:
         items = [{"tool": name, "inputs": " ".join(t.inputs), "artefacts": t.artefacts,
                   "options": "; ".join(f"{k}: {o.kind} ({o.flag}) {o.help}"
                                        for k, o in t.options.items()) or "-",
-                  "known_issue": t.known_issue or None}
+                  "runtime": t.runtime, "known_issue": t.known_issue or None,
+                  "how_to_run": ("exécuter sous Windows (scripts/run_ez_windows.ps1) puis importer "
+                                 "avec ez_import" if t.runtime == "windows_only"
+                                 else "ez_run dans le conteneur")}
                  for name, t in zimmerman.REGISTRY.items()]
         recmd = next(i for i in items if i["tool"] == "RECmd")
         try:

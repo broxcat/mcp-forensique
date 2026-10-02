@@ -110,6 +110,9 @@ def main() -> int:
     elif tool in CSV_ROWS and cdir:
         write_csv(os.path.join(cdir, f"{tool}_Output.csv"), CSV_ROWS[tool])
     elif tool == "bstrings":
+        if not sys.stdin.isatty():  # like the real one: redirected stdin -> reads stdin, no output
+            print("input from stdin or file")
+            return 0
         with open(arg(args, "-o"), "w") as fh:
             fh.write("hello world\nhttp://203.0.113.10/a.ps1\n")
     elif tool == "rla":

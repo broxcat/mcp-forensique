@@ -10,6 +10,7 @@ import json
 import re
 from typing import Any
 
+from .engines import zimmerman
 from .ez_ops import _window
 from .timeline import to_utc
 
@@ -38,7 +39,15 @@ SHORTCUTS: dict[str, dict[str, Any]] = {
                                 "TargetModified", "SourceModified"]},
     "recyclebin_query": {"tool": "RBCmd", "text_param": "name_contains",
                          "text": ["FileName", "SourceName"], "time": ["DeletedOn"]},
+    "srum_query": {"tool": "SrumECmd", "text_param": "app_contains",
+                   "text": ["ExeInfo", "ExeInfoDescription", "AppId", "UserName", "Sid"],
+                   "time": ["Timestamp"]},
 }
+# srum_query `table` -> part of the SrumECmd CSV file name (from its README; unverified, §11).
+SRUM_TABLES = {"network_usage": "NetworkUsages", "app_resource": "AppResourceUseInfo",
+               "network_connections": "NetworkConnections", "energy": "EnergyUsage",
+               "push_notifications": "PushNotifications", "app_timeline": "AppTimelineProvider",
+               "vfu": "vfuprov"}
 
 
 def _text_of(row: dict[str, Any], fields: list[str]) -> str:
@@ -67,7 +76,19 @@ class ArtefactOps:
         if sha1 and not SHA1_RE.match(sha1):
             raise ValueError("sha1 must be 40 hex characters")
         executed = real.get("executed_only")
-        r = await self._parsed(spec["tool"], path, ev, [])
+        table = real.get("table")
+        if table is not None and table not in SRUM_TABLES:
+            raise ValueError(f"table must be one of {sorted(SRUM_TABLES)}")
+        if zimmerman.REGISTRY[spec["tool"]].runtime == "windows_only":
+            try:
+                folder = self._export_dir(params)
+            except FileNotFoundError as exc:
+                raise ValueError(f"{spec['tool']} does not run on Linux: run "
+                                 "scripts/run_ez_windows.ps1 on Windows, then pass the export "
+                                 f"folder (evidence/<HOST>/ez_out/...) here. ({exc})") from exc
+            r = await self._imported(spec["tool"], folder)
+        else:
+            r = await self._parsed(spec["tool"], path, ev, [])
 
         def where(row: dict[str, Any]) -> bool:
             if needle and needle not in _text_of(row, spec["text"]):
@@ -75,6 +96,8 @@ class ArtefactOps:
             if sha1 and not str(row.get("SHA1") or "").lower().endswith(sha1):
                 return False
             if executed and str(row.get("Executed") or "").lower() not in ("yes", "true"):
+                return False
+            if table and SRUM_TABLES[table].lower() not in str(row.get("_file", "")).lower():
                 return False
             if lo is None and hi is None:
                 return True
@@ -85,7 +108,8 @@ class ArtefactOps:
                        offset=real.get("offset") or 0)
         cached = " — parse reused" if r.get("cached") else ""
         return self._ez_outcome(name, params, real, ps, ev, r, q,
-                                f"{q['matched']} of {r['row_count']} {spec['tool']} rows{cached}")
+                                f"{q['matched']} of {r['row_count']} {spec['tool']} rows{cached}",
+                                r.get("notes"))
 
     async def op_prefetch_query(self, params: dict[str, Any], conf: Any = None) -> Any:
         return await self._shortcut("prefetch_query", params)
@@ -107,3 +131,6 @@ class ArtefactOps:
 
     async def op_recyclebin_query(self, params: dict[str, Any], conf: Any = None) -> Any:
         return await self._shortcut("recyclebin_query", params)
+
+    async def op_srum_query(self, params: dict[str, Any], conf: Any = None) -> Any:
+        return await self._shortcut("srum_query", params)

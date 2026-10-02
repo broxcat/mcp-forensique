@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from mcp import Client
 
+from export_helpers import jsonl, make_export
 from forensic_mcp import audit, config, contract, evidence, results, runner, safety, schemas, server
 
 pytestmark = pytest.mark.anyio
@@ -34,6 +35,9 @@ def _case(cfg, classification, name="WS-042"):
 
 # ---- output contract (ET-03, EF-04, EF-10) --------------------------------------------------
 async def test_every_tool_response_matches_contract(cfg) -> None:
+    pf, sq, sr = (make_export(cfg.evidence_root, "LAB", t, "mem.raw", {f"{t}.json": jsonl([{"x": 1}])},
+                              stamp=f"2026100{i}T000000Z")
+                  for i, t in enumerate(("PECmd", "SQLECmd", "SrumECmd")))
     async with Client(server.build_server(cfg)) as c:
         run = await c.call_tool("vol3_run", {"path": "mem.raw", "plugin": "windows.pslist"})
         rid, aid = run.structured_content["result_id"], run.structured_content["audit_id"]
@@ -47,7 +51,9 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
                  ("ez_list_tools", {}), ("ez_run", {**m, "tool": "bstrings"}),
                  ("evtx_query", {**m, "preset": "persistence"}), ("mft_search", m),
                  ("timeline", {"around": "2026-10-06T14:31:00Z"}),
-                 ("prefetch_query", m), ("browser_history", m), ("shimcache_query", m),
+                 ("prefetch_query", {"path": pf}), ("browser_history", {"path": sq}),
+                 ("srum_query", {"path": sr}), ("ez_import", {"tool": "PECmd", "path": pf}),
+                 ("shimcache_query", m),
                  ("amcache_query", m), ("lnk_query", m), ("jumplist_query", m),
                  ("recyclebin_query", m), ("disk_info", m),
                  ("disk_list", {**m, "partition_offset": 206848}),
