@@ -63,7 +63,7 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
                  ("record_finding", {"kind": "fact", "text": "System is PID 4", "confidence": "high",
                                      "citations": [{"result_id": rid, "row": 1, "field": "PID",
                                                     "value": 4}]}),
-                 ("list_findings", {})]
+                 ("list_findings", {}), ("report_export", {})]
         seen = {"vol3_run"}
         for tool, args in calls:
             r = await c.call_tool(tool, args)

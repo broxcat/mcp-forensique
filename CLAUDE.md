@@ -42,8 +42,7 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 
 ```
 Today: J5 (02/10) — 4.3a/b/c done (P3 defensive part still open, see below)
-Current task: 4.4 DONE (02/10) — milestone M4 reached on fixtures; waiting for the user
-  (commit of 4.4 not done yet); next P5 (5.1 skill playbook)
+Current task: out-of-band validation + report_export DONE (02/10); next P5 (5.1 skill playbook)
 Next milestones: M2 architecture validated J4 (01/10, livrable L2) · M3 evidence ready J6 (05/10)
                  · M4 MCP server functional J10 (09/10) · M5 feature freeze J13 (14/10)
 Existing code (built before this CDC-aligned plan, to be reconciled in task 2.1):
@@ -174,6 +173,22 @@ Done: 4.4 (02/10) — EF-04: page.next_call on every response (same tool + filte
   real Triage-Memory pslist (UWkpjFjDzM.exe row 63: true finding accepted, wrong PPID and wrong
   Offset(V) rejected with the real cell value); pslist paging 50/65 + next_call. NOTE: these
   3 findings (F-0001..F-0003) went into the REAL journal /output/audit.jsonl (§11).
+Done: 4.4 committed and pushed (ffcfce3, 38 tools, 112 tests).
+Done: out-of-band validation of findings + report_export (02/10, request L. Plancke; CDC §5
+  human validation, over-confidence, traceability, chain of evidence) — validation.py (decide()
+  + interactive CLI `python -m forensic_mcp validate`, TTY required, valider / rejeter / à
+  revoir, analyst name + reason, citations re-checked with the current cell value; any finding
+  reachable by id; server-rejected findings can only be rejected), never imported by the server;
+  `validation` events chained (schema: decision validated/rejected/to_review, comment
+  required); findings_ops.load_findings = current status from the journal (French labels);
+  report.py `report_export(final, title)`: draft marks NON VALIDÉ, final refused while
+  à valider / à revoir (lists them), on a broken chain or a changed evidence; final re-hashes
+  the evidence ("after", journaled); report.md (FR) with provenance per citation and the
+  journal head hash. 39 MCP tools; pytest 119 passed (tests/test_validation_report.py).
+  Real checks: CLI from a shell without TTY -> refused, exit 2, nothing written; on the real
+  journal report_export(final) refused "F-0001 (à valider)", draft written with NON VALIDÉ and
+  the head hash; 0 validation events written by the agent. F-0001..F-0003 left untouched for
+  the analyst (L. Plancke will reject them with the reason "finding de test").
 Decisions recorded (user, 30/09): 3 = deny Bash in the analysis workspace (Claude Code setting,
   analyst side, not implemented in this repo); 5 = cleanup approved. Points 1, 2, 4 of L2 §12
   still open (default transport, llm_mode per transport, version pinning).
@@ -333,13 +348,13 @@ and validate every tool response against it in tests.
 
 | CDC guardrail | Implementation in forensic-mcp | Test |
 |---|---|---|
-| Human validation | Tools annotated read/action; action tools disabled by default and require `ctx.elicit` or the `/approvals` page with the analyst's name; the LLM can never validate | action without confirmation refused and journaled |
-| Traceability | automatic `tool_call` records; `record_finding` for every suggestion; report generated only from journaled, validated findings, citing audit ids | 100 % of report findings have an audit id |
-| Chain of evidence | read-only mount; full SHA-256 at registration (before analysis) and at report export (after); quick size/mtime check before each call | modified copy detected; hashes in report |
+| Human validation | Tools annotated read/journal/action_on_demand; sensitive plugins need a named analyst's form confirmation (SDK resolver), journaled. **Findings are validated OUT OF BAND only**: `docker exec -it forensic-mcp python -m forensic_mcp validate` (interactive terminal required; no MCP tool and no HTTP route writes a `validation`; `validation.py` is never imported by the server); decisions valider / rejeter / à revoir with analyst name + reason, chained in the journal, never deleted | no MCP tool name contains "valid", server modules never import/write validation, MCP calls produce no `validation` event, CLI refused without a TTY |
+| Traceability | automatic `tool_call` records; `record_finding` for every suggestion; `report_export` builds the report only from journaled findings, each citation with result, row, value, tool, command line, version, evidence hash and audit ids, plus the journal head hash | report contains the head hash and provenance; every call/suggestion journaled (golden test) |
+| Chain of evidence | read-only mount; full SHA-256 at registration (before analysis); quick size/mtime check before each call; `report_export(final=true)` re-hashes every evidence used ("après", journaled) and refuses if one changed; hashes before/after in the report | modified copy detected (call refused, final export refused); hashes in report |
 | Confidential data | case `classification: lab / internal / client` in `case.toml`; `client` ⇒ server refuses unless `llm_mode = "local"`; `internal` + cloud ⇒ pseudonymisation of hostnames, accounts, IPs (stable tokens `HOST_1`, `USER_1`, `IP_EXT_1` / `IP_INT_1`), mapping kept server-side, tokens accepted as inputs | no real name/IP in cloud-mode output of a fixture |
 | Confidence limits | every finding carries `confidence`; every cited IOC/timestamp/hash is re-checked by the server | — |
 | Anti-hallucination | `record_finding` **cross-checks each cited value against the raw row** (result_id + _row + field); mismatch ⇒ finding rejected with reason; no citation ⇒ refused | invented PID / IP / timestamp rejected |
-| Over-confidence | findings are `à valider` until an analyst validates; report shows status and requires senior reviewer name | report export refuses unvalidated findings in "final" mode |
+| Over-confidence | findings are `à valider` until an analyst decides (validé / rejeté / à revoir); `report_export(final=true)` refuses while one is à valider or à revoir and lists them; the draft marks them **NON VALIDÉ** | final export refused with a pending / à revoir finding, then accepted after the decisions |
 | Prompt injection | artefact text only inside data fields and the EVIDENCE DATA markers; server never executes or follows content; no action tool enabled by default | fixture with "ignore previous instructions" in a cmdline stays data |
 
 ---
@@ -357,6 +372,7 @@ and validate every tool response against it in tests.
 | EF-07 lab SIEM query | C | only if time after M5 | EF-15 stakeholder board | C | 6.1 if time |
 | EF-08 collection checklist | M | 5.1 | ET-01…ET-09 | — | see §4, 4.x, 5.x, 7.x |
 | EXT-01 vol2 + all vol3 plugins (Décision J3) | M (user) | 4.2 | EXT-02 17 EZ tools + disk image (Décision J3) | M (user) | 4.3a/b/c |
+| GF-VAL out-of-band validation of findings + `report_export` (CDC §5 human validation, over-confidence, traceability) | M (user, 02/10) | after 4.4 | | | |
 
 **Gantt impact of the Décision J3 (proposal, to be approved):** 4.3 is split —
 4.3a (J9, 08/10) EZ registry + EvtxECmd `evtx_query` + MFTECmd `mft_search`;
@@ -637,6 +653,20 @@ statements and rejects one with a wrong IP.
   statement drawn from it is right (interpretation stays "à valider").
 - Agent error (4.3d): the commit message and STATUS said "37 MCP tools"; the real count was 36.
   Caught by the ET-09 test that asserts the number of exposed tools.
+- Out-of-band validation (02/10): no MCP tool, no HTTP route and no server module can write a
+  `validation`; the CLI requires an interactive terminal (refused with exit 2 from a plain
+  shell, verified for real). But the TTY check is a speed bump, not a barrier: a client with a
+  shell can allocate a pseudo-terminal (this project does it for bstrings) and the analyst name
+  is typed, not authenticated. The barrier is decision 3 (no shell for the analysis client)
+  plus the journal (each decision chained, nominative, never deleted).
+- The report's head hash is the journal state just before the export's own tool_call (which is
+  journaled right after); like the journal it lives in /output, so it proves something only if
+  a copy is kept off the PC.
+- Validation design bugs caught by the tests (02/10): the first CLI version offered only pending
+  findings and exited when none was left, so server-rejected findings (F-0002/F-0003 on the
+  real journal) could not receive the analyst's reason; now any finding is reachable by id and a
+  server-rejected one can only be rejected (never validated). A sed edit also turned a test
+  regex into a character class that always passed — tests on tests matter.
 - Encoded blobs defeat pseudonymisation: the base64 of an encoded PowerShell command still
   carries the real IP/URL in cloud mode (the server-decoded text is pseudonymised, the raw
   argument is not).

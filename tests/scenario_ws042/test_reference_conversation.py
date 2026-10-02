@@ -120,7 +120,7 @@ async def test_reference_conversation(ws042) -> None:
         assert "row 999 does not exist" in reasons[5] and "unknown result_id" in reasons[6]
         listing = await call("list_findings", {})
         statuses = [r["status"] for r in listing["rows"]]
-        assert statuses == ["à valider"] * len(true) + ["rejected_by_server"] * len(false)
+        assert statuses == ["à valider"] * len(true) + ["rejeté par le serveur"] * len(false)
         pending = await call("list_findings", {"status": "à valider", "limit": 2})
         assert pending["row_count"] == len(true) and pending["page"]["next_call"] == {
             "tool": "list_findings", "args": {"status": "à valider", "offset": 2, "limit": 2}}

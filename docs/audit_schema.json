@@ -125,10 +125,10 @@
         {
           "if": {"properties": {"type": {"const": "validation"}}},
           "then": {
-            "required": ["finding_id", "decision"],
+            "required": ["finding_id", "decision", "comment"],
             "properties": {
               "finding_id": {"type": "string", "pattern": "^F-[0-9]{4,}$"},
-              "decision": {"enum": ["validated", "rejected"]},
+              "decision": {"enum": ["validated", "rejected", "to_review"]},
               "comment": {"type": "string"},
               "actor": {"properties": {"kind": {"const": "analyst"}}, "required": ["name"]}
             }

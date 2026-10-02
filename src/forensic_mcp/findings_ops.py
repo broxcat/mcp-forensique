@@ -57,6 +57,37 @@ def value_matches(cell: Any, value: Any) -> str | None:
     return None
 
 
+# Journal codes -> labels shown to people (CDC: à valider / validé / rejeté).
+STATUS_LABEL = {"à valider": "à valider", "rejected_by_server": "rejeté par le serveur",
+                "validated": "validé", "rejected": "rejeté", "to_review": "à revoir"}
+BLOCKING = ("à valider", "à revoir")  # a final report refuses these
+
+
+def load_findings(audit_file: Path, with_citations: bool = False) -> list[dict[str, Any]]:
+    """Every finding with its CURRENT status, rebuilt from the journal: the latest analyst
+    `validation` event wins; nothing is ever deleted (rejected findings stay listed)."""
+    out: dict[str, dict[str, Any]] = {}
+    for e in audit.iter_events(audit_file):
+        if e["type"] == "suggestion":
+            f = {"finding_id": e["finding_id"], "kind": e["kind"],
+                 "status": STATUS_LABEL[e["status"]], "confidence": e["confidence"],
+                 "text": e["text"],
+                 "citations": "; ".join(f"{c['result_id']}#{c['_row']}.{c['field']}"
+                                        for c in e["citations"]),
+                 "attack": ", ".join(e.get("attack") or []), "audit_id": e["audit_id"],
+                 "decided_by": None, "decision_reason": None, "decided_utc": None,
+                 "decision_audit_id": None}
+            if with_citations:
+                f["citation_list"] = e["citations"]
+            out[e["finding_id"]] = f
+        elif e["type"] == "validation" and e.get("finding_id") in out:
+            out[e["finding_id"]].update(
+                status=STATUS_LABEL[e["decision"]], decided_by=e["actor"].get("name"),
+                decision_reason=e.get("comment"), decided_utc=e["ts_utc"],
+                decision_audit_id=e["audit_id"])
+    return list(out.values())
+
+
 class FindingsOps:
     """Mixed into ops.Engine (uses cfg, actor, _policy, _listing)."""
 
@@ -146,21 +177,8 @@ class FindingsOps:
         return out
 
     def findings(self) -> list[dict[str, Any]]:
-        """All findings with their current status (latest analyst validation wins)."""
-        out: dict[str, dict[str, Any]] = {}
-        for e in audit.iter_events(self.cfg.audit_file):
-            if e["type"] == "suggestion":
-                out[e["finding_id"]] = {
-                    "finding_id": e["finding_id"], "kind": e["kind"], "status": e["status"],
-                    "confidence": e["confidence"], "text": e["text"],
-                    "citations": "; ".join(f"{c['result_id']}#{c['_row']}.{c['field']}"
-                                           for c in e["citations"]),
-                    "attack": ", ".join(e.get("attack") or []), "audit_id": e["audit_id"],
-                    "validated_by": None}
-            elif e["type"] == "validation" and e.get("finding_id") in out:
-                out[e["finding_id"]].update(status=e["decision"],
-                                            validated_by=e["actor"].get("name"))
-        return list(out.values())
+        """All findings with their current status (see load_findings)."""
+        return load_findings(self.cfg.audit_file)
 
     async def op_list_findings(self, params: dict[str, Any], conf: Any = None) -> Any:
         items = [f for f in self.findings()

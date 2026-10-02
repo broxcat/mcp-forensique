@@ -51,7 +51,7 @@ TOOL_CLASSES = {
     "vol3_run": "action_on_demand", "vol2_list_plugins": "read", "vol2_imageinfo": "read",
     "vol2_run": "action_on_demand", **DISK_TOOLS, "query_results": "read",
     "list_results": "read", "replay": "action_on_demand", "record_finding": "journal",
-    "list_findings": "read"}
+    "list_findings": "read", "report_export": "journal"}
 TOOL_NAMES = list(TOOL_CLASSES)
 ANNOTATIONS = {"read": READ, "journal": JOURNAL, "action_on_demand": ON_DEMAND}
 Result = Annotated[CallToolResult, dict[str, Any]]
@@ -248,13 +248,23 @@ def build_server(cfg: Config | None = None) -> MCPServer:
             "confidence": confidence, "attack": attack})
 
     @tool("list_findings")
-    async def list_findings(status: Literal["à valider", "rejected_by_server", "validated",
-                                            "rejected"] | None = None,
+    async def list_findings(status: Literal["à valider", "validé", "rejeté", "à revoir",
+                                            "rejeté par le serveur"] | None = None,
                             kind: Literal["fact", "hypothesis", "recommendation"] | None = None,
                             limit: int = 50, offset: int = 0) -> Result:
-        """Findings recorded so far (from the audit journal) with status and citations."""
+        """Findings recorded so far, with their current status read from the audit journal
+        (à valider / validé / rejeté / à revoir / rejeté par le serveur). Read-only: only an
+        analyst can validate or reject, outside MCP (`python -m forensic_mcp validate`)."""
         return await run("list_findings", {"status": status, "kind": kind, "limit": limit,
                                            "offset": offset})
+
+    @tool("report_export")
+    async def report_export(final: bool = False, title: str = "") -> Result:
+        """Write the investigation report (Markdown, French) from the journaled findings, with
+        provenance and the journal head hash. final=true is REFUSED while a finding is
+        "à valider" or "à revoir" (validation is done by an analyst outside MCP); the draft
+        (final=false) marks those findings "NON VALIDÉ"."""
+        return await run("report_export", {"final": final, "title": title})
 
     @tool("replay")
     async def replay(audit_id: int, ctx: Context,

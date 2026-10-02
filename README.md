@@ -76,7 +76,7 @@ claude mcp add --transport http forensic http://localhost:8000/mcp --header "Aut
 `http://localhost:3000`, serveur MCP à déclarer avec l'URL interne `http://forensic:8000/mcp` et
 le même jeton.
 
-## 4. Outils exposés (38)
+## 4. Outils exposés (39)
 
 | Domaine | Outils |
 |---|---|
@@ -86,7 +86,7 @@ le même jeton.
 | Disque (EZ) | `evtx_query` (presets logons, rdp, execution, persistence, log_clearing), `mft_search`, `shimcache_query`, `amcache_query`, `lnk_query`, `jumplist_query`, `recyclebin_query`, `ez_run`, `ez_list_tools`, `timeline` |
 | Outils EZ Windows-only | `prefetch_query`, `browser_history`, `srum_query`, `ez_import` (voir §5) |
 | Images disque | `disk_info`, `disk_list`, `disk_extract` (cibles fixes ; extraits utilisables ensuite comme `@<result_id>/<chemin>`) |
-| Constats | `record_finding`, `list_findings` |
+| Constats et rapport | `record_finding`, `list_findings`, `report_export` |
 
 Chaque réponse suit le même contrat ([`docs/output_schema.json`](docs/output_schema.json)) :
 `result_id`, `audit_id`, empreinte de la preuve, lignes numérotées `_row`, page suivante
@@ -111,7 +111,27 @@ l'exécutable, de l'entrée et des sorties). Ensuite `ez_import` ou directement
 `prefetch_query(path="WS-042/ez_out/PECmd_…")` : le serveur vérifie les empreintes avant
 d'utiliser l'export. `-DryRun` affiche la commande sans rien exécuter.
 
-## 6. Modèle de sécurité
+## 6. Validation des constats et rapport
+
+L'IA enregistre ses constats avec `record_finding` ; ils restent « à valider ». **Seul un
+analyste valide, hors MCP**, depuis un terminal interactif :
+
+```powershell
+docker exec -it forensic-mcp python -m forensic_mcp validate
+```
+
+Le menu liste les constats à valider ou à revoir, recontrôle chaque citation (valeur citée,
+valeur actuelle dans la donnée brute), puis enregistre la décision (valider, rejeter, à revoir)
+avec le nom de l'analyste et un motif. Chaque décision est chaînée au journal ; aucun constat
+n'est supprimé. Un identifiant (`F-0002`) donne accès à n'importe quel constat ; un constat
+rejeté par le serveur ne peut qu'être rejeté. Aucun outil MCP ne permet de valider.
+
+`report_export(final=false)` produit un brouillon où les constats en attente sont marqués
+**NON VALIDÉ** ; `report_export(final=true)` est refusé tant qu'il en reste et indique lesquels,
+recalcule l'empreinte de chaque preuve utilisée et inscrit le hash de tête du journal, à
+conserver hors du poste.
+
+## 7. Modèle de sécurité
 
 | Garde-fou | Mise en œuvre |
 |---|---|
@@ -119,7 +139,7 @@ d'utiliser l'export. `-DryRun` affiche la commande sans rien exécuter.
 | Pas d'argument libre | noms de plugins et d'outils issus de la liste découverte ou du registre ; chaque option est typée et vérifiée dans l'aide réelle de l'outil (`docs/tool_help/`) |
 | Traçabilité | journal `/output/audit.jsonl` chaîné par SHA-256 : chaque appel (y compris refusé ou en échec), chaque enregistrement de preuve, chaque constat ; `replay` rejoue un appel et compare la sortie |
 | Chaîne de preuve | SHA-256 complet avant la première analyse, contrôle taille/date avant chaque appel (preuve modifiée ⇒ refus), `verify_evidence` pour le contrôle « après » |
-| Validation humaine | plugins sensibles (identifiants, extractions, `--dump`, ruches SAM/SECURITY) exécutés seulement après confirmation nominative de l'analyste dans le client MCP ; l'IA ne peut pas valider |
+| Validation humaine | plugins sensibles (identifiants, extractions, `--dump`, ruches SAM/SECURITY) exécutés seulement après confirmation nominative de l'analyste dans le client MCP ; constats validés hors bande (§6) ; l'IA ne peut pas valider |
 | Anti-hallucination | `record_finding` revérifie chaque valeur citée dans la ligne brute ; constat rejeté si la valeur, la ligne ou l'identifiant ATT&CK ne sont pas fournis par le serveur |
 | Données confidentielles | `case.toml` : `client` refusé en mode cloud ; `internal` + cloud ⇒ pseudonymisation stable (`HOST_1`, `USER_1`, `IP_EXT_1`…), correspondance gardée côté serveur |
 | Injection de prompt | contenu d'artefact uniquement dans des champs de données, entre marqueurs ; le serveur n'exécute jamais ce contenu |
@@ -130,7 +150,7 @@ l'espace d'analyse ; le journal est infalsifiable sans détection, pas inaltéra
 est déclaré, pas détecté ; les exports Windows reposent sur un manifeste écrit par le poste de
 l'analyste.
 
-## 7. Tests
+## 8. Tests
 
 ```powershell
 docker compose exec forensic pytest -q
