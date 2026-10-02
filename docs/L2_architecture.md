@@ -123,9 +123,9 @@ CDC §9 (« conteneur Docker préparé dès P2 ») contre le risque d'environnem
 | `mcp` | 2.2.0 (épinglé) | SDK MCP officiel (ET-01) |
 | `volatility3` | 2.28.2 (épinglé) | analyse mémoire (EF-01) |
 | Runtime .NET | 9.0 | exécute les outils Zimmerman |
-| EvtxECmd, MFTECmd | builds .NET 9 (non épinglés, voir section 12) | EVTX (EF-02), $MFT (EF-03) |
+| EvtxECmd, MFTECmd | builds .NET 9, zips vérifiés par SHA-256 (`rules/ez_zips.sha256`, 03/10) | EVTX (EF-02), $MFT (EF-03) |
 | 15 autres outils Zimmerman, Volatility 2.6 | — | **installés, non exposés** (hors périmètre CDC) |
-| `uvicorn`, `pyyaml`, `pytest` | non épinglés | serveur HTTP, règles, tests |
+| `uvicorn`, `pyyaml`, `pytest` et dépendances | épinglés (`requirements.lock`, 03/10) | serveur HTTP, règles, tests |
 
 Le code n'est pas copié dans l'image : le dossier du projet est monté sur `/app`. Le script
 `scripts/check_tools.py` vérifie que les 20 outils démarrent (résultat Phase 1 : 20/20) et
@@ -175,7 +175,7 @@ joint le serveur par le réseau Docker interne (`forensic:8000`).
 
 Risques résiduels (à reporter dans L7) : surface d'attaque supplémentaire (port local, page
 d'accueil publique) ; jeton unique partagé, donc **pas d'identité nominative** côté HTTP ;
-image `open-webui:main` non épinglée ; deux processus serveur (HTTP et stdio) peuvent écrire en
+image Open WebUI épinglée par digest (03/10) ; deux processus serveur (HTTP et stdio) peuvent écrire en
 même temps dans le journal (traité en 9.4).
 
 ## 7. Outils exposés et classe
@@ -340,8 +340,11 @@ $MFT non exposés, aucun garde-fou de confidentialité actif.
    transport (stdio = cloud / Claude Code, HTTP = local / Open WebUI).
 3. **Canal de validation nominative** : `ctx.elicit` dans Claude Code, et pour Open WebUI une page
    `/approvals` (nom saisi, sans compte individuel) ou une commande dans le conteneur.
-4. **Épinglage de la chaîne d'approvisionnement** : outils Zimmerman, `uvicorn`, `pyyaml`,
-   image `open-webui:main`, sans version ni empreinte ; à épingler avant M3.
+4. **Épinglage de la chaîne d'approvisionnement** — *traité le 03/10 (P7)* : image de base par
+   digest, paquets Python par version (`requirements.lock`), runtime .NET par version, sleuthkit
+   et ewf-tools par version, chaque téléchargement (17 zips EZ, Volatility 2, script .NET)
+   vérifié par SHA-256 (confiance au premier usage : les URL EZ ne sont pas versionnées, une
+   nouvelle version fait échouer la construction), Open WebUI par digest.
 5. **Nettoyage de l'existant** : retrait de `max_upload_gb`, `validate_args` et
    `FORBIDDEN_FLAGS` (inutilisés) en 4.1. *Décidé (J3) et fait en 4.1.*
 

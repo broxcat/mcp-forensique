@@ -25,7 +25,9 @@ services:
       - "no-new-privileges:true"
 
   webui:
-    image: ghcr.io/open-webui/open-webui:main
+    # Pinned by digest (P7 hardening, 03/10/2026): the "main" build of Open WebUI 0.11.4 already
+    # deployed here (its MCP integration is not tested yet); change it only deliberately.
+    image: ghcr.io/open-webui/open-webui:main@sha256:8b432fe0a65b91116afc7961365c6cca5379cc923171386a96691f3471f3cae9
     container_name: open-webui
     ports:
       - "127.0.0.1:3000:8080"

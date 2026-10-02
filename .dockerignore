@@ -10,3 +10,5 @@ output/
 *.vmem
 *.dmp
 *.E01
+.env
+.scratch/

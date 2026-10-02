@@ -794,3 +794,13 @@ statements and rejects one with a wrong IP.
   collide with real-time checks; the guard stays (an LLM inventing a future time is refused).
 - Sitrep generation takes 0.14 s, but objective 4 (< 10 min) is the HUMAN delay from timeline
   to a reviewed, compliant sitrep: server speed proves nothing about it; measure it in P7.
+- Supply-chain pinning (P7, 03/10): the EZ download URLs are NOT versioned, so the zip hashes
+  are trust-on-first-use (recorded 03/10 from a throwaway container) and a new EZ release makes
+  the build fail on purpose. pip packages are pinned by version only (no --require-hashes);
+  Debian base packages stay unpinned (security updates remove old versions from the archive).
+  The project itself appeared in `pip freeze` (forensic-mcp==0.1.0, not on PyPI): a raw freeze
+  is not a usable lock file without review.
+- Re-running check_tools without --vol3 marked Volatility 3 FAILED and rewrote tools.toml and
+  docs/tool_help/vol3.txt (default path /app/.venv/bin/vol); a re-run with --vol3
+  /opt/venv/bin/vol restored both byte for byte. Tool-check scripts that rewrite configuration
+  must be re-run with the deployment's paths.

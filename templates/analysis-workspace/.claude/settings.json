@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "mcp__forensic__*"
+    ],
+    "deny": [
+      "Bash",
+      "PowerShell",
+      "WebFetch",
+      "WebSearch",
+      "NotebookEdit",
+      "Edit",
+      "Write",
+      "Read(<EVIDENCE_DIR>/**)",
+      "Read(<OUTPUT_DIR>/**)",
+      "Read(<REPO_DIR>/.secrets/**)",
+      "Read(<REPO_DIR>/.env)"
+    ]
+  },
+  "enableAllProjectMcpServers": true
+}
