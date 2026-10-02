@@ -1,0 +1,68 @@
+# Triage decision tree of a compromised Windows host (EF-09): branch -> question -> server tools
+# -> MITRE ATT&CK techniques. Documented in skills/playbook-poste-compromis/references/
+# arbre_triage.md (kept in sync by a test). The ATT&CK IDs listed here and in
+# rules/process_rules.yaml are the only ones record_finding accepts: the model never invents one.
+branches:
+  - id: execution
+    label: "Exécution"
+    questions:
+      - q: "Un programme Office a-t-il lancé un interpréteur (PowerShell, cmd, wscript, mshta…) ?"
+        tools: [vol_pslist, vol_pstree]
+        attack: [T1566.001, T1204.002, T1059]
+      - q: "Des commandes PowerShell encodées ou des blocs de script suspects ?"
+        tools: [vol_cmdline, evtx_query]
+        attack: [T1059.001, T1027]
+      - q: "Un interpréteur de commandes Windows a-t-il été utilisé ?"
+        tools: [vol_cmdline, evtx_query]
+        attack: [T1059.003]
+      - q: "Quels exécutables ont tourné, et quand (prefetch, Amcache, ShimCache) ?"
+        tools: [prefetch_query, amcache_query, shimcache_query]
+        attack: [T1204.002]
+  - id: persistence
+    label: "Persistance"
+    questions:
+      - q: "Une tâche planifiée a-t-elle été créée (4698, 106) ?"
+        tools: [evtx_query, disk_extract]
+        attack: [T1053.005]
+      - q: "Une clé Run ou le dossier Démarrage pointe-t-il vers un exécutable inconnu ?"
+        tools: [vol_printkey, ez_run]
+        attack: [T1547.001]
+      - q: "Un service a-t-il été installé (7045, 4697) ?"
+        tools: [evtx_query, vol3_run]
+        attack: [T1543.003]
+  - id: lateral_movement
+    label: "Mouvement latéral et identifiants"
+    questions:
+      - q: "Des sessions RDP entrantes ou sortantes (4624 type 10, 4778, 1149, 21, 25) ?"
+        tools: [evtx_query]
+        attack: [T1021.001]
+      - q: "Des identifiants explicites ou des comptes valides utilisés à distance (4648, 4624 type 3) ?"
+        tools: [evtx_query]
+        attack: [T1078, T1021.002]
+      - q: "Le processus LSASS a-t-il été lu ou vidé (accès mémoire, outil d'extraction) ?"
+        tools: [vol_pslist, vol_malfind, vol_cmdline]
+        attack: [T1003.001]
+  - id: exfiltration
+    label: "Collecte et exfiltration"
+    questions:
+      - q: "Des archives ont-elles été créées dans un dossier temporaire ou public ?"
+        tools: [mft_search]
+        attack: [T1560.001, T1074.001]
+      - q: "Des connexions sortantes vers des adresses publiques depuis un processus suspect ?"
+        tools: [vol_netscan, timeline]
+        attack: [T1071.001, T1041]
+      - q: "Des outils ou fichiers téléchargés, ou des envois vers un service web ?"
+        tools: [browser_history, srum_query, vol_cmdline]
+        attack: [T1105, T1567]
+  - id: defense_evasion
+    label: "Dissimulation"
+    questions:
+      - q: "Des journaux ont-ils été effacés (1102, 104) ?"
+        tools: [evtx_query]
+        attack: [T1070.001]
+      - q: "Du code a-t-il été injecté dans un autre processus ?"
+        tools: [vol_malfind]
+        attack: [T1055]
+      - q: "Un processus imite-t-il un binaire système (nom, chemin, parent) ?"
+        tools: [vol_pslist, vol_cmdline]
+        attack: [T1036, T1036.005]

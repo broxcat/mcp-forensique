@@ -42,7 +42,12 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 
 ```
 Today: J5 (02/10) — 4.3a/b/c done (P3 defensive part still open, see below)
-Current task: out-of-band validation + report_export DONE (02/10); next P5 (5.1 skill playbook)
+Current task: 5.1 DONE (02/10); 3.1 defensive part in progress (request L. Plancke 02/10);
+  then 5.2 (citation rules, artefact interpretation, trials with both LLM modes)
+PENDING ANALYST ACTION: F-0001 (à valider), F-0002 and F-0003 (rejetés par le serveur) in the
+  real journal await the analyst's decision (L. Plancke: reject with the reason "finding de
+  test", via `docker exec -it forensic-mcp python -m forensic_mcp validate`). The agent never
+  validates or rejects them. report_export(final) stays refused until F-0001 is decided.
 Next milestones: M2 architecture validated J4 (01/10, livrable L2) · M3 evidence ready J6 (05/10)
                  · M4 MCP server functional J10 (09/10) · M5 feature freeze J13 (14/10)
 Existing code (built before this CDC-aligned plan, to be reconciled in task 2.1):
@@ -189,6 +194,21 @@ Done: out-of-band validation of findings + report_export (02/10, request L. Plan
   journal report_export(final) refused "F-0001 (à valider)", draft written with NON VALIDÉ and
   the head hash; 0 validation events written by the agent. F-0001..F-0003 left untouched for
   the analyst (L. Plancke will reject them with the reason "finding de test").
+Done: 5.1 (02/10) — skill skills/playbook-poste-compromis/ (FR): SKILL.md (frontmatter name +
+  description; quand l'utiliser, principes, déroulé, citation summary) + references/
+  checklist_collecte.md (EF-08) + arbre_triage.md (EF-09). Data: rules/checklist.yaml (21 steps,
+  detect = case_toml / registered under memory|kape / ok tool_call (tool, preset, ez_tool) on a
+  path of the case, '@rid' mapped to its source image / findings citing results of the case /
+  decided / final report_export) and rules/triage_tree.yaml (5 branches, 16 questions, server
+  tools, 23 ATT&CK IDs, now accepted by record_finding). checklist_ops.py: checklist_status(case)
+  (read) from the journal only, proof = audit IDs / finding IDs, next_steps. playbook.py: MCP
+  prompt playbook_poste_compromis(case) = SKILL.md + references, case name checked. 40 MCP tools
+  + 1 prompt; pytest 124 passed (tests/test_playbook.py). Golden test: its "invented" ATT&CK ID
+  T1003.001 is now provided by the tree (LSASS question) -> replaced by T9999 (valid format, in
+  no server table, stays invalid if ATT&CK IDs are added later; rule 10: the test's intent, not
+  the code, had changed). Real check on the journal (case ""): 11/21 steps, memory
+  and EVTX steps done with their audit IDs, findings = F-0001, validation pending F-0001;
+  prompt 11.3 k chars; verify_audit ok.
 Decisions recorded (user, 30/09): 3 = deny Bash in the analysis workspace (Claude Code setting,
   analyst side, not implemented in this repo); 5 = cleanup approved. Points 1, 2, 4 of L2 §12
   still open (default transport, llm_mode per transport, version pinning).
@@ -670,3 +690,12 @@ statements and rejects one with a wrong IP.
 - Encoded blobs defeat pseudonymisation: the base64 of an encoded PowerShell command still
   carries the real IP/URL in cloud mode (the server-decoded text is pseudonymised, the raw
   argument is not).
+- Result ids are not unique per tool_call (4.x/5.1): query_results journals the SAME result_id as
+  the call that produced it, without its input path. The first checklist_status version mapped
+  result -> case from the last tool_call and lost the case of every queried result (F-0001 not
+  counted). Mitigation: map from the producing call; regression test. Journal readers must not
+  assume one event per result.
+- The ATT&CK allowlist of record_finding grows with the triage tree (5.1): a test using a
+  "made-up" ID (T1003.001) became a legitimate ID. Anti-hallucination tests must pick IDs that
+  are outside every server table, and the tables themselves need review (they define what the
+  model may claim).

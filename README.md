@@ -76,7 +76,7 @@ claude mcp add --transport http forensic http://localhost:8000/mcp --header "Aut
 `http://localhost:3000`, serveur MCP à déclarer avec l'URL interne `http://forensic:8000/mcp` et
 le même jeton.
 
-## 4. Outils exposés (39)
+## 4. Outils exposés (40) et prompt MCP
 
 | Domaine | Outils |
 |---|---|
@@ -87,6 +87,11 @@ le même jeton.
 | Outils EZ Windows-only | `prefetch_query`, `browser_history`, `srum_query`, `ez_import` (voir §5) |
 | Images disque | `disk_info`, `disk_list`, `disk_extract` (cibles fixes ; extraits utilisables ensuite comme `@<result_id>/<chemin>`) |
 | Constats et rapport | `record_finding`, `list_findings`, `report_export` |
+| Playbook (skill) | `checklist_status(case)` : étapes de la checklist faites / à faire pour un hôte, déduites du journal d'audit |
+
+La skill « playbook poste compromis » est dans `skills/playbook-poste-compromis/` (Claude Code :
+copier ou lier ce dossier dans `.claude/skills/`). Pour les clients sans skills (Open WebUI,
+modèle local), le même contenu est exposé comme prompt MCP `playbook_poste_compromis(case)`.
 
 Chaque réponse suit le même contrat ([`docs/output_schema.json`](docs/output_schema.json)) :
 `result_id`, `audit_id`, empreinte de la preuve, lignes numérotées `_row`, page suivante

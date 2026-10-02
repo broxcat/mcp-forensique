@@ -17,6 +17,7 @@ from mcp.server.mcpserver import Context, Elicit, Resolve
 from mcp.types import CallToolResult, ToolAnnotations
 from pydantic import BaseModel
 
+from . import playbook
 from .config import Config, load_config
 from .memory_ops import Approval
 from .ops import Engine
@@ -51,7 +52,7 @@ TOOL_CLASSES = {
     "vol3_run": "action_on_demand", "vol2_list_plugins": "read", "vol2_imageinfo": "read",
     "vol2_run": "action_on_demand", **DISK_TOOLS, "query_results": "read",
     "list_results": "read", "replay": "action_on_demand", "record_finding": "journal",
-    "list_findings": "read", "report_export": "journal"}
+    "list_findings": "read", "report_export": "journal", "checklist_status": "read"}
 TOOL_NAMES = list(TOOL_CLASSES)
 ANNOTATIONS = {"read": READ, "journal": JOURNAL, "action_on_demand": ON_DEMAND}
 Result = Annotated[CallToolResult, dict[str, Any]]
@@ -265,6 +266,21 @@ def build_server(cfg: Config | None = None) -> MCPServer:
         "à valider" or "à revoir" (validation is done by an analyst outside MCP); the draft
         (final=false) marks those findings "NON VALIDÉ"."""
         return await run("report_export", {"final": final, "title": title})
+
+    @tool("checklist_status")
+    async def checklist_status(case: str = "", limit: int = 50, offset: int = 0) -> Result:
+        """Collection and analysis checklist of a compromised Windows host (playbook, EF-08):
+        each step of rules/checklist.yaml marked "fait" / "à faire" for the case folder (host
+        folder under the evidence root, "" = whole root), derived from the audit journal with
+        the audit IDs as proof. next_steps lists the next server steps to run."""
+        return await run("checklist_status", {"case": case, "limit": limit, "offset": offset})
+
+    @mcp.prompt(name="playbook_poste_compromis",
+                description="Playbook poste Windows compromis (checklist, arbre de triage, "
+                            "règles de citation) pour un cas donné.")
+    def playbook_poste_compromis(case: str) -> str:
+        """SKILL.md + references, for clients without skills (local model, ET-06/ET-07)."""
+        return playbook.render(case)
 
     @tool("replay")
     async def replay(audit_id: int, ctx: Context,

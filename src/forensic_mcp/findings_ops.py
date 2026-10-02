@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from . import analyzers, audit, decode, results
+from . import analyzers, audit, decode, playbook, results
 from .timeline import to_utc
 
 KINDS = ("fact", "hypothesis", "recommendation")
@@ -25,11 +25,11 @@ PARTIAL_MIN_CELL, PARTIAL_MIN_VALUE = 64, 4
 
 
 def known_attack_ids() -> set[str]:
-    """ATT&CK IDs the server itself provides (rule table)."""
+    """ATT&CK IDs the server itself provides (rule table + triage tree, task 5.1)."""
     ids: set[str] = set()
     for r in analyzers.rules()["rules"]:
         ids |= set(r.get("attack", [])) | set(r.get("attack_system_name", []))
-    return ids
+    return ids | playbook.tree_attack_ids()
 
 
 def _row(d: Path, n: int) -> dict[str, Any] | None:

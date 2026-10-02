@@ -18,6 +18,7 @@ from . import audit, contract, evidence, results, safety, schemas
 from .config import Config, load_tools
 from .engines import volatility3
 from .artefact_ops import ArtefactOps
+from .checklist_ops import ChecklistOps
 from .disk_ops import DiskOps
 from .ez_ops import EzOps
 from .findings_ops import FindingsOps
@@ -54,7 +55,7 @@ def _rows_digest(rows: list[dict[str, Any]]) -> str:
 
 
 class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, ImportOps, FindingsOps,
-             ReportOps):
+             ReportOps, ChecklistOps):
     """Operations bound to one Config (memory operations in memory_ops.MemoryOps)."""
 
     def __init__(self, cfg: Config) -> None:

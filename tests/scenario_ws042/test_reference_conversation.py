@@ -101,7 +101,7 @@ async def test_reference_conversation(ws042) -> None:
             ("fact", "UpdateSvc created at 14:35:00",
              [cite(per, task, "TimeCreated", "2026-10-06T14:35:00Z")], []),
             ("hypothesis", "Lateral movement happened", [], []),
-            ("fact", "Credentials were dumped", [cite(ps, rows[490], "PID", 490)], ["T1003.001"]),
+            ("fact", "Credentials were dumped", [cite(ps, rows[490], "PID", 490)], ["T9999"]),
             ("fact", "Row 999 says so", [{**cite(ps, rows[4], "PID", 4), "row": 999}], []),
             ("fact", "Unknown result", [{**cite(ps, rows[4], "PID", 4), "result_id": "nope"}], []),
         ]
@@ -116,7 +116,7 @@ async def test_reference_conversation(ws042) -> None:
             assert "REJECTED" in f["summary"], text
             reasons.append(f["summary"])
         assert "185.1.2.3" in reasons[0] and "not found" in reasons[0]
-        assert "no citation" in reasons[3] and "T1003.001" in reasons[4]
+        assert "no citation" in reasons[3] and "T9999" in reasons[4]
         assert "row 999 does not exist" in reasons[5] and "unknown result_id" in reasons[6]
         listing = await call("list_findings", {})
         statuses = [r["status"] for r in listing["rows"]]

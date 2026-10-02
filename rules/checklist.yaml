@@ -1,0 +1,75 @@
+# Collection and analysis checklist of a compromised Windows host (EF-08), in order of volatility.
+# Read by the checklist_status tool (status derived from the audit journal) and documented in
+# skills/playbook-poste-compromis/references/checklist_collecte.md (same ids, kept in sync by a
+# test). `detect` says what the server looks for in the journal for the case folder:
+#   case_toml            the case folder holds a case.toml
+#   registered           an evidence_registered event for a path under <case>/<under>
+#   tool_call            a successful tool_call of one of `tools` on the case (optional `preset`,
+#                        `ez_tool`: the EvtxECmd preset or the EZ tool of ez_run / ez_import)
+#   findings             at least one finding accepted by the cross-check cites the case
+#   decided              no finding of the case is still "à valider" or "à revoir"
+#   report_final         a successful report_export(final=true)
+steps:
+  - {id: case_folder, phase: cadrage, human: true, tool: list_evidence,
+     label: "Dossier <HÔTE>/ sous la racine des preuves, avec case.toml (classification lab / internal / client)",
+     detect: {type: case_toml}}
+  - {id: memory_acquired, phase: collecte volatile, human: true, tool: register_evidence,
+     label: "Dump mémoire acquis en premier (WinPmem), copié dans <HÔTE>/memory/ et enregistré (SHA-256)",
+     detect: {type: registered, under: memory}}
+  - {id: triage_acquired, phase: collecte disque et journaux, human: true, tool: register_evidence,
+     label: "Collecte KAPE ($MFT, $J, ruches, EVTX, prefetch, profils) copiée dans <HÔTE>/kape/ et enregistrée",
+     detect: {type: registered, under: kape}}
+  - {id: mem_processes, phase: analyse mémoire, tool: vol_pslist,
+     label: "Processus et arborescence (parents anormaux, doublons, noms imités)",
+     detect: {type: tool_call, tools: [vol_pslist, vol_pstree]}}
+  - {id: mem_cmdline, phase: analyse mémoire, tool: vol_cmdline,
+     label: "Lignes de commande (PowerShell encodé décodé par le serveur, IOC)",
+     detect: {type: tool_call, tools: [vol_cmdline]}}
+  - {id: mem_network, phase: analyse mémoire, tool: vol_netscan,
+     label: "Connexions réseau (adresses publiques, correspondance avec les IOC)",
+     detect: {type: tool_call, tools: [vol_netscan]}}
+  - {id: mem_injection, phase: analyse mémoire, tool: vol_malfind,
+     label: "Code injecté (régions mémoire exécutables suspectes)",
+     detect: {type: tool_call, tools: [vol_malfind]}}
+  - {id: mem_run_keys, phase: analyse mémoire, tool: vol_printkey,
+     label: "Clés Run lues en mémoire",
+     detect: {type: tool_call, tools: [vol_printkey]}}
+  - {id: disk_mft, phase: analyse disque, tool: mft_search,
+     label: "$MFT : fichiers créés autour de l'incident (Temp, AppData, Public, archives)",
+     detect: {type: tool_call, tools: [mft_search], ez_tool: MFTECmd}}
+  - {id: disk_registry, phase: analyse disque, tool: shimcache_query,
+     label: "Registre : ShimCache, Amcache, persistance (RECmd, lot Kroll)",
+     detect: {type: tool_call, tools: [shimcache_query, amcache_query], ez_tool: RECmd}}
+  - {id: disk_execution, phase: analyse disque, tool: prefetch_query,
+     label: "Traces d'exécution : prefetch, SRUM (outils Windows-only : export puis import)",
+     detect: {type: tool_call, tools: [prefetch_query, srum_query], ez_tool: PECmd}}
+  - {id: disk_user_activity, phase: analyse disque, tool: lnk_query,
+     label: "Activité utilisateur : LNK, jump lists, corbeille, navigateur",
+     detect: {type: tool_call, tools: [lnk_query, jumplist_query, recyclebin_query, browser_history]}}
+  - {id: logs_logons, phase: journaux, tool: evtx_query,
+     label: "Ouvertures de session (4624, 4625, 4648, 4672)",
+     detect: {type: tool_call, tools: [evtx_query], preset: logons}}
+  - {id: logs_rdp, phase: journaux, tool: evtx_query,
+     label: "Sessions RDP (4778, 4779, 1149, 21, 25)",
+     detect: {type: tool_call, tools: [evtx_query], preset: rdp}}
+  - {id: logs_execution, phase: journaux, tool: evtx_query,
+     label: "Exécution (4688 avec ligne de commande, 4104 blocs de script PowerShell)",
+     detect: {type: tool_call, tools: [evtx_query], preset: execution}}
+  - {id: logs_persistence, phase: journaux, tool: evtx_query,
+     label: "Persistance (4698, 106, 7045, 4697)",
+     detect: {type: tool_call, tools: [evtx_query], preset: persistence}}
+  - {id: logs_clearing, phase: journaux, tool: evtx_query,
+     label: "Effacement de journaux (1102, 104)",
+     detect: {type: tool_call, tools: [evtx_query], preset: log_clearing}}
+  - {id: timeline, phase: synthèse, tool: timeline,
+     label: "Chronologie UTC (mémoire + EVTX + $MFT) autour du premier indice",
+     detect: {type: tool_call, tools: [timeline]}}
+  - {id: findings, phase: synthèse, tool: record_finding,
+     label: "Constats enregistrés avec citations (fait / hypothèse / recommandation)",
+     detect: {type: findings}}
+  - {id: validation, phase: validation, human: true, tool: list_findings,
+     label: "Constats validés ou rejetés par un analyste (hors MCP : python -m forensic_mcp validate)",
+     detect: {type: decided}}
+  - {id: report, phase: validation, tool: report_export,
+     label: "Rapport final exporté (hash de tête du journal conservé hors du poste)",
+     detect: {type: report_final}}
