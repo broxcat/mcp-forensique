@@ -1,0 +1,36 @@
+# EVTX presets for evtx_query (CLAUDE.md §9, EF-02). For each event: the log (Channel) that holds
+# it and what must be enabled on the host for it to exist. When a preset returns nothing, the
+# server lists these requirements: "no event" is not "no activity".
+presets:
+  logons:
+    description: "Interactive / network logons, explicit credentials, admin logons"
+    events:
+      - {id: 4624, channel: Security, requires: "Audit Logon (Logon/Logoff) - success"}
+      - {id: 4625, channel: Security, requires: "Audit Logon (Logon/Logoff) - failure"}
+      - {id: 4648, channel: Security, requires: "Audit Logon (Logon/Logoff) - success"}
+      - {id: 4672, channel: Security, requires: "Audit Special Logon (Logon/Logoff) - success"}
+  rdp:
+    description: "Remote Desktop sessions"
+    events:
+      - {id: 4778, channel: Security, requires: "Audit Other Logon/Logoff Events - success"}
+      - {id: 4779, channel: Security, requires: "Audit Other Logon/Logoff Events - success"}
+      - {id: 1149, channel: Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational, requires: "log enabled by default; needs the RemoteConnectionManager/Operational .evtx in the input"}
+      - {id: 21, channel: Microsoft-Windows-TerminalServices-LocalSessionManager/Operational, requires: "log enabled by default; needs the LocalSessionManager/Operational .evtx in the input"}
+      - {id: 25, channel: Microsoft-Windows-TerminalServices-LocalSessionManager/Operational, requires: "log enabled by default; needs the LocalSessionManager/Operational .evtx in the input"}
+  execution:
+    description: "Process creation and PowerShell script blocks"
+    events:
+      - {id: 4688, channel: Security, requires: "Audit Process Creation - success, plus 'Include command line in process creation events' for the command line"}
+      - {id: 4104, channel: Microsoft-Windows-PowerShell/Operational, requires: "PowerShell Script Block Logging (GPO / registry EnableScriptBlockLogging=1)"}
+  persistence:
+    description: "Scheduled tasks and services"
+    events:
+      - {id: 4698, channel: Security, requires: "Audit Other Object Access Events - success"}
+      - {id: 106, channel: Microsoft-Windows-TaskScheduler/Operational, requires: "TaskScheduler/Operational log enabled (disabled by default on several Windows versions)"}
+      - {id: 7045, channel: System, requires: "System log (always on); needs System.evtx in the input"}
+      - {id: 4697, channel: Security, requires: "Audit Security System Extension - success"}
+  log_clearing:
+    description: "Event log cleared"
+    events:
+      - {id: 1102, channel: Security, requires: "always written when the Security log is cleared; needs Security.evtx in the input"}
+      - {id: 104, channel: System, requires: "always written when a log is cleared; needs System.evtx in the input"}

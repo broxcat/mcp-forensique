@@ -382,3 +382,30 @@ d'attaque augmente (Volatility 2 n'est plus maintenu, plus d'analyseurs de forma
 | P6 Assistant de crise — **M5** gel des fonctionnalités | J13 | J14 (EF-15, priorité C, abandonné) |
 | P7 Évaluation / P8 L7 | J14–J15 / J16 | J15–J16, L7 rédigé en parallèle |
 | P9 Démonstration | J17–J18 | inchangé |
+
+### Proposition 4.3c — extraction depuis une image disque (à valider, Dockerfile non modifié)
+
+**Constaté dans le conteneur (02/10/2026).** Utilisateur `analyst` (uid 1000), capacités Linux
+toutes à 0 (`CapEff`, `CapBnd`), pas de `/dev/fuse` : **aucun montage possible** (ni `mount`,
+ni `ewfmount`/FUSE, ni périphérique loop). Seuls des outils qui lisent l'image comme un fichier
+conviennent. Aucun outil disque n'est présent (`fls`, `icat`, `mmls`, `ewfinfo` absents).
+Disponibilité vérifiée sans rien installer (métadonnées Debian bookworm et index PyPI) :
+`sleuthkit` 4.11.1 (lié à `libewf2`, donc lecture E01), `ewf-tools` 20140813, `libtsk19` ;
+`dissect.target` 3.25.1 (Fox-IT, AGPL-3.0, 12 dépendances de base).
+
+| Option | Pour | Contre |
+|---|---|---|
+| **A. `sleuthkit` + `ewf-tools` (apt, recommandée)** | Paquets Debian signés ; CLI (`mmls`, `fls`, `icat`) exécutées par le runner (timeout, sortie bornée, arguments typés) ; E01 lu directement via libewf, sans montage | Analyseurs en C face à des images hostiles (atténué : utilisateur non privilégié, aucune capacité) ; listes de chemins d'artefacts à écrire nous-mêmes ; libewf de 2014 |
+| B. `dissect.target` (pip) | Python pur ; connaît les artefacts Windows ; E01, raw, VMDK, VHD(X) | Chaîne d'approvisionnement plus large (≈ 12 paquets + transitifs, à épingler avec empreintes) ; licence AGPL ; nouvel écosystème à maîtriser |
+
+**Conception (option A).** Trois outils : `disk_info(path)` (`mmls` : partitions et offsets ;
+format E01 / raw), `disk_list(path, partition, dir_path)` (`fls -r -p -o <offset>`, paginé) et
+`disk_extract(path, targets, partition)` avec des cibles **énumérées** (type KAPE : `$MFT`,
+`$J`, ruches SYSTEM / SOFTWARE / SAM / SECURITY, NTUSER.DAT, UsrClass.dat, Amcache.hve, EVTX,
+Prefetch, SRUDB.dat, jump lists, LNK, `$I` de la corbeille, bases des navigateurs,
+ActivitiesCache.db) : `fls` localise les inodes, `icat` copie chaque fichier vers
+`/output/<result_id>/extracted/<chemin>`. Chaque fichier extrait est haché et journalisé
+(`evidence_registered`, avec l'image source et l'inode), puis mis en lecture seule. La jail
+reçoit une seconde racine en lecture seule (`/output/*/extracted`) pour que `ez_run`,
+`evtx_query` et `mft_search` lisent ces extraits. Besoin : `apt-get install sleuthkit
+ewf-tools` dans le `Dockerfile` (versions épinglées), après accord.

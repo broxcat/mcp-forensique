@@ -7,6 +7,7 @@ with its registration; a changed file is refused. `verify_full` re-hashes (stage
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
 from contextlib import contextmanager
@@ -97,6 +98,26 @@ def check_before_use(cfg: Config, path: Path, actor: dict[str, Any]) -> dict[str
                           "Analysis refused: restore the original copy or register the new file "
                           "under a different name.")
     return {"path": rel, "sha256": rec["sha256"], "verified": state}
+
+
+MAX_DIR_FILES = 20_000
+
+
+def check_dir_before_use(cfg: Config, folder: Path, actor: dict[str, Any]) -> dict[str, Any]:
+    """Folder input (e.g. a KAPE triage folder): every file is registered / quick-checked like a
+    single file; the folder's sha256 is a manifest digest over sorted (path, sha256)."""
+    files = [p for p in sorted(folder.rglob("*")) if p.is_file() and p.name != "case.toml"
+             and not any(x.startswith(".") for x in p.relative_to(folder).parts)]
+    if not files:
+        raise SafetyError(f"empty evidence folder: {relpath(cfg, folder)}")
+    if len(files) > MAX_DIR_FILES:
+        raise SafetyError(f"{len(files)} files in {relpath(cfg, folder)} (max {MAX_DIR_FILES}): "
+                          "point the tool at a sub-folder")
+    h = hashlib.sha256()
+    for p in files:
+        ev = check_before_use(cfg, p, actor)
+        h.update(f"{ev['path']}\0{ev['sha256']}\n".encode())
+    return {"path": relpath(cfg, folder), "sha256": h.hexdigest(), "verified": UNCHANGED}
 
 
 def verify_full(cfg: Config, path: Path, actor: dict[str, Any],

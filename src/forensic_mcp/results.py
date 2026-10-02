@@ -10,7 +10,7 @@ import secrets
 import sys
 import time
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
 
@@ -147,13 +147,16 @@ def query(d: Path, contains: str | None = None, column: str | None = None,
           equals: str | None = None, regex: str | None = None,
           columns: list[str] | None = None, sort_by: str | None = None,
           sort_desc: bool = False, limit: int = 100, offset: int = 0,
-          max_cell_chars: int = 400) -> dict[str, Any]:
+          max_cell_chars: int = 400,
+          where: Callable[[dict[str, Any]], bool] | None = None) -> dict[str, Any]:
     """Filter rows lazily; returns {rows, matched, offset, limit, truncated}. `matched` counts
     every matching row (full stream, bounded memory); sorting covers all matches (heap)."""
     needle = contains.lower() if contains else None
     rx = re.compile(regex, re.IGNORECASE) if regex else None
 
     def keep(row: dict[str, Any]) -> bool:
+        if where is not None and not where(row):
+            return False
         if column is not None and equals is not None and not _values_equal(row.get(column), equals):
             return False
         if needle or rx:
@@ -186,8 +189,9 @@ def query(d: Path, contains: str | None = None, column: str | None = None,
         for i, row in enumerate(counted()):
             if offset <= i < k:
                 page.append(row)
-    if columns:
-        page = [{"_row": r["_row"], **{c: r.get(c) for c in columns if c != "_row"}} for r in page]
+    if columns:  # project on the columns that exist; a row with none of them stays whole
+        page = [{"_row": r["_row"], **{c: r[c] for c in columns if c != "_row" and c in r}}
+                if any(c in r for c in columns if c != "_row") else r for r in page]
     rows, cut = [], False
     for r in page:
         t, c = truncate_cells(r, max_cell_chars)

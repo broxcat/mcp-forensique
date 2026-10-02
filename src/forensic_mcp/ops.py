@@ -17,10 +17,11 @@ from mcp.types import CallToolResult
 from . import audit, contract, evidence, results, safety, schemas
 from .config import Config, load_tools
 from .engines import volatility3
+from .ez_ops import EzOps
 from .memory_ops import TYPED_VOL3, MemoryOps
 from .redact import TOKEN, Pseudonymizer, case_for, pseudonymizer_for
 
-REPLAYABLE = set(TYPED_VOL3) | {"vol3_run", "vol2_run", "vol2_imageinfo"}
+REPLAYABLE = set(TYPED_VOL3) | {"vol3_run", "vol2_run", "vol2_imageinfo", "ez_run"}
 MAX_LISTED = 500
 
 
@@ -39,6 +40,7 @@ class Outcome:
     output_exceeded: bool = False
     output_sha256: str | None = None
     pseudo: Pseudonymizer | None = None
+    error: str | None = None  # tool ran but failed silently (e.g. exit 0, no output)
     audit_extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -46,7 +48,7 @@ def _rows_digest(rows: list[dict[str, Any]]) -> str:
     return hashlib.sha256(audit.canonical(rows).encode()).hexdigest()
 
 
-class Engine(MemoryOps):
+class Engine(MemoryOps, EzOps):
     """Operations bound to one Config (memory operations in memory_ops.MemoryOps)."""
 
     def __init__(self, cfg: Config) -> None:
@@ -87,6 +89,8 @@ class Engine(MemoryOps):
             outcome, extra["error"] = "timeout", f"timeout after {self.cfg.timeout_seconds} s"
         elif out.output_exceeded:
             outcome, extra["error"] = "tool_error", f"output over {self.cfg.max_output_mb} MB"
+        elif out.error:
+            outcome, extra["error"] = "tool_error", out.error
         elif out.exit_code not in (None, 0):
             outcome, extra["error"] = "tool_error", f"exit code {out.exit_code}"
         else:
@@ -136,11 +140,11 @@ class Engine(MemoryOps):
             vol3 = await volatility3.version(self.cfg)
         except Exception as exc:  # report, don't crash the listing
             vol3 = f"error: {exc}"
-        items = [{"tool": t, "installed": True, "exposed": t in ("vol3", "vol2"),
+        items = [{"tool": t, "installed": True, "exposed": t != "dotnet",
                   "version": vol3 if t == "vol3" else ("2.6" if t == "vol2" else None)}
                  for t in sorted(tools)]
         return self._listing("tool_status", params, items,
-                             f"{len(tools)} tools installed, exposed: vol3 {vol3}, vol2 2.6 (EZ tools: task 4.3)")
+                             f"{len(tools)} tools installed, exposed: vol3 {vol3}, vol2 2.6, 17 EZ tools")
 
     async def op_list_evidence(self, params: dict[str, Any], conf: Any = None) -> Outcome:
         base = safety.jail_path(params.get("subdir") or ".", self.cfg.evidence_root)

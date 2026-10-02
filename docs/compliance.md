@@ -1,21 +1,21 @@
 # Matrice de conformité CDC ↔ forensic-mcp
 
-Mise à jour : J3 (30/09/2026), tâche 4.2 (Volatility 2 + 3, Décision J3). Les statuts décrivent le **code** ;
+Mise à jour : J5 (02/10/2026), tâche 4.3 (outils Eric Zimmerman, EVTX, $MFT, timeline ; Décision J3). Les statuts décrivent le **code** ;
 la conception est dans [`L2_architecture.md`](L2_architecture.md) (sa matrice §10 est l'état
 au J4, jalon M2). À tenir à jour à la fin de chaque tâche (règle 1 de `CLAUDE.md`).
 
 Statuts : **fait** · **partiel** · **manquant** · **hors périmètre**.
 Les intitulés ET-xx sont repris de `CLAUDE.md` (§4, §8, §9) ; le CDC n'est pas versionné
 dans le dépôt, les intitulés sont à vérifier contre le CDC du 26/09/2026.
-Tests : `tests/test_memory.py` + `tests/test_rules.py` (4.2), `tests/test_socle.py` (4.1), `tests/test_fasttrack.py`, `tests/test_phase2.py` — 58 tests.
+Tests : `tests/test_disk.py` (4.3), `tests/test_memory.py` + `tests/test_rules.py` (4.2), `tests/test_socle.py` (4.1), `tests/test_fasttrack.py`, `tests/test_phase2.py` — 85 tests.
 
 ## 1. Exigences fonctionnelles (EF)
 
 | ID | Prio | Exigence | Statut | Code | Test | Écart / tâche |
 |---|---|---|---|---|---|---|
 | EF-01 | M | Plugins Volatility 3 | fait | `memory_ops.py` (`vol_pslist`, `vol_pstree`, `vol_cmdline`, `vol_netscan`, `vol_malfind`, `vol_dlllist`, `vol_printkey`, `vol3_run`, `vol_list_plugins`), `engines/volatility3.py` (`plugin_options` lu dans `vol <plugin> -h`), `analyzers.py`, `decode.py`, `rules/process_rules.yaml` | `test_memory.py` (un test par outil), `test_rules.py` (une fixture par règle) ; contrôle réel sur `Triage-Memory.mem` (STATUS) | Test de référence complet `tests/scenario_ws042/` : 4.4. |
-| EF-02 | M | Filtrage EVTX | manquant | EvtxECmd installé seulement | — | `evtx_query` + presets. → 4.3 |
-| EF-03 | M | Recherche $MFT | manquant | MFTECmd installé seulement | — | `mft_search`. → 4.3 |
+| EF-02 | M | Filtrage EVTX | partiel | `ez_ops.op_evtx_query` (presets `rules/evtx_presets.yaml` : logons, rdp, execution, persistence, log_clearing ; `--inc` pour les IDs, dates et texte côté serveur ; parse unique réutilisée ; preset vide ⇒ journal et politique d'audit requis, log présent / absent) | `test_disk.py::test_evtx_query_presets_inc_then_reuse`, `::test_evtx_empty_preset_explains_requirements` | **Aucun .evtx réel sous /evidence** : noms de colonnes EvtxECmd non vérifiés sur données réelles (fournir un échantillon, M3). |
+| EF-03 | M | Recherche $MFT | partiel | `ez_ops.op_mft_search` (MFTECmd, parse unique, filtres chemin / extension / plage UTC sur 8 horodatages) | `test_disk.py::test_mft_search` | **Aucun $MFT réel sous /evidence** : colonnes MFTECmd non vérifiées sur données réelles (M3). |
 | EF-04 | M | Résultats paginés + lien vers la sortie brute | partiel | `contract.build` (`page.next_offset`, `raw_output`), `results.query` (streaming, `matched`), `query_results(offset, limit)` | `test_socle.py::test_every_tool_response_matches_contract`, `::test_response_size_is_bounded` | `memory_run` + `query_results` paginés ; les outils de liste sont tronqués à `max_rows_returned` sans paramètre `offset`. → 4.4 |
 | EF-05 | M | SHA-256 des preuves journalisé | fait | `evidence.py` (enregistrement avant analyse, contrôle rapide, re-hachage), `register_evidence`, `verify_evidence` | `test_socle.py::test_registration_before_analysis_and_change_detected` | Hash « après » dans le rapport exporté : 4.4 / 6.1. |
 | EF-06 | M | Lecture seule des preuves | fait | `docker-compose.yml` (`/evidence:ro`), `safety.jail_path` | Phase 1 : `touch /evidence/x` → *Read-only file system* ; `test_phase2.py::test_jail_*` | Aucune seconde racine ajoutée en 4.1. |
@@ -24,7 +24,7 @@ Tests : `tests/test_memory.py` + `tests/test_rules.py` (4.2), `tests/test_socle.
 | EF-09 | M | Arbre de triage ATT&CK | partiel | Table de règles `rules/process_rules.yaml` : 7 règles + `ioc_match`, identifiants ATT&CK fournis par le serveur, `next_steps` par règle | `test_rules.py` | Arbre de triage de la skill (`references/arbre_triage.md`). → 5.1 |
 | EF-10 | M | Citation de l'artefact source | partiel | `_row` stable (`results.iter_rows`), `result_id` + `audit_id` dans chaque réponse | `test_fasttrack.py::test_mcp_lists_tools_and_runs` (`_row` conservé par filtre) | `record_finding` avec citations. → 4.4 + 5.2 |
 | EF-11 | M | Distinction fait / hypothèse / recommandation | manquant | (schéma `suggestion` prêt) | — | `record_finding(kind=…)`. → 4.4 + 5.2 |
-| EF-12 | M | Timeline de crise | manquant | (schéma `crisis_event` prêt) | — | `crisis_add_event`, `crisis_timeline`. → 6.1 |
+| EF-12 | M | Timeline de crise | manquant | (schéma `crisis_event` prêt) | — | `crisis_add_event`, `crisis_timeline` (pourra citer la timeline forensique `timeline`, faite en 4.3). → 6.1 |
 | EF-13 | S | Sitrep au format fixe | manquant | — | — | `sitrep_draft` + `templates/sitrep.md`. → 6.1 |
 | EF-14 | S | Suggestions de confinement | manquant | — | — | `containment_suggestions`, toujours « à valider ». → 6.1 |
 | EF-15 | C | Tableau des parties prenantes | manquant | — | — | 6.1 si temps. |
@@ -35,13 +35,13 @@ Tests : `tests/test_memory.py` + `tests/test_rules.py` (4.2), `tests/test_socle.
 |---|---|---|---|---|---|
 | ET-01 | Serveur MCP, SDK officiel, transport de référence stdio | partiel | `__main__.py --stdio`, `server.py` (`mcp==2.2.0`) | `test_fasttrack.py::test_mcp_lists_tools_and_runs` (client en mémoire) | stdio jamais vérifié depuis Windows (`docker exec -i`). HTTP = écart documenté (L2 §6). → 4.4 |
 | ET-02 | Outils en sous-processus, timeout, sortie bornée | fait | `runner.run_process` (sans shell, timeout, `max_output_mb`, arrêt du groupe de processus, fichiers tronqués à la borne) ; `contract.fit` (`max_response_kb`) | `test_phase2.py::test_runner_kills_on_timeout`, `test_socle.py::test_runner_bounds_output`, `::test_tool_output_bound_is_journaled`, `::test_response_size_is_bounded` | — |
-| ET-03 | Sorties JSON structurées | fait | `contract.py` (contrat §5 + `iocs`, `decoded`), `schemas.validate_output` appelé sur **chaque** réponse dans `ops.Engine.call` | `test_socle.py::test_every_tool_response_matches_contract` (les 19 outils), `test_memory.py` | — |
+| ET-03 | Sorties JSON structurées | fait | `contract.py` (contrat §5 + `iocs`, `decoded`, `notes`), `schemas.validate_output` appelé sur **chaque** réponse dans `ops.Engine.call` | `test_socle.py::test_every_tool_response_matches_contract` (les 24 outils), `test_memory.py`, `test_disk.py` | — |
 | ET-04 | Journal d'audit horodaté et rejouable | fait (socle) | `audit.py` (types, `audit_id`, `ts_utc`, verrou `flock`, `verify_report` : chaîne + séquence + schéma, `head_hash`), `ops.Engine.call` (`tool_call` automatique : ok / tool_error / timeout / refused), `replay` | `test_socle.py::test_every_call_is_journaled_ok_refused_failed`, `::test_concurrent_appends_keep_the_chain`, `::test_verify_detects_schema_and_sequence_errors`, `::test_replay_reruns_and_compares` ; `test_phase2.py::test_audit_chain_detects_tampering` | Événements `suggestion`, `validation` : 4.4 ; `crisis_event` : 6.1 ; ancrage du hash de tête dans le rapport : 4.4. |
 | ET-05 | Validation des chemins (jail) | fait | `safety.jail_path` (`resolve` + `is_relative_to`), message explicite « placer la preuve sous EVIDENCE_DIR » | `test_phase2.py::test_jail_*`, `test_socle.py::test_every_call_is_journaled_ok_refused_failed` | — |
 | ET-06 | Skill au format SKILL.md | manquant | — | — | `skills/playbook-poste-compromis/`. → P5 |
 | ET-07 | LLM cloud et LLM local | partiel | `llm_mode` appliqué par `redact.pseudonymizer_for` ; service `webui` (Open WebUI + Ollama) | `test_socle.py::test_*_cloud_mode` | Serveur MCP pas encore enregistré dans Open WebUI ; mode déclaré, pas détecté (L2 §12 point 2). → 5.2 |
 | ET-08 | Machine d'analyse Linux | fait | `Dockerfile`, `docker-compose.yml` | Phase 1 : `check_tools.py` 20/20 | Justification : L2 §5. Épinglage des versions à faire (L2 §12 point 4). |
-| ET-09 | ≥ 1 test unitaire par outil exposé | partiel | 58 tests, faux `vol` et faux `vol2` dans `tests/fakebin/` | `test_memory.py` : un test par outil mémoire ; `test_socle.py` : les 19 outils | Outils EZ (4.3a/b) ; test de référence (4.4). |
+| ET-09 | ≥ 1 test unitaire par outil exposé | partiel | 85 tests ; faux `vol`, `vol2`, `ez` dans `tests/fakebin/` | `test_disk.py::test_ez_run_each_tool` (les 17 outils EZ), `test_memory.py` (un test par outil mémoire), `test_socle.py` (les 24 outils MCP) | Test de référence `tests/scenario_ws042/` : 4.4. |
 
 ## 3. Garde-fous (CDC §5)
 
@@ -79,7 +79,7 @@ sur le Gantt (4.3 découpée en 4.3a/4.3b/4.3c, M4 → J12, M5 → J14) : L2 §1
 | ID | Prio | Exigence | Statut | Tâche |
 |---|---|---|---|---|
 | EXT-01 | M (décision) | vol2 + tous les plugins vol3, options typées, plugins sensibles confirmés | fait | 4.2 : `vol3_run`, `vol2_list_plugins`, `vol2_imageinfo` (cache par hash), `vol2_run` ; vol2 `--plugins`, `-w`, `-D` jamais passés, plugins vol2 à `-D` refusés |
-| EXT-02 | M (décision) | 17 outils EZ + extraction depuis image disque | manquant | 4.3a / 4.3b / 4.3c |
+| EXT-02 | M (décision) | 17 outils EZ + extraction depuis image disque | partiel | 4.3a/b faits : `engines/zimmerman.py` (registre unique vérifié contre `docs/tool_help`), `ez_list_tools`, `ez_run` (options typées), `evtx_query`, `mft_search`, `timeline` ; détection des échecs silencieux (bstrings 2026.5.0 inutilisable sous Linux). 4.3c (image disque) : conception proposée, Dockerfile **non modifié**, en attente d'accord (L2 §12). |
 
 ## 6. Écarts de périmètre et éléments hérités
 

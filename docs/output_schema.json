@@ -93,6 +93,10 @@
     },
     "anomalies": {"type": "array", "items": {"$ref": "#/$defs/anomaly"}},
     "next_steps": {"type": "array", "items": {"$ref": "#/$defs/next_step"}},
+    "notes": {
+      "description": "Server notes, e.g. which log or audit policy an empty EVTX preset requires.",
+      "type": "array", "items": {"type": "string"}
+    },
     "iocs": {
       "description": "IOCs extracted by the server (e.g. from a decoded PowerShell command).",
       "type": "array",

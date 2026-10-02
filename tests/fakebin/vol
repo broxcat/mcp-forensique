@@ -84,8 +84,10 @@ PSLIST = [{"PID": 4, "PPID": 0, "ImageFileName": "System", "Offset(V)": 0xFFFFFA
           {"PID": 500, "PPID": 380, "ImageFileName": "explorer.exe", "Offset(V)": 4099,
            "Threads": 30, "ExitTime": None, "__children": []},
           {"PID": 2980, "PPID": 500, "ImageFileName": "WINWORD.EXE", "Offset(V)": 4100,
+           "CreateTime": "2026-10-06T14:29:00+00:00",
            "Threads": 12, "ExitTime": None, "__children": []},
           {"PID": 4312, "PPID": 2980, "ImageFileName": "powershell.exe", "Offset(V)": 4101,
+           "CreateTime": "2026-10-06T14:30:00+00:00",
            "Threads": 11, "ExitTime": None, "__children": []}]
 CMDLINE = [{"PID": 4312, "Process": "powershell.exe", "UserName": "alice",
             "Args": "powershell -f C:\\Users\\alice\\a.ps1 203.0.113.10 10.0.0.5 "

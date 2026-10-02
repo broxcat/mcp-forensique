@@ -41,9 +41,9 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 ## 2. STATUS (update at the end of every task)
 
 ```
-Today: J3 (30/09) — 4.1 done ahead of plan (P3 defensive part still open, see below)
-Current task: 4.2 DONE, waiting for the user; next 4.3a (EZ registry, evtx_query, mft_search) —
-  only after the user approves the 4.3 / disk-image plan and the Gantt split (§8, L2 §12)
+Today: J5 (02/10) — 4.3a/b done (P3 defensive part still open, see below)
+Current task: 4.3 DONE except 4.3c (disk image), waiting for the user: approve option A
+  (apt sleuthkit + ewf-tools) or B (pip dissect.target) in L2 §12 before any Dockerfile change
 Next milestones: M2 architecture validated J4 (01/10, livrable L2) · M3 evidence ready J6 (05/10)
                  · M4 MCP server functional J10 (09/10) · M5 feature freeze J13 (14/10)
 Existing code (built before this CDC-aligned plan, to be reconciled in task 2.1):
@@ -92,6 +92,29 @@ Done: 4.2 (30/09) — Décision J3 recorded (§1, §8, L2 §12, compliance §5).
   18.5 s; vol2 netscan 80 / 64.9 s. After FP fixes the only process anomaly is unusual_path on
   UWkpjFjDzM.exe (PID 3496, AppData\Local\Temp — the known malicious process of the sample);
   netscan: 2 external_connection medium (OUTLOOK.EXE -> 52.x:443).
+Done: 4.3a/b (02/10) — engines/zimmerman.py: ONE registry of the 17 EZ tools (inputs -f/-d,
+  output, typed options, artefacts), verify_registry() = every flag present in docs/tool_help;
+  forbidden: --sync --vss -l --maps --appIds -w -b --fs --fr --saveTo --dumpTo -o(PECmd)
+  --blobdir --dd --dr --json/--xml/--html. CSVs -> rows.jsonl with `_csv` column (raw CSVs kept
+  in out/ for Timeline Explorer). ez_ops.py: ez_list_tools, ez_run, evtx_query (presets in
+  rules/evtx_presets.yaml, --inc for IDs, dates/text server-side, parse cache
+  output/.toolcache/ez_parse.json, empty preset -> notes with log + audit policy, log
+  present/ABSENT from a full parse), mft_search (parse once, path/extension/UTC window on 8
+  time fields), timeline.py (memory process times + EVTX + $MFT, UTC, ±window, each event cites
+  source_result_id + source_row; written as its own result). Folder inputs (KAPE): every file
+  registered, manifest digest. Silent-failure detection (exit 0, no output -> tool_error + note).
+  Output schema gains `notes`. 24 MCP tools. pytest 85 passed (tests/test_disk.py, fake
+  tests/fakebin/ez + ez_tools/BatchExamples).
+  Real checks (no .evtx / $MFT / disk image under /evidence, so EvtxECmd/MFTECmd columns are NOT
+  verified on real data): ez_list_tools on the real install (17 tools, all flags found, RECmd
+  batch files listed); real bstrings 2026.5.0 on Triage-Memory.mem -> prints "input from stdin
+  or file", exit 0, no output, also with -d and on a small /tmp file: unusable on Linux, now
+  journaled as tool_error; timeline on the real vol_pslist around 2019-03-22T05:46:00Z ±15 min
+  -> 65 process_start events in 0.6 s, each citing the pslist result and row; journal verify ok.
+  4.3c (disk image): verified no privileges (CapEff/CapBnd 0, no /dev/fuse, uid 1000) -> no
+  mount/ewfmount; available without install: Debian bookworm sleuthkit 4.11.1 (libewf2 -> E01),
+  ewf-tools 20140813; PyPI dissect.target 3.25.1 (AGPL, 12 deps). Design + options in L2 §12.
+  Nothing installed; Dockerfile untouched.
 Decisions recorded (user, 30/09): 3 = deny Bash in the analysis workspace (Claude Code setting,
   analyst side, not implemented in this repo); 5 = cleanup approved. Points 1, 2, 4 of L2 §12
   still open (default transport, llm_mode per transport, version pinning).
@@ -470,6 +493,18 @@ statements and rejects one with a wrong IP.
   `explorer.exe` (edit distance 2) and `\??\C:\Windows\system32\conhost.exe` as an unusual path.
   Fixed (exclusion list, NT prefix), but a rule table produces confident-looking anomalies: an
   anomaly is a lead to verify, never a finding.
+- Silent tool failure (4.3, verified 02/10): bstrings 2026.5.0 on Linux exits 0 and writes
+  nothing ("input from stdin or file"). Without a check, "0 rows" would read as "string not
+  present" — a false negative an analyst would trust. Mitigation: exit 0 + no output =
+  tool_error in the journal and a note in the response. Residual: other tools may fail silently
+  in ways that still write an empty CSV.
+- An EVTX parse filtered with `--inc` cannot tell which logs the input holds: an empty preset was
+  first reported as "Security log ABSENT" although Security.evtx was there. Mitigation: an empty
+  preset is re-answered from a full parse. "No event" ≠ "no activity" ≠ "log missing".
+- Untested on real disk artefacts: no .evtx / $MFT sample yet, so EvtxECmd/MFTECmd column names
+  are assumed (projection falls back to full rows if they differ). Verify at M3.
+- Disk images in a hardened container: no capabilities and no FUSE, so no mount/ewfmount; only
+  file-reading parsers (sleuthkit, dissect) can work — they parse hostile images in-process.
 - Encoded blobs defeat pseudonymisation: the base64 of an encoded PowerShell command still
   carries the real IP/URL in cloud mode (the server-decoded text is pseudonymised, the raw
   argument is not).

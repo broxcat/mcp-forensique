@@ -9,7 +9,7 @@ Class of each tool (human-validation guardrail, L2 §7):
 """
 # No `from __future__ import annotations`: the SDK evaluates the Resolve(...) annotations, which
 # reference resolvers local to build_server().
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from mcp.server import MCPServer
 from mcp.server.elicitation import ElicitationResult
@@ -21,7 +21,9 @@ from .memory_ops import Approval
 from .ops import Engine
 
 INSTRUCTIONS = (
-    "Forensic MCP server (Volatility 3 and 2). Call list_evidence, then the typed tools "
+    "Forensic MCP server (Volatility 3 and 2, Eric Zimmerman tools). Call list_evidence. "
+    "Disk artefacts: evtx_query (presets), mft_search, ez_run (ez_list_tools), timeline. "
+    "Memory: the typed tools "
     "vol_pslist, vol_pstree, vol_cmdline, vol_netscan, vol_malfind, vol_dlllist, vol_printkey on a "
     "memory image; vol3_run / vol2_run for any other plugin (names from vol_list_plugins / "
     "vol2_list_plugins). Use query_results to filter or page a result. The server computes the "
@@ -41,12 +43,21 @@ TOOL_CLASSES = {
     "vol_pstree": "read", "vol_cmdline": "read", "vol_netscan": "read",
     "vol_malfind": "action_on_demand", "vol_dlllist": "read", "vol_printkey": "read",
     "vol3_run": "action_on_demand", "vol2_list_plugins": "read", "vol2_imageinfo": "read",
-    "vol2_run": "action_on_demand", "query_results": "read", "list_results": "read",
+    "vol2_run": "action_on_demand", "ez_list_tools": "read", "ez_run": "read",
+    "evtx_query": "read", "mft_search": "read", "timeline": "read",
+    "query_results": "read", "list_results": "read",
     "replay": "action_on_demand"}
 TOOL_NAMES = list(TOOL_CLASSES)
 ANNOTATIONS = {"read": READ, "journal": JOURNAL, "action_on_demand": ON_DEMAND}
 Result = Annotated[CallToolResult, dict[str, Any]]
 Confirm = ElicitationResult[Approval]
+EzTool = Literal["EvtxECmd", "MFTECmd", "PECmd", "RECmd", "AmcacheParser",
+                 "AppCompatCacheParser", "LECmd", "JLECmd", "SBECmd", "SrumECmd", "SQLECmd",
+                 "WxTCmd", "RBCmd", "RecentFileCacheParser", "SumECmd", "bstrings", "rla"]
+EvtxPreset = Literal["logons", "rdp", "execution", "persistence", "log_clearing"]
+MftTimeField = Literal["Created0x10", "LastModified0x10", "LastRecordChange0x10",
+                       "LastAccess0x10", "Created0x30", "LastModified0x30",
+                       "LastRecordChange0x30", "LastAccess0x30"]
 
 
 def build_server(cfg: Config | None = None) -> MCPServer:
@@ -194,6 +205,59 @@ def build_server(cfg: Config | None = None) -> MCPServer:
         need --dump-dir are refused."""
         return await run("vol2_run", {"path": path, "plugin": plugin, "profile": profile,
                                       "pid": pid, "offset": offset}, ctx, confirmation)
+
+    @tool("ez_list_tools")
+    async def ez_list_tools() -> Result:
+        """The 17 Eric Zimmerman tools: accepted artefacts, input (-f file / -d folder) and the
+        typed options of each (for ez_run)."""
+        return await run("ez_list_tools", {})
+
+    @tool("ez_run")
+    async def ez_run(tool: EzTool, path: str, ctx: Context,
+                     options: dict[str, bool | int | str | list[int] | list[str]] | None = None,
+                     limit: int = 50, offset: int = 0) -> Result:
+        """Run one Eric Zimmerman tool on a file or folder of the evidence root, e.g.
+        tool="PECmd", path="WS-042/kape/C/Windows/prefetch"; tool="RECmd",
+        options={"batch": "Kroll_Batch.reb"}. Only the typed options listed by ez_list_tools."""
+        return await run("ez_run", {"tool": tool, "path": path, "options": options,
+                                    "limit": limit, "offset": offset}, ctx)
+
+    @tool("evtx_query")
+    async def evtx_query(path: str, ctx: Context, preset: EvtxPreset | None = None,
+                         event_ids: list[int] | None = None, start: str | None = None,
+                         end: str | None = None, contains: str | None = None,
+                         limit: int = 50, offset: int = 0) -> Result:
+        """Windows event logs (.evtx file or folder) with EvtxECmd, filtered by preset
+        (logons, rdp, execution, persistence, log_clearing), event IDs, UTC time range
+        (ISO-8601) and text. Example: "qui s'est connecté en RDP ?" -> preset="rdp".
+        An empty preset says which log or audit policy was required."""
+        return await run("evtx_query", {"path": path, "preset": preset, "event_ids": event_ids,
+                                        "start": start, "end": end, "contains": contains,
+                                        "limit": limit, "offset": offset}, ctx)
+
+    @tool("mft_search")
+    async def mft_search(path: str, ctx: Context, path_contains: str | None = None,
+                         extension: str | None = None, start: str | None = None,
+                         end: str | None = None, time_field: MftTimeField = "Created0x10",
+                         limit: int = 50, offset: int = 0) -> Result:
+        """Search a $MFT (MFTECmd, parsed once): path substring, extension (".exe"), UTC time
+        range on one timestamp (Created0x10 = $STANDARD_INFORMATION creation…).
+        Example: files created in Users\\Public around the incident."""
+        return await run("mft_search", {"path": path, "path_contains": path_contains,
+                                        "extension": extension, "start": start, "end": end,
+                                        "time_field": time_field, "limit": limit,
+                                        "offset": offset}, ctx)
+
+    @tool("timeline")
+    async def timeline(around: str, ctx: Context, case: str = "", window_minutes: int = 30,
+                       limit: int = 50, offset: int = 0) -> Result:
+        """Merged UTC timeline of a case folder (process start/exit from memory, EVTX events,
+        $MFT created/modified) within ±window_minutes of `around` (ISO-8601). Uses results
+        already produced (vol_pslist, evtx_query, mft_search); each event cites its source
+        result_id and row."""
+        return await run("timeline", {"case": case, "around": around,
+                                      "window_minutes": window_minutes, "limit": limit,
+                                      "offset": offset}, ctx)
 
     @tool("query_results")
     async def query_results(result_id: str, contains: str | None = None,

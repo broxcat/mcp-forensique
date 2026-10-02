@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Fake Eric Zimmerman tool for unit tests: `ez <dir>/<Tool>.dll <args>`.
+Writes canned CSV output where the real tool would (--csv dir, -o file, --out dir)."""
+import csv
+import os
+import sys
+
+EVTX = [  # golden scenario: PowerShell at 14:30, scheduled task UpdateSvc 2 min later
+    {"TimeCreated": "2026-10-06 14:28:00.0000000", "EventId": "4624", "Channel": "Security",
+     "Computer": "WS-042", "UserName": "WS-042\\alice", "RemoteHost": "10.0.0.7",
+     "MapDescription": "Successful logon", "PayloadData1": "LogonType 3", "Payload": "x"},
+    {"TimeCreated": "2026-10-06 14:30:05.0000000", "EventId": "4104",
+     "Channel": "Microsoft-Windows-PowerShell/Operational", "Computer": "WS-042",
+     "MapDescription": "Script block", "PayloadData1": "IEX (New-Object Net.WebClient)"},
+    {"TimeCreated": "2026-10-06 14:32:07.0000000", "EventId": "4698", "Channel": "Security",
+     "Computer": "WS-042", "MapDescription": "A scheduled task was created",
+     "PayloadData1": "TaskName: \\UpdateSvc"},
+    {"TimeCreated": "2026-10-06 14:40:00.0000000", "EventId": "7045", "Channel": "System",
+     "Computer": "WS-042", "MapDescription": "A service was installed", "PayloadData1": "upd"},
+]
+MFT = [
+    {"EntryNumber": "1201", "SequenceNumber": "3", "InUse": "True", "ParentPath": ".\\Users\\Public",
+     "FileName": "upd.exe", "Extension": ".exe", "FileSize": "73802", "IsDirectory": "False",
+     "Created0x10": "2026-10-06 14:31:00.0000000", "LastModified0x10": "2026-10-06 14:31:00.0000000"},
+    {"EntryNumber": "88", "SequenceNumber": "1", "InUse": "True",
+     "ParentPath": ".\\Windows\\System32", "FileName": "kernel32.dll", "Extension": ".dll",
+     "FileSize": "1", "IsDirectory": "False", "Created0x10": "2019-03-01 10:00:00.0000000",
+     "LastModified0x10": "2019-03-01 10:00:00.0000000"},
+]
+
+
+def arg(args, flag):
+    return args[args.index(flag) + 1] if flag in args else None
+
+
+def write_csv(path, rows):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    cols = list(dict.fromkeys(k for r in rows for k in r))
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=cols)
+        w.writeheader()
+        w.writerows(rows)
+
+
+def main() -> int:
+    tool = os.path.splitext(os.path.basename(sys.argv[1]))[0]
+    args = sys.argv[2:]
+    src = arg(args, "-f") or arg(args, "-d")
+    out = arg(args, "--csv")
+    if "silent" in (src or ""):  # mimics the real bstrings 2026.5.0 on Linux: exit 0, no output
+        print("input from stdin or file")
+        return 0
+    if tool == "EvtxECmd":
+        inc = arg(args, "--inc")
+        rows = [r for r in EVTX if not inc or r["EventId"] in inc.split(",")]
+        write_csv(os.path.join(out, "20261006_EvtxECmd_Output.csv"), rows)
+    elif tool == "MFTECmd":
+        write_csv(os.path.join(out, "20261006_MFTECmd_$MFT_Output.csv"), MFT)
+    elif tool == "AmcacheParser":  # several CSVs, like the real tool
+        write_csv(os.path.join(out, "Amcache_UnassociatedFileEntries.csv"),
+                  [{"SHA1": "aa", "FullPath": "c:\\users\\public\\upd.exe"}])
+        write_csv(os.path.join(out, "Amcache_ProgramEntries.csv"), [{"Name": "Office"}])
+    elif tool == "RECmd" and "--bn" not in args:
+        print(f"Key: {arg(args, '--kn')}\nValue: UpdateSvc  C:\\Users\\Public\\upd.exe")
+    elif tool == "bstrings":
+        with open(arg(args, "-o"), "w") as fh:
+            fh.write("hello world\nhttp://203.0.113.10/a.ps1\n")
+    elif tool == "rla":
+        os.makedirs(arg(args, "--out"), exist_ok=True)
+        with open(os.path.join(arg(args, "--out"), "SYSTEM"), "wb") as fh:
+            fh.write(b"regf")
+    elif tool == "SrumECmd" and not os.path.basename(src or "").lower().startswith("srudb"):
+        print("fake SrumECmd: not a SRUDB.dat", file=sys.stderr)
+        return 1
+    elif out:
+        write_csv(os.path.join(out, f"{tool}_Output.csv"),
+                  [{"Tool": tool, "SourceFile": src, "Args": " ".join(args)}])
+    else:
+        print(f"fake ez: no output option for {tool}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

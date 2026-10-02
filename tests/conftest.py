@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from forensic_mcp.config import Config
-from forensic_mcp.engines import volatility2, volatility3
+from forensic_mcp.engines import volatility2, volatility3, zimmerman
 
 FAKEBIN = Path(__file__).parent / "fakebin"
 
@@ -22,7 +22,10 @@ def cfg(tmp_path: Path) -> Config:
     (ev / "mem.raw").write_bytes(b"\0" * 4096)
     tools = tmp_path / "tools.toml"
     tools.write_text(f'[tools.vol3]\ncmd = ["{sys.executable}", "{FAKEBIN / "vol"}"]\nok = true\n'
-                     f'[tools.vol2]\ncmd = ["{sys.executable}", "{FAKEBIN / "vol2"}"]\nok = true\n')
+                     f'[tools.vol2]\ncmd = ["{sys.executable}", "{FAKEBIN / "vol2"}"]\nok = true\n'
+                     + "".join(f'[tools.{t}]\ncmd = ["{sys.executable}", "{FAKEBIN / "ez"}", '
+                               f'"{FAKEBIN / "ez_tools" / (t + ".dll")}"]\nok = true\n'
+                               for t in zimmerman.REGISTRY))
     volatility3._cache.clear()
     volatility3._opt_cache.clear()
     volatility2._cache.clear()

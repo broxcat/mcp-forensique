@@ -44,6 +44,9 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
                  ("vol_malfind", m), ("vol_dlllist", m), ("vol_printkey", {**m, "key": "Run"}),
                  ("vol2_list_plugins", {}), ("vol2_imageinfo", m),
                  ("vol2_run", {**m, "plugin": "pslist", "profile": "Win7SP1x64"}),
+                 ("ez_list_tools", {}), ("ez_run", {**m, "tool": "bstrings"}),
+                 ("evtx_query", {**m, "preset": "persistence"}), ("mft_search", m),
+                 ("timeline", {"around": "2026-10-06T14:31:00Z"}),
                  ("query_results", {"result_id": rid, "limit": 1}), ("list_results", {}),
                  ("replay", {"audit_id": aid})]
         seen = {"vol3_run"}
