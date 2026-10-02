@@ -43,8 +43,8 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 ```
 Today: J5 (02/10) — 4.3a/b/c done (P3 defensive part still open, see below)
 Current task: 5.2 agent part DONE (02/10), waiting for the user: trials with both LLM modes
-  are human (docs/essais_skill.md); next 6.1. NOT COMMITTED: 3.1/3.2 defensive part,
-  disk_extract_file, 5.2 (commit not requested yet)
+  are human (docs/essais_skill.md); next 6.1. Committed 02/10, NOT pushed: 23b3dbf (3.1/3.2
+  defensive part), d84daf6 (disk_extract_file), b7c622b (5.2)
 PENDING ANALYST ACTION: F-0001 (à valider), F-0002 and F-0003 (rejetés par le serveur) in the
   real journal await the analyst's decision (L. Plancke: reject with the reason "finding de
   test", via `docker exec -it forensic-mcp python -m forensic_mcp validate`). The agent never
