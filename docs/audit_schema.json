@@ -95,7 +95,9 @@
               "duration_s": {"type": "number", "minimum": 0},
               "output_sha256": {"description": "sha256 of rows.jsonl, compared by replay().", "oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
               "replay_of": {"description": "audit_id of the original call when this is a replay.", "type": "integer", "minimum": 1},
-              "replay_match": {"type": "boolean"}
+              "replay_match": {"type": "boolean"},
+              "row_count": {"description": "Rows matched by this call (since 5.3; used to verify an observation = absence).", "type": "integer", "minimum": 0},
+              "notes": {"description": "Server notes of the response (e.g. log or audit policy required).", "type": "array", "items": {"type": "string"}}
             }
           }
         },
@@ -105,7 +107,13 @@
             "required": ["finding_id", "kind", "text", "citations", "confidence", "cross_check"],
             "properties": {
               "finding_id": {"type": "string", "pattern": "^F-[0-9]{4,}$"},
-              "kind": {"enum": ["fact", "hypothesis", "recommendation"]},
+              "kind": {"enum": ["fact", "hypothesis", "recommendation", "observation"]},
+              "observation": {
+                "description": "kind=observation only: server-written statements of absence and the copied notes.",
+                "type": "object", "required": ["statements", "notes"], "additionalProperties": false,
+                "properties": {"statements": {"type": "array", "items": {"type": "string"}},
+                               "notes": {"type": "array", "items": {"type": "string"}}}
+              },
               "text": {"type": "string", "minLength": 1},
               "citations": {"type": "array", "items": {"$ref": "#/$defs/citation"}},
               "confidence": {"enum": ["low", "medium", "high"]},

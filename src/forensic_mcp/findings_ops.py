@@ -17,7 +17,12 @@ from typing import Any
 from . import analyzers, audit, decode, playbook, results
 from .timeline import to_utc
 
-KINDS = ("fact", "hypothesis", "recommendation")
+KINDS = ("fact", "hypothesis", "recommendation", "observation")
+# observation (5.3): a verified ABSENCE of trace in a cited result. Its citations name a result
+# with row 0 and field "audit_id" (a journaled call on that result returned 0 rows), "*" (the
+# result is empty) or a column (no row of the result holds the value). The server writes the
+# statement and copies the call's notes (required log / audit policy).
+OBS_ALL, OBS_CALL = "*", "audit_id"
 CONFIDENCE = ("low", "medium", "high")
 ATTACK_RE = re.compile(r"^T[0-9]{4}(\.[0-9]{3})?$")
 MAX_CITATIONS = 20
@@ -79,6 +84,7 @@ def load_findings(audit_file: Path, with_citations: bool = False) -> list[dict[s
                  "decision_audit_id": None}
             if with_citations:
                 f["citation_list"] = e["citations"]
+                f["observation"] = e.get("observation")
             out[e["finding_id"]] = f
         elif e["type"] == "validation" and e.get("finding_id") in out:
             out[e["finding_id"]].update(
@@ -132,6 +138,79 @@ class FindingsOps:
                         f"(row has {str(cell)[:80]!r})"
         return cit, ""
 
+    def _check_absence(self, c: dict[str, Any], calls: dict[int, dict[str, Any]],
+                       producers: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], str, dict]:
+        """Cross-check one observation citation; returns (citation, problem, {statement, notes})."""
+        rid, n, field, value = c.get("result_id"), c.get("row"), c.get("field"), c.get("value")
+        if not isinstance(value, (str, int, float, bool)) and value is not None:
+            value = str(value)
+        cit = {"result_id": str(rid), "_row": 0, "field": str(field), "value": value}
+        try:
+            d = results.result_dir(self.cfg.output_root, str(rid))
+        except (ValueError, FileNotFoundError):
+            return cit, f"unknown result_id {rid!r}", {}
+        meta = results.read_meta(d)
+        ps = self._policy(Path(meta["input_path"]) if meta.get("input_path") else None)
+        if ps and field != OBS_CALL:
+            value = ps.restore(value)
+            cit["value"] = value
+            self._finding_ps = ps
+        if n not in (0, None):
+            return cit, "an observation cites a result, not a row: row must be 0", {}
+        if field == OBS_CALL:
+            call = calls.get(results.as_number(value)) if results.as_number(value) else None
+            if call is None or call.get("result_id") != rid:
+                return cit, f"audit_id {value!r} is not a journaled call on {rid}", {}
+            if call.get("outcome") != "ok":
+                return cit, (f"the cited call ended '{call.get('outcome')}': a failed tool proves "
+                             "no absence"), {}
+            if "row_count" not in call:
+                return cit, ("this call was journaled without its row count (before 5.3): run "
+                             "the query again and cite the new audit_id"), {}
+            if call["row_count"] != 0:
+                return cit, f"the cited call returned {call['row_count']} rows", {}
+            shown = {k: v for k, v in (call.get("params") or {}).items()
+                     if v not in (None, "", [], False) and k not in ("limit", "offset")}
+            return cit, "", {"statement": f"Aucune ligne renvoyée par {call['tool']} {shown} "
+                                          f"(audit_id {call['audit_id']}, résultat {rid}).",
+                             "notes": call.get("notes") or []}
+        prod = producers.get(str(rid))
+        if prod is None or prod.get("outcome") != "ok":
+            return cit, (f"the call that produced {rid} did not end 'ok': a failed tool proves "
+                         "no absence"), {}
+        if field == OBS_ALL:
+            count = results.count_rows(d)
+            if count:
+                return cit, f"{rid} has {count} rows: cite the audit_id of an empty query or a " \
+                            "column + value", {}
+            return cit, "", {"statement": f"Le résultat {rid} ({prod['tool']}) ne contient "
+                                          "aucune ligne.", "notes": prod.get("notes") or []}
+        if value is None or not str(value).strip():
+            return cit, "an absence of a value needs the value (field + value)", {}
+        wanted, seen, hits = str(value).casefold(), False, []
+        for i, row in enumerate(results.iter_rows(d), 1):
+            if field in row:
+                seen = True
+                if wanted in str(row[field]).casefold() or value_matches(row[field], value):
+                    hits.append(i)
+        if hits:
+            return cit, f"value {value!r} is present in {rid} rows {hits[:5]} (field {field!r})", {}
+        if not seen and results.count_rows(d):
+            return cit, f"field {field!r} not in the rows of {rid}", {}
+        return cit, "", {"statement": f"Aucune ligne de {rid} ({prod['tool']}) dont le champ "
+                                      f"{field} contient {value!r}.",
+                         "notes": prod.get("notes") or []}
+
+    def _journal_calls(self) -> tuple[dict[int, dict[str, Any]], dict[str, dict[str, Any]]]:
+        """tool_call events by audit_id, and the call that produced each result_id."""
+        calls, producers = {}, {}
+        for e in audit.iter_events(self.cfg.audit_file):
+            if e["type"] == "tool_call":
+                calls[e["audit_id"]] = e
+                if e.get("result_id") and e["result_id"] not in producers:
+                    producers[e["result_id"]] = e
+        return calls, producers
+
     async def op_record_finding(self, params: dict[str, Any], conf: Any = None) -> Any:
         kind, confidence = params.get("kind"), params.get("confidence")
         text = str(params.get("text") or "").strip()
@@ -145,16 +224,29 @@ class FindingsOps:
         problems: list[str] = []
         checked, rows = [], []
         self._finding_ps = None
+        observed: dict[str, list[str]] = {"statements": [], "notes": []}
+        journal = self._journal_calls() if kind == "observation" else None
         for i, c in enumerate(citations, 1):
-            cit, problem = self._check(c if isinstance(c, dict) else {})
+            c = c if isinstance(c, dict) else {}
+            if journal is not None:
+                cit, problem, info = self._check_absence(c, *journal)
+                if info:
+                    observed["statements"].append(info["statement"])
+                    observed["notes"] += [n for n in info["notes"] if n not in observed["notes"]]
+            else:
+                cit, problem = self._check(c)
             checked.append(cit)
-            rows.append({"citation": i, **{k: cit[k] for k in ("result_id", "_row", "field")},
+            rows.append({"citation": i, "result_id": cit["result_id"],
+                         "cited_row": cit["_row"], "field": cit["field"],
                          "value": str(cit["value"])[:200], "check": problem or "ok"})
             if problem:
                 problems.append(f"citation {i}: {problem}")
         if not citations:
             problems.append("no citation: every statement must cite result_id + row + field + "
                             "value (EF-10)")
+        if kind == "observation" and attack:
+            problems.append("an observation states the absence of a trace in a result, not a "
+                            "technique: no ATT&CK ID")
         known = known_attack_ids()
         for t in attack:
             if not ATTACK_RE.match(str(t)) or t not in known:
@@ -168,11 +260,17 @@ class FindingsOps:
                           kind=kind, text=text, citations=checked, confidence=confidence,
                           attack=[str(t) for t in attack if ATTACK_RE.match(str(t))],
                           cross_check={"status": "failed" if problems else "passed",
-                                       "mismatches": problems}, status=status)
+                                       "mismatches": problems}, status=status,
+                          **({"observation": observed} if kind == "observation" else {}))
         summary = (f"{fid} REJECTED by the cross-check: {'; '.join(problems)}" if problems else
                    f"{fid} recorded ({kind}, confidence {confidence}): à valider by an analyst")
         out = self._listing("record_finding", params, rows, summary)
         out.payload["notes"] = [f"suggestion journaled as audit_id {ev['audit_id']}"] + problems
+        if kind == "observation" and not problems:
+            out.payload["notes"] += [
+                "Observation = absence of the trace in the cited result only, NOT absence of the "
+                "behaviour. Server statement: " + " ".join(observed["statements"]),
+                *observed["notes"]]
         out.audit_extra = {"finding_id": fid, "finding_status": status}
         return out
 

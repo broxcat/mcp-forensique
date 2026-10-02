@@ -42,9 +42,9 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 
 ```
 Today: J5 (02/10) — 4.3a/b/c done (P3 defensive part still open, see below)
-Current task: 5.2 agent part DONE (02/10), waiting for the user: trials with both LLM modes
-  are human (docs/essais_skill.md); next 6.1. Committed 02/10, NOT pushed: 23b3dbf (3.1/3.2
-  defensive part), d84daf6 (disk_extract_file), b7c622b (5.2)
+Current task: 6.1 (crisis assistant), after 5.3 (02/10). Trials with both LLM modes are
+  human (docs/essais_skill.md). Pushed 02/10: 23b3dbf (3.1/3.2 defensive part), d84daf6
+  (disk_extract_file), b7c622b (5.2), f0bb99a (STATUS)
 PENDING ANALYST ACTION: F-0001 (à valider), F-0002 and F-0003 (rejetés par le serveur) in the
   real journal await the analyst's decision (L. Plancke: reject with the reason "finding de
   test", via `docker exec -it forensic-mcp python -m forensic_mcp validate`). The agent never
@@ -101,6 +101,18 @@ Done: 5.2 agent part (02/10) — references/interpretation_artefacts.md (memory:
   references; docs/essais_skill.md (trial sheet cloud/local, human). Prompt = 24.4 k chars.
   pytest 134 passed (test_playbook.py: tools in the docs exist, ATT&CK IDs accepted, documented
   thresholds = findings_ops constants).
+Done: 5.3 (02/10, request L. Plancke) — (1) prompt playbook_poste_compromis(case, section=None):
+  default = SKILL.md only (5,081 chars real, bound MAX_DEFAULT_CHARS 6,000 tested); sections
+  artefacts / citations / checklist / arbre, also MCP resources playbook://references/<section>.
+  (2) record_finding kind="observation" (verified absence, see §11): findings_ops
+  _check_absence + _journal_calls, Engine.call journals row_count + notes on tool_calls with a
+  result, audit_schema (kind observation, `observation` {statements, notes}, tool_call
+  row_count/notes), report shows the server statement + notes, validation.recheck re-verifies;
+  record_finding response rows: `cited_row` instead of `_row`. regles_citation.md §2/§7 and
+  SKILL.md updated. pytest 136 passed (tests/test_observation.py: accepted on an empty
+  query_results call, on an absent column value and on an empty EVTX preset of a shared parse
+  with notes copied; rejected with rows / value present / non-empty "*" / unknown result /
+  other call / row != 0 / ATT&CK). Real: 41 tools, 4 resources, real journal schema-valid.
 Done: 4.1 (30/09) — socle: new modules schemas.py, contract.py, evidence.py, redact.py, ops.py
   (Engine.call wraps every tool); audit.py rewritten (typed events, audit_id, ts_utc, flock,
   verify_report = chain + sequence + schema, head_hash); runner output bound (max_output_mb);
@@ -734,13 +746,27 @@ statements and rejects one with a wrong IP.
   of `auditpol /backup`. And with $ErrorActionPreference = "Stop", `Write-Error` throws: the
   documented exit code 2 ("not administrator") came out as 1 — found by running the scripts
   non-admin. A logging check that reports wrongly makes "no event" look like "no activity".
-- Absences cannot be findings (5.2): record_finding needs a cited row, so "no 4698 in
-  Security.evtx" cannot be journaled as a suggestion nor appear in the report; the skill tells
-  the assistant to present it as an observation with the result_id and the server's note. A
-  negative result is still evidence: a gap for objective 3 (100 % of suggestions traced).
+- Absences could not be findings (5.2): record_finding needed a cited row, so "no 4698 in
+  Security.evtx" could not be journaled nor reported — a gap for objective 3. FIXED in 5.3:
+  kind="observation" (row 0; field "audit_id" = a journaled call on that result that returned
+  0 rows, "*" = empty result, or a column + value absent from every row). The server verifies
+  the absence itself, refuses it if the producing call failed (a failed tool proves no
+  absence), writes the statement and copies the notes; no ATT&CK ID. tool_call events now
+  carry row_count + notes (calls journaled before 5.3 cannot back an observation). Residual:
+  the server can only say "no trace in this artefact"; the LLM's free text may still overstate
+  it ("no persistence") — the report shows the server's statement next to it and the analyst
+  validates.
+- Subtle trap found while adding observations (5.3): evtx_query (and the shortcuts) return the
+  result_id of the SHARED parse, which has rows; the empty answer is a filtered VIEW of it. An
+  absence check on "result_id has 0 rows" would have rejected every real empty preset; the
+  absence must be tied to the call (audit_id), not to the result.
+- Latent contract bug (found 5.3): record_finding's response rows carried the CITED row number
+  as `_row`, the contract's own numbering key (duplicates, and 0 broke the schema). Renamed
+  `cited_row` in the response; the journal citation keeps `_row`.
 - Skill documentation can drift from the server: the first citation example in
   regles_citation.md cited vol_pstree rows 2/3 for an anomaly the reference case raises on
   vol_pslist, with made-up row numbers — the doc itself taught the invented-row-number error.
   Mitigation: placeholders instead of row numbers, tests tying documented thresholds/IDs/tools to
-  the code. The full prompt (SKILL.md + 4 references) is 24.4 k characters: a small local
-  model's context may truncate it.
+  the code. The full prompt (SKILL.md + 4 references) was 24.4 k characters: a small local
+  model's context may truncate it. 5.3: the default prompt is SKILL.md only (5.1 k chars,
+  bound 6 k tested); each reference is a section / MCP resource asked explicitly.

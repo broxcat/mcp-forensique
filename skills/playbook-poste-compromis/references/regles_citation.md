@@ -19,6 +19,7 @@ respecter : `record_finding` recontrôle chaque valeur citée et rejette le cons
 | `fact` | La valeur est **lue** dans une ligne de résultat du serveur | « `powershell.exe` (PID 4312) a pour parent `WINWORD.EXE` (PID 2980). » |
 | `hypothesis` | Une **interprétation** des faits, plausible mais à vérifier | « Ce lancement est probablement dû à une macro Office. » |
 | `recommendation` | Une **action proposée** à l'analyste ; jamais exécutée par l'assistant | « Extraire la tâche planifiée `UpdateSvc` du disque pour l'examiner. » |
+| `observation` | Une **absence de trace vérifiée** dans un résultat cité (voir §7) | « Aucun événement 4698 dans le résultat de `evtx_query` (preset persistence) sur `Security.evtx`. » |
 
 Une hypothèse ou une recommandation cite aussi les lignes qui la fondent. Ne jamais présenter une
 hypothèse comme un fait : « typique de », « compatible avec », « suggère » signalent une hypothèse.
@@ -73,8 +74,30 @@ base64), `timeline` et les dates UTC (pas de conversion de fuseau), `_row` (pas 
 1. lire les `notes` du résultat (journal absent de la collecte, politique d'audit non activée) ;
 2. dire **ce qui** a été cherché, **où** (fichier, `result_id`) et ce que la note du serveur indique.
 
-Une absence ne peut pas être enregistrée comme constat (il n'y a pas de ligne à citer) : la
-présenter comme une **observation à valider**, avec le `result_id` et la note, jamais comme un fait.
+Une absence vérifiée s'enregistre avec `kind="observation"`. Les citations portent sur un
+résultat, avec `row = 0` et l'une de ces formes :
+
+| `field` | `value` | Le serveur vérifie |
+|---|---|---|
+| `audit_id` | l'`audit_id` de l'appel (réponse du serveur) | cet appel porte sur ce `result_id`, s'est terminé « ok » et a renvoyé 0 ligne (cas des requêtes filtrées : `evtx_query`, `mft_search`, `query_results`…) |
+| `*` | `null` | le résultat entier ne contient aucune ligne |
+| une colonne (`ImageFileName`…) | la valeur cherchée | aucune ligne du résultat entier ne contient cette valeur dans cette colonne |
+
+Il rejette l'observation si le résultat contient la trace, s'il n'existe pas, ou si l'outil qui
+l'a produit a échoué (un outil en échec ne prouve aucune absence). Il **rédige lui-même** la
+constatation (« Aucune ligne renvoyée par … ») et **recopie ses notes** (journal ou politique
+d'audit requis) ; c'est ce texte qui figure dans le rapport. Pas d'identifiant ATT&CK.
+
+Une observation dit seulement que **la trace est absente de l'artefact cité**, jamais que le
+comportement n'a pas eu lieu : écrire « aucun 4698 dans ce journal », pas « aucune persistance ».
+Elle est « à valider » comme les autres constats.
+
+```json
+{"kind": "observation", "confidence": "medium",
+ "text": "Aucun événement de création de tâche dans Security.evtx (preset persistence)",
+ "citations": [{"result_id": "<result_id renvoyé par evtx_query>", "row": 0,
+                "field": "audit_id", "value": "<audit_id de cet appel>"}]}
+```
 
 ## 8. « À valider »
 

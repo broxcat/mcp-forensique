@@ -236,14 +236,19 @@ def build_server(cfg: Config | None = None) -> MCPServer:
         return await run("list_results", {"limit": limit, "offset": offset})
 
     @tool("record_finding")
-    async def record_finding(kind: Literal["fact", "hypothesis", "recommendation"], text: str,
+    async def record_finding(kind: Literal["fact", "hypothesis", "recommendation",
+                                           "observation"], text: str,
                              citations: list[Citation],
                              confidence: Literal["low", "medium", "high"],
                              attack: list[str] | None = None) -> Result:
         """Record ONE statement for the report (EF-10, EF-11). Every statement must cite the
         cells it relies on: result_id, row (_row), field, value. The server re-checks each value
         in the raw row and REJECTS the finding on any mismatch, missing citation or ATT&CK ID it
-        did not provide. Accepted findings stay "à valider" until an analyst validates them."""
+        did not provide. Accepted findings stay "à valider" until an analyst validates them.
+        kind="observation" = a verified ABSENCE of trace in a result (never the absence of a
+        behaviour): cite row=0 and field="audit_id" + value=<audit_id of a call on that result
+        that returned 0 rows>, or field="*" (empty result), or field=<column> + value (no row
+        holds it). The server writes the statement and copies the notes; no ATT&CK ID."""
         return await run("record_finding", {
             "kind": kind, "text": text, "citations": [c.model_dump() for c in citations],
             "confidence": confidence, "attack": attack})
@@ -251,7 +256,8 @@ def build_server(cfg: Config | None = None) -> MCPServer:
     @tool("list_findings")
     async def list_findings(status: Literal["à valider", "validé", "rejeté", "à revoir",
                                             "rejeté par le serveur"] | None = None,
-                            kind: Literal["fact", "hypothesis", "recommendation"] | None = None,
+                            kind: Literal["fact", "hypothesis", "recommendation",
+                                          "observation"] | None = None,
                             limit: int = 50, offset: int = 0) -> Result:
         """Findings recorded so far, with their current status read from the audit journal
         (à valider / validé / rejeté / à revoir / rejeté par le serveur). Read-only: only an
@@ -276,11 +282,21 @@ def build_server(cfg: Config | None = None) -> MCPServer:
         return await run("checklist_status", {"case": case, "limit": limit, "offset": offset})
 
     @mcp.prompt(name="playbook_poste_compromis",
-                description="Playbook poste Windows compromis (checklist, arbre de triage, "
-                            "règles de citation) pour un cas donné.")
-    def playbook_poste_compromis(case: str) -> str:
-        """SKILL.md + references, for clients without skills (local model, ET-06/ET-07)."""
-        return playbook.render(case)
+                description="Playbook poste Windows compromis pour un cas donné. Sans section : "
+                            "SKILL.md seul. section = artefacts, citations, checklist ou arbre.")
+    def playbook_poste_compromis(case: str, section: str | None = None) -> str:
+        """SKILL.md, or one reference, for clients without skills (local model, ET-06/ET-07)."""
+        return playbook.render(case, section)
+
+    def _reference(section: str) -> None:
+        @mcp.resource(f"playbook://references/{section}", name=f"playbook_{section}",
+                      description=f"Playbook poste compromis — référence {section}",
+                      mime_type="text/markdown")
+        def read() -> str:
+            return playbook.section_text(section)
+
+    for _section in playbook.SECTIONS:
+        _reference(_section)
 
     @tool("replay")
     async def replay(audit_id: int, ctx: Context,

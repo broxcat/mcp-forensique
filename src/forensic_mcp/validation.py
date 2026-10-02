@@ -51,9 +51,15 @@ def recheck(cfg: Config, finding: dict[str, Any]) -> list[dict[str, Any]]:
     """Each citation with the value cited, the value now in the row and a fresh cross-check."""
     eng = Engine(cfg)
     out = []
+    journal = eng._journal_calls() if finding.get("kind") == "observation" else None
     for c in finding.get("citation_list", []):
-        _, problem = eng._check({"result_id": c["result_id"], "row": c["_row"],
-                                 "field": c["field"], "value": c["value"]})
+        cited = {"result_id": c["result_id"], "row": c["_row"], "field": c["field"],
+                 "value": c["value"]}
+        if journal is not None:  # an absence: re-verify it, there is no cell to show
+            _, problem, info = eng._check_absence(cited, *journal)
+            out.append({**c, "current": info.get("statement"), "check": problem or "ok"})
+            continue
+        _, problem = eng._check(cited)
         current: Any = None
         try:
             row = _row(results.result_dir(cfg.output_root, c["result_id"]), c["_row"])

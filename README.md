@@ -118,8 +118,9 @@ d'utiliser l'export. `-DryRun` affiche la commande sans rien exécuter.
 
 ## 6. Validation des constats et rapport
 
-L'IA enregistre ses constats avec `record_finding` ; ils restent « à valider ». **Seul un
-analyste valide, hors MCP**, depuis un terminal interactif :
+L'IA enregistre ses constats avec `record_finding` (fait, hypothèse, recommandation, ou
+observation = absence de trace vérifiée par le serveur dans un résultat cité) ; ils restent
+« à valider ». **Seul un analyste valide, hors MCP**, depuis un terminal interactif :
 
 ```powershell
 docker exec -it forensic-mcp python -m forensic_mcp validate

@@ -134,7 +134,14 @@ class ReportOps:
                 f"{f['status']} par {f['decided_by']} le {f['decided_utc']} — motif : "
                 f"{f['decision_reason']}")
             lines += [f"### {f['finding_id']} — {f['kind']} — confiance {f['confidence']}", "",
-                      f"{f['text']}", "", f"- Statut : {status}",
+                      f"{f['text']}", ""]
+            obs = f.get("observation")
+            if obs:  # an absence of trace in the cited result, worded by the server
+                lines += ["**Observation (absence de trace dans le résultat cité, pas absence du "
+                          "comportement) — constat du serveur :**", "",
+                          *[f"- {_md(s)}" for s in obs["statements"]],
+                          *[f"- Note du serveur : {_md(n)}" for n in obs["notes"]], ""]
+            lines += [f"- Statut : {status}",
                       f"- ATT&CK : {f['attack'] or '—'}",
                       f"- Suggestion journalisée : audit_id {f['audit_id']}", "",
                       "| Résultat | Ligne | Champ | Valeur | Outil | Commande | Empreinte preuve | audit_id |",

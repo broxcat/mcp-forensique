@@ -92,6 +92,11 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, ImportOps, FindingsOps,
                    evidence_sha256=out.evidence_sha256, result_id=out.result_id,
                    exit_code=out.exit_code, output_sha256=out.output_sha256)
         extra = dict(out.audit_extra, timed_out=out.timed_out)
+        if out.result_id:  # what this call returned: lets record_finding verify an absence (5.3)
+            if isinstance(out.payload.get("row_count"), int):
+                extra["row_count"] = out.payload["row_count"]
+            if out.payload.get("notes"):
+                extra["notes"] = [str(n) for n in out.payload["notes"]]
         if out.timed_out:
             outcome, extra["error"] = "timeout", f"timeout after {self.cfg.timeout_seconds} s"
         elif out.output_exceeded:

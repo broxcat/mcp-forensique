@@ -84,11 +84,27 @@ async def test_playbook_prompt() -> None:
         prompts = {p.name for p in (await c.list_prompts()).prompts}
         assert "playbook_poste_compromis" in prompts
         got = await c.get_prompt("playbook_poste_compromis", {"case": "WS-042"})
+        parts = {s: (await c.get_prompt("playbook_poste_compromis",
+                                        {"case": "WS-042", "section": s})).messages[0].content.text
+                 for s in playbook.SECTIONS}
+        listed = {str(r.uri) for r in (await c.list_resources()).resources}
+        res = {s: (await c.read_resource(f"playbook://references/{s}")).contents[0].text
+               for s in playbook.SECTIONS}
     text = got.messages[0].content.text
+    # 5.3: the default prompt is SKILL.md only, bounded, and names the sections
+    assert len(text) <= playbook.MAX_DEFAULT_CHARS, len(text)
     assert text.startswith("Cas : `WS-042`") and "<HÔTE>" not in text
-    assert "checklist_status" in text and "T1053.005" in text and "name:" not in text.split("\n")[2]
+    assert "checklist_status" in text and "name:" not in text.split("\n")[2]
+    assert all(f"`{s}`" in text for s in playbook.SECTIONS)
+    assert "T1053.005" in parts["arbre"] and "checklist_status" in parts["checklist"]
+    assert "observation" in parts["citations"] and "ShimCache" in parts["artefacts"]
+    assert all(p.startswith("Cas : `WS-042`") for p in parts.values())
+    assert listed >= {f"playbook://references/{s}" for s in playbook.SECTIONS}
+    assert all(res[s] == playbook.section_text(s) for s in playbook.SECTIONS)
     with pytest.raises(ValueError):
         playbook.render("../x")
+    with pytest.raises(ValueError):
+        playbook.render("WS-042", "secrets")
 
 
 def test_references_5_2_use_real_tools_and_allowed_attack_ids() -> None:

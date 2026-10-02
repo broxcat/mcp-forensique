@@ -66,11 +66,14 @@ Après chaque étape, rappeler à l'analyste ce qui reste dans `checklist_status
   `field` et `value` exactement comme dans la réponse du serveur ; le serveur recontrôle chaque
   valeur et rejette sinon.
 - **Étiqueter** : `fact` (observé dans une ligne), `hypothesis` (interprétation plausible à
-  vérifier), `recommendation` (action proposée, jamais exécutée). Donner une `confidence`.
+  vérifier), `recommendation` (action proposée, jamais exécutée), `observation` (absence de
+  trace vérifiée dans un résultat : `row=0`, `field="audit_id"` + l'audit_id de l'appel vide).
+  Donner une `confidence`.
 - **ATT&CK** : seulement les identifiants fournis par le serveur (anomalies, arbre de triage).
 - **Dire « à valider »** : aucun constat n'est définitif avant la décision d'un analyste.
 - « Aucun événement » ne veut pas dire « aucune activité » : lire les `notes` du serveur (journal
-  absent, politique d'audit désactivée) avant de conclure.
+  absent, politique d'audit désactivée) ; une observation affirme l'absence de la trace dans
+  l'artefact cité, jamais l'absence du comportement.
 
 Règles complètes et exemple : [règles de citation](references/regles_citation.md). Avant de
 qualifier une ligne de suspecte, consulter l'[interprétation des artefacts](references/interpretation_artefacts.md)
