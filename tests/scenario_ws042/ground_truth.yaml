@@ -1,0 +1,73 @@
+# TEST FIXTURE for eval/score.py (tests/test_score.py): ground truth of the synthetic WS-042
+# reference case (CLAUDE.md §10). Fictitious values (TEST-NET-3 address); not a lab result and
+# no attack procedure (procedure_ref is a placeholder).
+format: forensic-mcp/ground-truth/1
+case: WS-042
+status: filled
+filled_by: ["fixture"]
+scenario_played_utc: {start: "2026-10-06T14:25:00Z", end: "2026-10-06T15:00:00Z"}
+hosts:
+  - {name: WS-042, role: victime principale, timezone: UTC, clock_offset_seconds: 0}
+  - {name: WS-043, role: second hôte, timezone: UTC, clock_offset_seconds: 0}
+steps:
+  - step: 1
+    cdc_step: "Macro Office → PowerShell encodé"
+    host: WS-042
+    attack: [T1566.001, T1059.001]
+    timestamp_utc: "2026-10-06T14:30:07Z"
+    procedure_ref: fixture
+    iocs:
+      - {type: ip, value: 203.0.113.10}
+      - {type: url, value: "http://203.0.113.10/a.ps1"}
+    expected_facts:
+      - {description: "powershell.exe a pour parent WINWORD.EXE", artefact: memory,
+         evidence_path: WS-042/memory/ws042.raw, tool: vol_pslist, field: PPID, value: 2980,
+         result_id: null, row: null}
+      - {description: "commande encodée qui télécharge a.ps1", artefact: memory,
+         evidence_path: WS-042/memory/ws042.raw, tool: vol_cmdline, field: decoded,
+         value: "http://203.0.113.10/a.ps1", result_id: null, row: null}
+  - step: 2
+    cdc_step: "Persistance : tâche planifiée + clé Run"
+    host: WS-042
+    attack: [T1053.005]
+    timestamp_utc: "2026-10-06T14:32:07Z"
+    procedure_ref: fixture
+    iocs:
+      - {type: scheduled_task, value: UpdateSvc}
+    expected_facts:
+      - {description: "tâche UpdateSvc créée (4698)", artefact: evtx,
+         evidence_path: WS-042/kape/Security.evtx, tool: evtx_query, field: TimeCreated,
+         value: "2026-10-06T14:32:07Z", result_id: null, row: null}
+  - step: 3
+    cdc_step: "Vol d'identifiants + RDP vers un second hôte"
+    host: WS-042
+    attack: [T1021.001]
+    timestamp_utc: "2026-10-06T14:40:00Z"
+    procedure_ref: fixture
+    iocs:
+      - {type: account, value: svc-backup}
+    expected_facts:
+      - {description: "ouverture de session RDP", artefact: evtx,
+         evidence_path: WS-042/kape/Security.evtx, tool: evtx_query, field: EventId,
+         value: 4778, result_id: null, row: null}
+  - step: 4
+    cdc_step: "Archive dans un dossier temporaire"
+    host: WS-042
+    attack: [T1560.001]
+    timestamp_utc: "2026-10-06T14:45:00Z"
+    procedure_ref: fixture
+    iocs: []
+    expected_facts:
+      - {description: "archive créée dans Temp", artefact: mft, tool: mft_search,
+         field: FileName, value: data.7z, result_id: null, row: null}
+  - step: 5
+    cdc_step: "Collecte"
+    host: WS-042
+    attack: [T1041]
+    timestamp_utc: "2026-10-06T14:50:00Z"
+    procedure_ref: fixture
+    iocs: []
+    expected_facts:
+      - {description: "connexion établie vers 203.0.113.10", artefact: memory,
+         evidence_path: WS-042/memory/ws042.raw, tool: vol_netscan, field: ForeignAddr,
+         value: 203.0.113.10, result_id: null, row: null}
