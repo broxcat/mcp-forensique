@@ -77,6 +77,19 @@ async def test_session_window_and_template_never_scored(cfg) -> None:
     assert "À MESURER" in score.render_markdown(t)
 
 
+def test_l6_draft_invents_no_result() -> None:
+    """Until the timed sessions are played, the L6 results section holds no number."""
+    l6 = (ROOT / "docs" / "L6_evaluation.md").read_text(encoding="utf-8")
+    results = l6.split("## 6. Résultats")[1].split("## 7.")[0]
+    lines = [ln for ln in results.splitlines() if ln.startswith("|")]
+    body = [ln for i, ln in enumerate(lines) if not ln.startswith("|---")
+            and not (i + 1 < len(lines) and lines[i + 1].startswith("|---"))]  # no header rows
+    cells = [c.strip() for ln in body for c in ln.strip("|").split("|")[1:]]
+    assert len(cells) > 30 and not [c for c in cells if c != "—" and "À MESURER" not in c]
+    assert "À MESURER" in (ROOT / "docs" / "L7_note_risques.md").read_text(encoding="utf-8") or \
+        "À COMPLÉTER APRÈS L6" in (ROOT / "docs" / "L7_note_risques.md").read_text(encoding="utf-8")
+
+
 async def test_cli(cfg, tmp_path) -> None:
     await _session(cfg)
     out = tmp_path / "score.json"
