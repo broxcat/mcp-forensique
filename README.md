@@ -76,7 +76,7 @@ claude mcp add --transport http forensic http://localhost:8000/mcp --header "Aut
 `http://localhost:3000`, serveur MCP à déclarer avec l'URL interne `http://forensic:8000/mcp` et
 le même jeton.
 
-## 4. Outils exposés (40) et prompt MCP
+## 4. Outils exposés (41) et prompt MCP
 
 | Domaine | Outils |
 |---|---|
@@ -85,7 +85,7 @@ le même jeton.
 | Mémoire (vol2) | `vol2_list_plugins`, `vol2_imageinfo`, `vol2_run` |
 | Disque (EZ) | `evtx_query` (presets logons, rdp, execution, persistence, log_clearing), `mft_search`, `shimcache_query`, `amcache_query`, `lnk_query`, `jumplist_query`, `recyclebin_query`, `ez_run`, `ez_list_tools`, `timeline` |
 | Outils EZ Windows-only | `prefetch_query`, `browser_history`, `srum_query`, `ez_import` (voir §5) |
-| Images disque | `disk_info`, `disk_list`, `disk_extract` (cibles fixes ; extraits utilisables ensuite comme `@<result_id>/<chemin>`) |
+| Images disque | `disk_info`, `disk_list`, `disk_extract` (cibles fixes), `disk_extract_file` (fichiers choisis par inode dans la liste de `disk_list`, fichiers effacés compris) ; extraits utilisables ensuite comme `@<result_id>/<chemin>` |
 | Constats et rapport | `record_finding`, `list_findings`, `report_export` |
 | Playbook (skill) | `checklist_status(case)` : étapes de la checklist faites / à faire pour un hôte, déduites du journal d'audit |
 

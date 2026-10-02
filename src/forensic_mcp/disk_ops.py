@@ -1,5 +1,6 @@
 """Disk-image operations (task 4.3c, Décision J3): disk_info (mmls), disk_list (fls) and
-disk_extract (fixed targets copied with icat). Images are read as files, never mounted.
+disk_extract (fixed targets copied with icat),
+disk_extract_file (files chosen by inode in the disk_list listing, deleted files included). Images are read as files, never mounted.
 Each extracted file is hashed, made read-only (0444) and journaled with its provenance; it is
 then reachable by the other tools as "@<result_id>/<path>" (second read-only jail root)."""
 from __future__ import annotations
@@ -13,6 +14,7 @@ from . import contract, evidence, results
 from .engines import sleuthkit, volatility3
 
 MAX_EXTRACT_FILES = 5000
+MAX_INODES = 20
 
 
 class DiskOps:
@@ -137,11 +139,18 @@ class DiskOps:
         if len(selected) > MAX_EXTRACT_FILES:
             selected = selected[:MAX_EXTRACT_FILES]
             notes.append(f"truncated at {MAX_EXTRACT_FILES} files: extract fewer targets")
-        rid, d = results.new_result(self.cfg.output_root, "disk_extract")
+        return await self._extract("disk_extract", params, real, path, ps, ev, sector, selected,
+                                   lrid, notes, {"targets": targets}, ", ".join(targets))
+
+    async def _extract(self, tool: str, params: dict, real: dict, path: Path, ps: Any, ev: dict,
+                       sector: int, selected: list[dict[str, Any]], lrid: str, notes: list[str],
+                       meta: dict[str, Any], label: str) -> Any:
+        """Copy the selected listing rows with icat: hashed, 0444, registered with provenance."""
+        rid, d = results.new_result(self.cfg.output_root, tool)
         base = d / "extracted"
         base.mkdir()
-        results.write_meta(d, tool="disk_extract", plugin="icat", argv=[], input_path=str(path),
-                           input_sha256=ev["sha256"], partition_offset=sector, targets=targets,
+        results.write_meta(d, tool=tool, plugin="icat", argv=[], input_path=str(path),
+                           input_sha256=ev["sha256"], partition_offset=sector, **meta,
                            exit_code=None, row_count=0)
         rows, failed = [], 0
         for row in selected:
@@ -154,8 +163,8 @@ class DiskOps:
             argv = [*sleuthkit.cmd(self.cfg, "icat"), "-o", str(sector), str(path), row["inode"]]
             rr = await sleuthkit.run_to_file(self.cfg, argv, dest, d / "icat_stderr.txt",
                                              self.cfg.max_extract_file_mb)
-            item = {"source_path": row["path"], "target": row["target"], "inode": row["inode"],
-                    "deleted": row["deleted"]}
+            item = {"source_path": row["path"], "target": row.get("target"),
+                    "inode": row["inode"], "deleted": row["deleted"]}
             if rr.exit_code != 0 or rr.timed_out or rr.output_exceeded:
                 failed += 1
                 dest.unlink(missing_ok=True)
@@ -172,16 +181,82 @@ class DiskOps:
                          "sha256": digest, "status": "ok", "registration_audit_id": reg["audit_id"]})
         (d / "rows.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n"
                                               for r in rows), encoding="utf-8")
-        results.write_meta(d, tool="disk_extract", plugin="icat", argv=["icat", "-o", str(sector)],
+        results.write_meta(d, tool=tool, plugin="icat", argv=["icat", "-o", str(sector)],
                            input_path=str(path), input_sha256=ev["sha256"],
-                           partition_offset=sector, targets=targets, exit_code=0 if not failed
+                           partition_offset=sector, **meta, exit_code=0 if not failed
                            else 1, row_count=len(rows), listing_result_id=lrid)
         if failed:
             notes.append(f"{failed} file(s) could not be copied (see status)")
         notes.append('Use the "path" column (@<result_id>/...) as input of ez_run, evtx_query, '
                      "mft_search and the *_query tools.")
         q = self._page(d, limit=real.get("limit") or 50, offset=real.get("offset") or 0)
-        return self._outcome("disk_extract", params, real, ps, ev, rid, d,
+        return self._outcome(tool, params, real, ps, ev, rid, d,
                              ["icat", "-o", str(sector), "<image>", "<inode>"], 0 if not failed
                              else 1, q, f"{len(rows) - failed} files extracted "
-                             f"({', '.join(targets)}), {failed} failed", notes)
+                             f"({label}), {failed} failed", notes)
+
+    # ---- chosen files by inode (request L. Plancke 02/10: recover a deleted file) ----------
+    def _cached_listing(self, real: dict[str, Any], path: Path) -> tuple[str, Path] | None:
+        """The disk_list result of (image, offset) if it exists (no fls run here)."""
+        rec = evidence.load_registry(self.cfg).get(evidence.relpath(self.cfg, path))
+        cache = Path(self.cfg.output_root) / ".toolcache" / "fls.json"
+        if not rec or not cache.exists():
+            return None
+        key = f"{rec['sha256']}|{self._sector(real.get('partition_offset') or 0)}"
+        rid = json.loads(cache.read_text(encoding="utf-8")).get(key)
+        d = Path(self.cfg.output_root) / rid if rid else None
+        return (rid, d) if d and (d / "rows.jsonl").exists() else None
+
+    @staticmethod
+    def _inodes(v: Any) -> list[int]:
+        if not isinstance(v, list) or not 1 <= len(v) <= MAX_INODES or any(
+                isinstance(i, bool) or not isinstance(i, int) or i < 0 for i in v):
+            raise ValueError(f"inodes must be 1-{MAX_INODES} non-negative integers from disk_list")
+        return sorted(set(v))
+
+    @staticmethod
+    def _select_inodes(ld: Path, inodes: list[int]) -> list[dict[str, Any]]:
+        wanted = {str(i) for i in inodes}
+        rows = [r for r in results.iter_rows(ld) if r.get("meta_type") == "r"
+                and str(r.get("inode", "")).split("-")[0] in wanted]
+        missing = wanted - {str(r["inode"]).split("-")[0] for r in rows}
+        if missing:
+            raise ValueError(f"inode(s) {sorted(missing, key=int)} are not regular files of this "
+                             "file system listing (see disk_list)")
+        return rows
+
+    async def extract_file_sensitive(self, params: dict[str, Any]) -> str | None:
+        """Confirmation needed if a requested inode is a credential hive (same rule as the
+        sam_security target of disk_extract)."""
+        real = {**params, "path": self._restore_path(str(params["path"]))}
+        path = volatility3.image_path(self.cfg, real["path"])
+        hit = self._cached_listing(real, path)
+        if hit is None:
+            return None  # the operation refuses without a listing
+        rows = self._select_inodes(hit[1], self._inodes(real.get("inodes")))
+        if any(sleuthkit.match_targets(r["path"], sorted(sleuthkit.SENSITIVE_TARGETS))
+               for r in rows):
+            return "credential hives (SAM/SECURITY)"
+        return None
+
+    async def op_disk_extract_file(self, params: dict[str, Any], conf: Any = None) -> Any:
+        real, path, ps, ev = self._image(params)
+        sector = self._sector(real.get("partition_offset") or 0)
+        inodes = self._inodes(real.get("inodes"))
+        hit = self._cached_listing(real, path)
+        if hit is None:
+            raise ValueError("no listing of this file system yet: call disk_list with the same "
+                             "path and partition_offset, then pick inodes from it")
+        lrid, ld = hit
+        selected = self._select_inodes(ld, inodes)
+        reason = await self.sensitive_reason("disk_extract_file", params)
+        if reason:
+            await self._confirm("disk_extract_file", real, reason, conf)
+        notes = [f"listing: result {lrid}"]
+        if any(r["deleted"] for r in selected):
+            notes.append("Deleted file(s): content read from the clusters the entry still points "
+                         "to; it may be partly overwritten if they were reused (check size, type "
+                         "and hash).")
+        return await self._extract("disk_extract_file", params, real, path, ps, ev, sector,
+                                   selected, lrid, notes, {"inodes": inodes},
+                                   "inode " + ", ".join(map(str, inodes)))

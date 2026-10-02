@@ -28,6 +28,7 @@ DISK_TOOLS = {"ez_list_tools": "read", "ez_run": "read", "evtx_query": "read",
               "browser_history": "read", "shimcache_query": "read", "amcache_query": "read",
               "lnk_query": "read", "jumplist_query": "read", "recyclebin_query": "read",
               "disk_info": "read", "disk_list": "read", "disk_extract": "action_on_demand",
+              "disk_extract_file": "action_on_demand",
               "ez_import": "journal", "srum_query": "read"}
 SrumTable = Literal["network_usage", "app_resource", "network_connections", "energy",
                     "push_notifications", "app_timeline", "vfu"]
@@ -39,6 +40,11 @@ def register_disk_tools(tool: Callable[[str], Any], run: Callable[..., Any],
 
     async def ask_extract(path: str, targets: list[str], ctx: Context) -> Any:
         return await ask("disk_extract", {"path": path, "targets": targets}, ctx)
+
+    async def ask_extract_file(path: str, inodes: list[int], ctx: Context,
+                               partition_offset: int = 0) -> Any:
+        return await ask("disk_extract_file", {"path": path, "inodes": inodes,
+                                               "partition_offset": partition_offset}, ctx)
 
     def window(**kw: Any) -> dict[str, Any]:
         return {k: v for k, v in kw.items()}
@@ -212,3 +218,18 @@ def register_disk_tools(tool: Callable[[str], Any], run: Callable[..., Any],
                                                 partition_offset=partition_offset,
                                                 include_deleted=include_deleted, limit=limit,
                                                 offset=offset), ctx, confirmation)
+
+    @tool("disk_extract_file")
+    async def disk_extract_file(path: str, inodes: list[int], ctx: Context,
+                                confirmation: Annotated[Confirm, Resolve(ask_extract_file)],
+                                partition_offset: int = 0, limit: int = 50,
+                                offset: int = 0) -> Result:
+        """Copy chosen files out of a disk image by inode (icat), DELETED files included. The
+        inodes must be regular files of the disk_list listing of the same path and
+        partition_offset (call disk_list first; 1-20 inodes). Each file is hashed, journaled with
+        image + inode, read-only, then usable as "@<result_id>/..." by the other tools.
+        Credential hives need the analyst's confirmation."""
+        return await run("disk_extract_file", window(path=path, inodes=inodes,
+                                                     partition_offset=partition_offset,
+                                                     limit=limit, offset=offset),
+                         ctx, confirmation)

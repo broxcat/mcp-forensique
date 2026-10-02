@@ -157,6 +157,34 @@ async def test_disk_extract_sam_security_needs_confirmation(case) -> None:
     assert [e["decision"] for e in _events(case, "action_confirmed")] == ["denied", "approved"]
 
 
+async def test_disk_extract_file_by_inode_including_deleted(case) -> None:
+    args = {"path": IMG, "partition_offset": 206848, "inodes": [1205]}
+    first = await _call(case, "disk_extract_file", args)
+    assert "call disk_list" in first  # the inode must come from a listing
+    await _call(case, "disk_list", {"path": IMG, "partition_offset": 206848, "deleted": True})
+    r = await _call(case, "disk_extract_file", args)
+    row = r["rows"][0]
+    assert r["row_count"] == 1 and row["deleted"] is True and row["status"] == "ok"
+    assert row["source_path"] == "Windows/Prefetch/DELETED.EXE-11111111.pf"
+    assert row["inode"] == "1205-128-1" and row["path"].startswith(f"@{r['result_id']}/")
+    assert any("Deleted file" in n for n in r["notes"])
+    f = Path(case.output_root) / r["result_id"] / "extracted" / row["source_path"]
+    assert f.read_text() == "content of 1205-128-1" and stat.S_IMODE(f.stat().st_mode) == 0o444
+    reg = [e for e in _events(case, "evidence_registered") if e["path"] == row["path"]][0]
+    assert reg["inode"] == "1205-128-1" and reg["source_image"] == IMG
+    call = [e for e in _events(case, "tool_call") if e["tool"] == "disk_extract_file"]
+    assert [e["outcome"] for e in call] == ["refused", "ok"]
+    for bad in ([], [64], [-1], list(range(21))):  # empty, a folder, negative, too many
+        out = await _call(case, "disk_extract_file", {**args, "inodes": bad})
+        assert isinstance(out, str), bad
+    # credential hives keep needing the analyst's confirmation through this tool too
+    sam = {**args, "inodes": [1202]}
+    assert "not confirmed" in await _call(case, "disk_extract_file", sam)
+    ok = await _call(case, "disk_extract_file", sam, _approve)
+    assert ok["rows"][0]["source_path"] == "Windows/System32/config/SAM"
+    assert audit.verify_audit(case.audit_file)[0]
+
+
 async def test_second_jail_root_only_accepts_extractions(case) -> None:
     r = await _call(case, "disk_extract", {"path": IMG, "partition_offset": 206848,
                                            "targets": ["mft"]})

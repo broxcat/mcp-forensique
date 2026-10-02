@@ -58,6 +58,7 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
                  ("recyclebin_query", m), ("disk_info", m),
                  ("disk_list", {**m, "partition_offset": 206848}),
                  ("disk_extract", {**m, "partition_offset": 206848, "targets": ["mft"]}),
+                 ("disk_extract_file", {**m, "partition_offset": 206848, "inodes": [0]}),
                  ("query_results", {"result_id": rid, "limit": 1}), ("list_results", {}),
                  ("replay", {"audit_id": aid}),
                  ("record_finding", {"kind": "fact", "text": "System is PID 4", "confidence": "high",
@@ -188,7 +189,8 @@ async def test_tools_are_annotated_and_actions_only_on_demand(cfg) -> None:
         tools = {t.name: t.annotations for t in (await c.list_tools()).tools}
     assert set(tools) == set(server.TOOL_CLASSES)
     on_demand = {n for n, c in server.TOOL_CLASSES.items() if c == "action_on_demand"}
-    assert on_demand == {"vol_malfind", "vol3_run", "vol2_run", "replay", "disk_extract"}
+    assert on_demand == {"vol_malfind", "vol3_run", "vol2_run", "replay", "disk_extract",
+                         "disk_extract_file"}
     for name, ann in tools.items():
         cls = server.TOOL_CLASSES[name]
         assert cls in ("read", "journal", "action_on_demand"), name
