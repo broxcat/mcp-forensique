@@ -16,7 +16,8 @@ TREE = ROOT / "rules" / "triage_tree.yaml"
 SKILL_DIR = ROOT / "skills" / "playbook-poste-compromis"
 HOST_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 SECTIONS = {"artefacts": "interpretation_artefacts.md", "citations": "regles_citation.md",
-            "checklist": "checklist_collecte.md", "arbre": "arbre_triage.md"}
+            "checklist": "checklist_collecte.md", "arbre": "arbre_triage.md",
+            "confinement": "confinement.md"}
 MAX_DEFAULT_CHARS = 6000
 
 

@@ -93,4 +93,4 @@ def test_every_exposed_tool_has_a_test() -> None:
     sources += Path(__file__).read_text(encoding="utf-8").split("def test_every_exposed")[0]
     missing = [t for t in server.TOOL_NAMES if not re.search(rf'"{t}"', sources)]
     assert missing == [], f"tools without a test: {missing}"
-    assert len(server.TOOL_NAMES) == 41
+    assert len(server.TOOL_NAMES) == 45

@@ -52,7 +52,9 @@ TOOL_CLASSES = {
     "vol3_run": "action_on_demand", "vol2_list_plugins": "read", "vol2_imageinfo": "read",
     "vol2_run": "action_on_demand", **DISK_TOOLS, "query_results": "read",
     "list_results": "read", "replay": "action_on_demand", "record_finding": "journal",
-    "list_findings": "read", "report_export": "journal", "checklist_status": "read"}
+    "list_findings": "read", "report_export": "journal", "checklist_status": "read",
+    "crisis_add_event": "journal", "crisis_timeline": "read", "sitrep_draft": "journal",
+    "containment_suggestions": "read"}
 TOOL_NAMES = list(TOOL_CLASSES)
 ANNOTATIONS = {"read": READ, "journal": JOURNAL, "action_on_demand": ON_DEMAND}
 Result = Annotated[CallToolResult, dict[str, Any]]
@@ -280,6 +282,46 @@ def build_server(cfg: Config | None = None) -> MCPServer:
         folder under the evidence root, "" = whole root), derived from the audit journal with
         the audit IDs as proof. next_steps lists the next server steps to run."""
         return await run("checklist_status", {"case": case, "limit": limit, "offset": offset})
+
+    # ---- crisis assistant (P6, task 6.1) -----------------------------------------------------
+    @tool("crisis_add_event")
+    async def crisis_add_event(time_utc: str, kind: Literal["event", "decision", "action"],
+                               description: str, owner: str, source: str,
+                               case: str = "") -> Result:
+        """Add one entry to the crisis timeline (EF-12), journaled as C-NNNN: time_utc ISO-8601
+        WITH an offset (e.g. 2026-10-06T14:32:07Z), kind event / decision / action, owner (who),
+        source (finding F-NNNN, audit_id, result_id or a person; named IDs are checked to exist).
+        Record only what the analyst or crisis cell reports or decides; a decision recorded here
+        is not executed by anyone."""
+        return await run("crisis_add_event", {"time_utc": time_utc, "kind": kind,
+                                              "description": description, "owner": owner,
+                                              "source": source, "case": case})
+
+    @tool("crisis_timeline")
+    async def crisis_timeline(case: str = "",
+                              kind: Literal["event", "decision", "action"] | None = None,
+                              limit: int = 50, offset: int = 0) -> Result:
+        """The crisis timeline in UTC order, read from the audit journal (EF-12)."""
+        return await run("crisis_timeline", {"case": case, "kind": kind, "limit": limit,
+                                             "offset": offset})
+
+    @tool("sitrep_draft")
+    async def sitrep_draft(audience: Literal["direction", "technique", "juridique",
+                                             "communication"],
+                           case: str = "", title: str = "") -> Result:
+        """Draft situation report (EF-13, French, templates/sitrep.md): situation, impact,
+        actions, prochaines étapes, décisions attendues — written by the server from VALIDATED
+        findings and the crisis timeline only (pending findings are listed as awaiting
+        validation). A draft to be reviewed by the crisis manager before it is sent."""
+        return await run("sitrep_draft", {"audience": audience, "case": case, "title": title})
+
+    @tool("containment_suggestions")
+    async def containment_suggestions(incident_type: Literal["ransomware", "compte_compromis",
+                                                             "exfiltration"]) -> Result:
+        """Containment measures to PROPOSE for an incident type (EF-14, rules/containment.yaml):
+        each one "à valider" by the crisis cell, never executed (no tool acts on the
+        infrastructure)."""
+        return await run("containment_suggestions", {"incident_type": incident_type})
 
     @mcp.prompt(name="playbook_poste_compromis",
                 description="Playbook poste Windows compromis pour un cas donné. Sans section : "

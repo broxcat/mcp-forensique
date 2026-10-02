@@ -1,0 +1,91 @@
+# Containment suggestions by incident type (EF-14, task 6.1). Read by containment_suggestions;
+# documented in skills/playbook-poste-compromis/references/confinement.md (kept in sync by a
+# test). These are SUGGESTIONS for the crisis cell: always "à valider", never executed by the
+# assistant or the server (CDC: automatic actions on the infrastructure are out of scope).
+# French text: it is shown to the analysts and copied into the sitrep.
+common:
+  - id: preserver_preuves
+    action: "Avant toute action sur un poste, faire le dump mémoire puis la collecte (KAPE) ; ne pas éteindre ni redémarrer les postes touchés"
+    but: "Garder les traces volatiles (processus, connexions, clés) et la chaîne de preuve"
+    precautions: "Noter l'heure UTC de chaque action et son auteur dans la chronologie de crise (crisis_add_event)"
+    responsable: "Analyste forensique"
+  - id: journal_crise
+    action: "Consigner chaque décision et chaque action dans la chronologie de crise"
+    but: "Traçabilité des décisions, base du sitrep"
+    precautions: "Une entrée par fait, avec son responsable et sa source"
+    responsable: "Responsable de crise"
+incident_types:
+  ransomware:
+    label: "Rançongiciel"
+    actions:
+      - id: rw_isoler
+        action: "Isoler du réseau les postes et serveurs touchés (fonction d'isolement de l'EDR, VLAN de quarantaine ou débranchement réseau), sans les éteindre"
+        but: "Stopper la propagation et le chiffrement des partages"
+        precautions: "Dump mémoire avant tout arrêt ; prévoir l'impact sur les services hébergés"
+        responsable: "Équipe réseau / SOC"
+      - id: rw_sauvegardes
+        action: "Déconnecter et protéger les sauvegardes ; vérifier qu'elles ne sont pas chiffrées"
+        but: "Garantir une restauration possible"
+        precautions: "Ne pas restaurer avant d'avoir identifié le vecteur et la date de première compromission"
+        responsable: "Équipe infrastructure"
+      - id: rw_comptes
+        action: "Réinitialiser les comptes à privilèges utilisés par l'attaquant et désactiver les comptes inconnus"
+        but: "Couper l'accès de l'attaquant"
+        precautions: "Coordonner avec l'enquête : une réinitialisation prématurée alerte l'attaquant"
+        responsable: "Équipe annuaire / IAM"
+      - id: rw_flux
+        action: "Bloquer au pare-feu et au proxy les IOC réseau validés (adresses, domaines)"
+        but: "Couper le canal de commande"
+        precautions: "Bloquer uniquement des IOC issus de constats validés"
+        responsable: "Équipe réseau"
+      - id: rw_notifier
+        action: "Évaluer les obligations de notification (CNIL sous 72 h en cas de violation de données personnelles, ANSSI / CERT-FR, assureur) et le dépôt de plainte"
+        but: "Respecter les obligations légales et contractuelles"
+        precautions: "Décision de la direction avec le juridique et le DPO"
+        responsable: "Juridique / DPO"
+  compte_compromis:
+    label: "Compte compromis"
+    actions:
+      - id: cc_reinitialiser
+        action: "Réinitialiser le mot de passe du compte et révoquer ses sessions et jetons actifs"
+        but: "Couper l'accès en cours"
+        precautions: "Vérifier d'abord les autres comptes utilisés depuis les mêmes sources"
+        responsable: "Équipe annuaire / IAM"
+      - id: cc_mfa
+        action: "Vérifier ou imposer l'authentification multifacteur et retirer les facteurs ajoutés par l'attaquant"
+        but: "Empêcher une reconnexion"
+        precautions: "Contrôler les méthodes MFA enregistrées récemment"
+        responsable: "Équipe annuaire / IAM"
+      - id: cc_perimetre
+        action: "Lister les connexions du compte (4624, 4648, RDP) et les postes touchés pour définir le périmètre"
+        but: "Savoir où l'attaquant est allé avec ce compte"
+        precautions: "Recouper avec la chronologie ; ne pas conclure sur l'absence d'événements sans vérifier l'audit"
+        responsable: "Analyste forensique"
+      - id: cc_privileges
+        action: "Retirer temporairement les droits d'administration non indispensables du compte"
+        but: "Limiter l'impact d'une reprise de contrôle"
+        precautions: "Prévenir le métier concerné"
+        responsable: "Équipe annuaire / IAM"
+  exfiltration:
+    label: "Exfiltration de données"
+    actions:
+      - id: ex_flux
+        action: "Bloquer les destinations d'exfiltration identifiées (adresses, domaines, services de stockage) au proxy et au pare-feu"
+        but: "Arrêter la fuite"
+        precautions: "Bloquer uniquement des IOC issus de constats validés ; conserver les journaux du proxy"
+        responsable: "Équipe réseau"
+      - id: ex_isoler
+        action: "Isoler les postes sources de l'exfiltration, sans les éteindre"
+        but: "Empêcher de nouveaux envois"
+        precautions: "Dump mémoire avant tout arrêt"
+        responsable: "Équipe réseau / SOC"
+      - id: ex_perimetre
+        action: "Identifier les données concernées (archives créées, volumes envoyés, SRUM, journaux du proxy)"
+        but: "Évaluer l'impact et les obligations de notification"
+        precautions: "S'appuyer sur des constats validés"
+        responsable: "Analyste forensique"
+      - id: ex_notifier
+        action: "Évaluer les obligations de notification (CNIL sous 72 h si données personnelles, clients, partenaires) et le dépôt de plainte"
+        but: "Respecter les obligations légales et contractuelles"
+        precautions: "Décision de la direction avec le juridique et le DPO"
+        responsable: "Juridique / DPO"

@@ -64,7 +64,12 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
                  ("record_finding", {"kind": "fact", "text": "System is PID 4", "confidence": "high",
                                      "citations": [{"result_id": rid, "row": 1, "field": "PID",
                                                     "value": 4}]}),
-                 ("list_findings", {}), ("report_export", {}), ("checklist_status", {})]
+                 ("list_findings", {}), ("report_export", {}), ("checklist_status", {}),
+                 ("crisis_add_event", {"time_utc": "2026-09-29T14:00:00Z", "kind": "event",
+                                       "description": "Alerte EDR", "owner": "SOC",
+                                       "source": "SOC"}),
+                 ("crisis_timeline", {}), ("sitrep_draft", {"audience": "direction"}),
+                 ("containment_suggestions", {"incident_type": "ransomware"})]
         seen = {"vol3_run"}
         for tool, args in calls:
             r = await c.call_tool(tool, args)

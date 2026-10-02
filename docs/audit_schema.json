@@ -187,7 +187,9 @@
               "kind": {"enum": ["event", "decision", "action"]},
               "description": {"type": "string", "minLength": 1},
               "owner": {"type": "string"},
-              "source": {"description": "finding_id, audit_id or free text origin.", "type": "string"}
+              "source": {"description": "finding_id, audit_id or free text origin.", "type": "string"},
+              "crisis_id": {"type": "string", "pattern": "^C-[0-9]{4,}$"},
+              "source_ref": {"description": "IDs named in source and checked to exist (findings, audit_ids, results).", "type": "object"}
             }
           }
         }

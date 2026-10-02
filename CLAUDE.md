@@ -41,10 +41,10 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 ## 2. STATUS (update at the end of every task)
 
 ```
-Today: J5 (02/10) — 4.3a/b/c done (P3 defensive part still open, see below)
-Current task: 6.1 (crisis assistant), after 5.3 (02/10). Trials with both LLM modes are
-  human (docs/essais_skill.md). Pushed 02/10: 23b3dbf (3.1/3.2 defensive part), d84daf6
-  (disk_extract_file), b7c622b (5.2), f0bb99a (STATUS)
+Today: J6 (03/10). Current task: 6.1 DONE (03/10) — FEATURE FREEZE (M5) after this, waiting
+  for the user; next P7 (eval/score.py, L6 draft) per §9. Human: trials with both LLM modes
+  (docs/essais_skill.md), lab + attack + ground truth (L3), F-0001..F-0003 decisions.
+  Pushed: 5.3 = aa73e84.
 PENDING ANALYST ACTION: F-0001 (à valider), F-0002 and F-0003 (rejetés par le serveur) in the
   real journal await the analyst's decision (L. Plancke: reject with the reason "finding de
   test", via `docker exec -it forensic-mcp python -m forensic_mcp validate`). The agent never
@@ -113,6 +113,20 @@ Done: 5.3 (02/10, request L. Plancke) — (1) prompt playbook_poste_compromis(ca
   query_results call, on an absent column value and on an empty EVTX preset of a shared parse
   with notes copied; rejected with rows / value present / non-empty "*" / unknown result /
   other call / row != 0 / ATT&CK). Real: 41 tools, 4 resources, real journal schema-valid.
+Done: 6.1 (03/10) — crisis_ops.py: crisis_add_event (crisis_event C-NNNN; time with explicit
+  offset, converted to UTC, refused if in the future; kind event/decision/action; owner;
+  source whose F-NNNN / audit_id / result_id are checked -> source_ref; tokens restored in
+  cloud mode, outputs pseudonymised), crisis_timeline (UTC order, kind/case filter),
+  sitrep_draft(audience direction/technique/juridique/communication) = templates/sitrep.md
+  filled by the server from VALIDATED findings + crisis timeline (pending findings listed,
+  never stated; impact left to the crisis manager; technique adds sources/ATT&CK, juridique
+  the journal head hash; sitrep.md + sha256 journaled, generation_s in meta),
+  containment_suggestions(ransomware/compte_compromis/exfiltration) from rules/containment.yaml
+  (+ references/confinement.md, prompt/resource section "confinement"), each "à valider —
+  jamais exécutée". EF-15 not built (Gantt). 45 MCP tools; pytest 141 passed
+  (tests/test_crisis.py, 5). Real check on a COPY of the real journal (/output untouched):
+  default prompt 5,442 chars, sitrep 0.14 s (0 validated findings, F-0001 listed as pending),
+  containment 7 measures (ransomware).
 Done: 4.1 (30/09) — socle: new modules schemas.py, contract.py, evidence.py, redact.py, ops.py
   (Engine.call wraps every tool); audit.py rewritten (typed events, audit_id, ts_utc, flock,
   verify_report = chain + sequence + schema, head_hash); runner output bound (max_output_mb);
@@ -770,3 +784,13 @@ statements and rejects one with a wrong IP.
   the code. The full prompt (SKILL.md + 4 references) was 24.4 k characters: a small local
   model's context may truncate it. 5.3: the default prompt is SKILL.md only (5.1 k chars,
   bound 6 k tested); each reference is a section / MCP resource asked explicitly.
+- Crisis timeline (6.1): description and owner are free text typed by the LLM from what the
+  analyst says; only the IDs named in `source` (F-NNNN, audit_id, result_id) are checked to
+  exist. A crisis entry is a statement of the crisis cell, not a cross-checked finding: the
+  sitrep states only VALIDATED findings as facts and quotes crisis entries as reported, with
+  their owner. Pseudonymisation of free text covers only names declared in case.toml.
+- A clock guard caught the agent's own test data (6.1): crisis tests dated 06/10 (the
+  reference-scenario date) were refused as "in the future" on 03/10. Lab dates in fixtures can
+  collide with real-time checks; the guard stays (an LLM inventing a future time is refused).
+- Sitrep generation takes 0.14 s, but objective 4 (< 10 min) is the HUMAN delay from timeline
+  to a reviewed, compliant sitrep: server speed proves nothing about it; measure it in P7.

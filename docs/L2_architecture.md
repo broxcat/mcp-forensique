@@ -203,7 +203,7 @@ outil d'action exigerait une confirmation humaine nominative, jamais celle du LL
 | `record_finding`, `list_findings` | EF-10, EF-11 | journal | non |
 | `checklist_status(case)` | EF-08 | lecture | non |
 | `crisis_add_event`, `crisis_timeline` | EF-12 | journal / lecture | non |
-| `sitrep_draft(audience)` | EF-13 | lecture | non |
+| `sitrep_draft(audience)` | EF-13 | journal (écrit `sitrep.md`, comme `report_export`) | non |
 | `containment_suggestions(incident_type)` | EF-14 | lecture (suggestions « à valider », jamais exécutées) | non |
 | Extraction de fichiers ou de mémoire de processus (`--dump`) | — | **action** | non exposé |
 
