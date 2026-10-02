@@ -390,4 +390,4 @@ statements and rejects one with a wrong IP.
 - `llm_mode` is declared by the server config, not detected: a cloud client can connect to a
   server set to `local` and receive client-classified data (L2 §12 point 2).
 - A hash chain is tamper-evident, not tamper-proof: whoever can write `/output` can rewrite the
-  whole chain; only an off-host copy of the head hash detects it.
+  whole chain; only an off-host copy of the head hash detects it
