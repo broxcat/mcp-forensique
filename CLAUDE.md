@@ -41,7 +41,8 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 ## 2. STATUS (update at the end of every task)
 
 ```
-Today: J6 (03/10). Current task: P7 agent part DONE (03/10), waiting for the user. Feature
+Today: J6 (03/10). WARNING: container forensic-mcp currently runs the STALE parent clone
+  (see §11 "Two clones"); decision pending. Current task: P7 agent part DONE (03/10). Feature
   freeze (M5) since 6.1 (5fb5e21). Human: lab + attack + ground truth (L3), timed sessions
   classic / cloud / local (L6 protocol), trials of the skill, F-0001..F-0003 decisions.
 Done: P7 agent part (03/10) — (1) hardening b4ca110: base image digest, requirements.lock,
@@ -814,3 +815,11 @@ statements and rejects one with a wrong IP.
   docs/tool_help/vol3.txt (default path /app/.venv/bin/vol); a re-run with --vol3
   /opt/venv/bin/vol restored both byte for byte. Tool-check scripts that rewrite configuration
   must be re-run with the deployment's paths.
+- Two clones, one Compose project (03/10): the old clone C:\...\scp-forensique (stale code at
+  task 4.3a/b) contains the current repo as a sub-folder; both are Compose project
+  "scp-forensique" with container_name forensic-mcp. `docker compose up` from the parent
+  (02/10 23:43 UTC) recreated forensic-mcp on the STALE code with the parent's evidence/output:
+  an MCP analysis session (image.vmem, 72 tool_calls, 23:44-01:15 UTC) ran without
+  record_finding / validation / observations, and the parent journal diverged from the current
+  one after their 43 common lines (116 vs 96 lines). Neither journal was modified by the agent.
+  Lesson: one deployment directory per case; a stale checkout silently disables guardrails.

@@ -75,7 +75,7 @@ async def test_cli_refuses_without_a_terminal(cfg) -> None:
 async def test_cli_decisions_are_chained_and_nothing_is_deleted(cfg) -> None:
     await _three_findings(cfg)
     answers = iter(["L. Plancke", "1", "v", "valeurs recontrôlées", "o",
-                    "1", "r", "doublon de F-0001", "o", "F-0003", "v", "essai", "o",
+                    "1", "r", "doublon de F-0001", "o", "F-0003", "v",
                     "F-0003", "r", "finding de test", "o", "q"])
     said: list[str] = []
     rc = validation.run_cli(cfg, ask=lambda q: next(answers), say=said.append,
@@ -90,11 +90,39 @@ async def test_cli_decisions_are_chained_and_nothing_is_deleted(cfg) -> None:
         ("F-0001", "validated", "L. Plancke", "valeurs recontrôlées"),
         ("F-0002", "rejected", "L. Plancke", "doublon de F-0001"),
         ("F-0003", "rejected", "L. Plancke", "finding de test")]  # validating F-0003 was refused
-    assert "can only be rejected" in out
+    assert "seul [r] rejeter est possible" in out
     assert audit.verify_report(cfg.audit_file)["ok"]  # chained and schema-valid
     listing = await _call(cfg, "list_findings", {})
     assert {r["finding_id"]: r["status"] for r in listing["rows"]} == {
         "F-0001": "validé", "F-0002": "rejeté", "F-0003": "rejeté"}
+
+
+async def test_cli_server_rejected_offers_only_reject(cfg) -> None:
+    """A server-rejected finding: only [r] / [q]; no reason or confirmation is asked for an
+    impossible action. An invalid first answer recalls the expected formats."""
+    await _three_findings(cfg)
+    prompts: list[str] = []
+    answers = iter(["L. Plancke", "win-10lab", "r", "F-0003", "v", "F-0003", "q",
+                    "F-0003", "r", "finding de test", "o", "q"])
+
+    def ask(q: str) -> str:
+        prompts.append(q)
+        return next(answers)
+
+    said: list[str] = []
+    assert validation.run_cli(cfg, ask=ask, say=said.append, interactive=lambda: True) == 0
+    out = "\n".join(said)
+    expected = "Formats attendus : un numéro de la liste (1 à 2), un identifiant F-NNNN"
+    assert out.count(expected) == 2  # "win-10lab" and "r" at the first prompt
+    menus = [p for p in prompts if p.startswith("Rejeté par le serveur")]
+    assert len(menus) == 3 and all("[r] rejeter, [q] retour" in p and "[v]" not in p for p in menus)
+    assert not any(p.startswith("Décision") for p in prompts)  # no [v]/[a] menu for F-0003
+    assert sum(p.startswith("Motif") for p in prompts) == 1      # only for the real rejection
+    assert sum(p.startswith("Confirmer") for p in prompts) == 1
+    assert "seul [r] rejeter est possible" in out and "Refusé" not in out
+    ev = _events(cfg, "validation")
+    assert [(e["finding_id"], e["decision"], e["comment"]) for e in ev] == [
+        ("F-0003", "rejected", "finding de test")]
 
 
 async def test_decide_refusals_and_to_review(cfg) -> None:

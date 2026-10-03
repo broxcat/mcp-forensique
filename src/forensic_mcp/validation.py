@@ -111,7 +111,9 @@ def run_cli(cfg: Config, ask: Callable[[str], str] = input,
         elif choice.isdigit() and 1 <= int(choice) <= len(pending):
             f = pending[int(choice) - 1]
         else:
-            say("Choix invalide.")
+            say("Choix invalide. Formats attendus : "
+                + (f"un numéro de la liste (1 à {len(pending)}), " if pending else "")
+                + "un identifiant F-NNNN (ex. F-0002) ou q pour quitter.")
             continue
         say(f"\n{f['finding_id']} — {f['kind']} — confiance {f['confidence']} — {f['status']}")
         say(f"Énoncé : {f['text']}")
@@ -121,11 +123,21 @@ def run_cli(cfg: Config, ask: Callable[[str], str] = input,
             say(f"  - {c['result_id']} ligne {c['_row']} champ {c['field']} : cité "
                 f"{c['value']!r} | valeur actuelle {str(c['current'])[:120]!r} | "
                 f"contrôle {c['check']}")
-        code = ask("Décision : [v] valider, [r] rejeter, [a] à revoir, autre = annuler : ")
-        decision = DECISIONS.get(code.strip().lower())
-        if decision is None:
-            say("Annulé.")
-            continue
+        if f["status"] == STATUS_LABEL["rejected_by_server"]:
+            # validating or re-opening is impossible (decide() refuses it): offer only what works
+            code = ask("Rejeté par le serveur : seul le rejet (avec motif) est possible. "
+                       "[r] rejeter, [q] retour : ").strip().lower()
+            if code != "r":
+                say("Retour à la liste (seul [r] rejeter est possible pour ce constat)."
+                    if code not in ("q", "") else "Retour à la liste.")
+                continue
+            decision = DECISIONS["r"]
+        else:
+            code = ask("Décision : [v] valider, [r] rejeter, [a] à revoir, autre = annuler : ")
+            decision = DECISIONS.get(code.strip().lower())
+            if decision is None:
+                say("Annulé.")
+                continue
         reason = ask("Motif : ")
         label = STATUS_LABEL[decision]
         if ask(f"Confirmer « {label} » pour {f['finding_id']} par {analyst} ? (o/n) "
