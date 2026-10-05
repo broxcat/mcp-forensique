@@ -1,10 +1,12 @@
 """Crisis assistant (P6, task 6.1): crisis timeline (EF-12), sitrep draft (EF-13), containment
-suggestions (EF-14). The stakeholder board (EF-15, C) is not built (Gantt: dropped).
+suggestions (EF-14); the stakeholder board (EF-15) is in stakeholder_ops (task 6.2) and feeds
+the crisis timeline (kind "communication") and the sitrep's section 6.
 
 - crisis_add_event journals a `crisis_event` (C-NNNN): UTC time with an explicit offset, kind
   event / decision / action, owner, source. A source that names a finding, an audit_id or a
   result is checked to exist (source_ref); anything else is kept as free text.
-- crisis_timeline lists the events in UTC order (journal = single source of truth).
+- crisis_timeline lists the events, the stakeholder status changes and the logged
+  communications in UTC order (journal = single source of truth).
 - sitrep_draft fills templates/sitrep.md from VALIDATED findings and the crisis timeline only;
   the server writes it (deterministic), a person reviews it before it is sent.
 - containment_suggestions returns rules/containment.yaml for one incident type: suggestions,
@@ -30,9 +32,12 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTAINMENT = ROOT / "rules" / "containment.yaml"
 TEMPLATE = ROOT / "templates" / "sitrep.md"
 KINDS = ("event", "decision", "action")
-KIND_LABEL = {"event": "Événement", "decision": "Décision", "action": "Action"}
+TIMELINE_KINDS = (*KINDS, "communication")  # communication = stakeholder board (EF-15)
+KIND_LABEL = {"event": "Événement", "decision": "Décision", "action": "Action",
+              "communication": "Communication"}
 AUDIENCES = ("direction", "technique", "juridique", "communication")
-SECTIONS = ("situation", "impact", "actions", "prochaines_etapes", "decisions_attendues")
+SECTIONS = ("situation", "impact", "actions", "prochaines_etapes", "decisions_attendues",
+            "communications")
 EXPLICIT_TZ = re.compile(r"(Z|[+-]\d{2}:?\d{2})$")
 FINDING_RE = re.compile(r"\bF-\d{4,}\b")
 AUDIT_RE = re.compile(r"\baudit(?:_id)?[ :#=]*(\d+)\b", re.I)
@@ -127,12 +132,16 @@ class CrisisOps:
     async def op_crisis_timeline(self, params: dict[str, Any], conf: Any = None) -> Any:
         case, ps = self._crisis_policy(params.get("case"))
         kind = params.get("kind")
-        if kind is not None and kind not in KINDS:
-            raise ValueError(f"kind must be one of {KINDS}")
+        if kind is not None and kind not in TIMELINE_KINDS:
+            raise ValueError(f"kind must be one of {TIMELINE_KINDS}")
         items = [{"crisis_id": e.get("crisis_id"), "time_utc": e["time_utc"], "kind": e["kind"],
                   "description": e["description"], "owner": e["owner"], "source": e["source"],
                   "case": e.get("case"), "recorded_utc": e["ts_utc"], "audit_id": e["audit_id"]}
-                 for e in self.crisis_events(case or None) if kind in (None, e["kind"])]
+                 for e in self.crisis_events(case or None)]
+        items += self.stakeholder_timeline(case or None)
+        items = sorted((i for i in items if kind in (None, i["kind"])),
+                       key=lambda i: (to_utc(i["time_utc"]), i["audit_id"]))
+        self._learn_people(ps, case)
         span = f" du {items[0]['time_utc']} au {items[-1]['time_utc']}" if items else ""
         out = self._listing("crisis_timeline", params, items,
                             f"{len(items)} entrées de chronologie de crise{span}")
@@ -210,12 +219,14 @@ class CrisisOps:
         events = self.crisis_events(case or None)
         findings = load_findings(self.cfg.audit_file)
         sec = self._sitrep_sections(audience, events, findings)
+        sec["communications"] = self.communications_section(audience, case or None)
+        n_sh = len(self.stakeholder_board(case or None))
         head = audit.verify_report(self.cfg.audit_file)
         n_val = sum(1 for f in findings if f["status"] == STATUS_LABEL["validated"])
-        sources = (f"{len(events)} entrées de chronologie de crise, {n_val} constats validés ; "
-                   f"journal d'audit {head['lines']} lignes")
+        sources = (f"{len(events)} entrées de chronologie de crise, {n_val} constats validés, "
+                   f"{n_sh} parties prenantes au tableau ; journal d'audit {head['lines']} lignes")
         pied = ("Rédigé automatiquement à partir des seuls constats validés et de la chronologie "
-                "de crise ; aucune mesure n'a été exécutée par l'assistant.")
+                "de crise ; aucune mesure n'a été exécutée et aucun message envoyé par l'assistant.")
         if audience == "juridique":
             pied += (f" Chaîne de preuve : hash de tête du journal `{head['head_hash']}`, "
                      f"chaîne vérifiée : {'oui' if head['ok'] else 'NON'}.")
@@ -237,7 +248,8 @@ class CrisisOps:
                            sitrep_sha256=results.sha256_file(d / "sitrep.md"),
                            generation_s=elapsed, exit_code=0)
         out = self._listing("sitrep_draft", params, items,
-                            f"Brouillon de sitrep ({audience}) : 5 sections, {len(events)} "
+                            f"Brouillon de sitrep ({audience}) : {len(SECTIONS)} sections, "
+                            f"{len(events)} "
                             f"entrées de crise, {n_val} constats validés, généré en {elapsed} s")
         out.result_id = out.payload["result_id"] = rid
         out.payload["raw_output"] = {"container": f"/output/{rid}/",
@@ -245,6 +257,7 @@ class CrisisOps:
         out.payload["notes"] = [f"sitrep: /output/{rid}/sitrep.md",
                                 "BROUILLON : à relire et compléter (impact, décisions) par le "
                                 "responsable de crise avant diffusion."]
+        self._learn_people(ps, case)
         out.pseudo = ps
         out.audit_extra = {"sitrep_sha256": results.sha256_file(d / "sitrep.md"),
                            "head_hash": head["head_hash"]}

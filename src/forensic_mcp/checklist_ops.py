@@ -11,6 +11,7 @@ import yaml
 
 from . import audit, results, safety
 from .findings_ops import BLOCKING, STATUS_LABEL, load_findings
+from .stakeholder_ops import OPEN
 
 CHECKLIST = Path(__file__).resolve().parents[2] / "rules" / "checklist.yaml"
 
@@ -80,6 +81,12 @@ class ChecklistOps:
                 done, proof = (case_dir / "case.toml").is_file(), "case.toml"
             elif t == "findings":
                 done, proof = bool(mine), ", ".join(f["finding_id"] for f in mine[:5])
+            elif t == "stakeholders":  # EF-15: board of the case, from the journal
+                board = self.stakeholder_board(case or None).values()
+                open_ = [s["stakeholder_id"] for s in board if s["status"] in OPEN]
+                done = bool(board) and not open_
+                proof = ("à prévenir / à revoir : " + ", ".join(open_[:5])) if open_ else ", ".join(
+                    f"{s['stakeholder_id']} (audit_id {s['last_audit_id']})" for s in list(board)[:5])
             elif t == "decided":
                 pending = [f["finding_id"] for f in mine if f["status"] in BLOCKING]
                 done = bool(mine) and not pending

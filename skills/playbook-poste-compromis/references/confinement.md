@@ -17,6 +17,11 @@ Règles : une entrée de chronologie cite sa source (constat `F-NNNN`, `audit_id
 le sitrep ne reprend que les constats validés par un analyste ; une suggestion de confinement
 n'est jamais présentée comme faite.
 
+Qui prévenir (direction, DPO, juridique, assureur, autorité…) : voir
+[coordination des parties prenantes](coordination.md) et l'outil `stakeholder_suggest(case,
+incident_type)` ; le tableau (`stakeholder_upsert`, `comms_log`) alimente la section 6 du sitrep.
+Le serveur n'envoie aucun message.
+
 ## Mesures communes
 
 | Identifiant | Mesure | Responsable |

@@ -69,3 +69,4 @@ collecte, politique d'audit désactivée).
 | Constats enregistrés avec citations | `findings` | `record_finding` |
 | Constats validés ou rejetés par un analyste nommé | `validation` | humaine, hors MCP : `python -m forensic_mcp validate` |
 | Rapport final exporté, hash de tête du journal conservé hors du poste | `report` | `report_export(final=true)` |
+| Parties prenantes identifiées et prévenues (aucune « à prévenir » ni « à revoir ») | `stakeholders` | humaine ; tableau `stakeholder_list`, voir [coordination](coordination.md) |

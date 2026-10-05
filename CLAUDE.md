@@ -41,10 +41,33 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 ## 2. STATUS (update at the end of every task)
 
 ```
-Today: J6 (03/10). WARNING: container forensic-mcp currently runs the STALE parent clone
-  (see §11 "Two clones"); decision pending. Current task: P7 agent part DONE (03/10). Feature
-  freeze (M5) since 6.1 (5fb5e21). Human: lab + attack + ground truth (L3), timed sessions
+Today: J6 (05/10). WARNING: container forensic-mcp STILL runs the STALE parent clone (seen
+  05/10: mounts C:\...\scp-forensique, recreated ~6 min before the 6.2 session; see §11 "Two
+  clones"); decision pending. 6.2 was tested in a one-off container from THIS repo
+  (`docker compose run -d --rm --no-deps --name forensic-task62 forensic sleep infinity`).
+  Current task: 6.2 DONE (05/10). Feature freeze (M5) since 6.1 (5fb5e21); 6.2 added after it
+  on explicit request (L. Plancke). Human: lab + attack + ground truth (L3), timed sessions
   classic / cloud / local (L6 protocol), trials of the skill, F-0001..F-0003 decisions.
+Done: 6.2 (05/10, request L. Plancke; EF-15, cited by the majeure's subject) — stakeholder
+  coordination, the server never sends anything. stakeholder_ops.py: stakeholder_upsert
+  (S-NNNN; role from the closed list of rules/stakeholders.yaml (13), status a_prevenir /
+  prevenu / accuse_reception / sans_objet / a_revoir, channel enum, name/organisation/owner
+  <= 120, note <= 500, notify_by_utc with explicit offset -> UTC, never in the future with
+  prevenu/accuse_reception, source checked like crisis_add_event; event `stakeholder_update`
+  holding only the given fields, board folded from the journal), stakeholder_list (open first,
+  en_retard computed, created/last audit_id), stakeholder_suggest (common + per type ransomware /
+  compte_compromis / exfiltration / autre, order, indicative delay, rule id, "à valider",
+  writes nothing; legal/contractual delays "à confirmer par le juridique"; personal data: "à
+  évaluer par le DPO / le juridique"), comms_log (`comms_logged`, already made, never changes
+  the status; next_steps proposes stakeholder_upsert prevenu). redact: PERSON_n / CONTACT_n
+  (Pseudonymizer.people). Sitrep section 6 "Communications" (confirmed vs "à prévenir / en
+  attente", detail by audience), crisis_timeline kind "communication", checklist step
+  `stakeholders` (22 steps), references/coordination.md + prompt/resource section
+  `coordination`. 49 MCP tools; pytest 160 passed (tests/test_stakeholders.py 8, README table
+  test). Real: /health 200 + /mcp 401 on the 6.2 code (one-off container); COPY of the real
+  journal (96 lines, verify ok): 5 fictitious stakeholders + 2 comms + 2 sitreps (0.07 s) +
+  timeline (7 communication entries) -> copy verify ok 116 lines; real journal SHA-256
+  unchanged.
 Done: P7 agent part (03/10) — (1) hardening b4ca110: base image digest, requirements.lock,
   .NET 9.0.20, SHA-256 of every download (rules/ez_zips.sha256, TOFU), Open WebUI by digest,
   .dockerignore .env, templates/analysis-workspace (no Bash/PowerShell/Edit/Write, no direct
@@ -427,6 +450,7 @@ and validate every tool response against it in tests.
 | `validation` | analyst, nominative | finding id, validated/rejected, analyst name, comment |
 | `action_request` / `action_confirmed` | server + analyst | any action tool (none by default) |
 | `crisis_event` | crisis tools | time, type (event/decision/action), description, owner, source |
+| `stakeholder_update` / `comms_logged` | stakeholder tools (6.2) | S-NNNN, role, status, given fields only / communication already made (direction, summary, at_utc) |
 
 `replay(audit_id)` re-runs a `tool_call` with the same params and compares the output sha256
 ("rejouable"). `verify_audit()` checks the chain. Reports cite audit ids.
@@ -456,7 +480,7 @@ and validate every tool response against it in tests.
 | EF-04 paginated + raw link | M | 4.1 + 4.4 | EF-12 crisis timeline | M | 6.1 |
 | EF-05 SHA-256 journaled | M | 4.1 | EF-13 sitrep fixed format | S | 6.1 |
 | EF-06 read-only | M | done (verify 4.1) | EF-14 containment suggestions | S | 6.1 |
-| EF-07 lab SIEM query | C | only if time after M5 | EF-15 stakeholder board | C | 6.1 if time |
+| EF-07 lab SIEM query | C | only if time after M5 | EF-15 stakeholder board | C | 6.2 (done 05/10, on request) |
 | EF-08 collection checklist | M | 5.1 | ET-01…ET-09 | — | see §4, 4.x, 5.x, 7.x |
 | EXT-01 vol2 + all vol3 plugins (Décision J3) | M (user) | 4.2 | EXT-02 17 EZ tools + disk image (Décision J3) | M (user) | 4.3a/b/c |
 | GF-VAL out-of-band validation of findings + `report_export` (CDC §5 human validation, over-confidence, traceability) | M (user, 02/10) | after 4.4 | | | |
@@ -555,6 +579,12 @@ prompts so the local-model client can use it.
   `references/confinement.md` (ransomware, compte compromis, exfiltration), always
   "à valider", never executed (EF-14); stakeholder board DSI / juridique / communication /
   direction only if time (EF-15, C). No new feature after J13.
+- **6.2 Coordination des parties prenantes (EF-15, done 05/10 on explicit request after M5):**
+  `stakeholder_upsert`, `stakeholder_list`, `stakeholder_suggest(incident_type)`, `comms_log`
+  (stakeholder_ops.py, rules/stakeholders.yaml, references/coordination.md); journal events
+  `stakeholder_update` / `comms_logged`; sitrep section 6, crisis timeline kind
+  "communication", checklist step `stakeholders`. The server proposes and records; it never
+  sends a message; legal delays are never stated ("à confirmer par le juridique").
 
 ### P7 — Évaluation comparative (J14–J15, 15–16/10) · L6 rapport d'évaluation
 Human runs the classic then the assisted investigation (CDC §6 protocol). Agent writes
@@ -823,3 +853,20 @@ statements and rejects one with a wrong IP.
   record_finding / validation / observations, and the parent journal diverged from the current
   one after their 43 common lines (116 vs 96 lines). Neither journal was modified by the agent.
   Lesson: one deployment directory per case; a stale checkout silently disables guardrails.
+- Stakeholder coordination (6.2): the risk is a message sent, or a decision taken, in place of
+  a person. Mitigation: no coordination tool can send anything (no process, network or mail
+  import in stakeholder_ops, open_world_hint false, argv empty — tested); stakeholder_suggest
+  writes nothing and every row is "à valider"; comms_log records a communication already made
+  and never changes the status (it only proposes stakeholder_upsert prevenu). Limits: names,
+  notes and summaries are free text relayed by the LLM, not verified; "prévenu" is a
+  declaration; the repository's contacts are fictitious; no legal delay is stated as certain
+  ("à confirmer par le juridique", personal-data notification "à évaluer par le DPO / le
+  juridique"): the server gives no legal advice.
+- Contact pseudonymisation (6.2) is narrow: board names -> PERSON_n, e-mail addresses and
+  FRENCH-format phone numbers found in notes / summaries -> CONTACT_n; other phone formats and
+  the organisation field are not pseudonymised. A first phone pattern allowing '-' matched
+  result ids (20261005-143207) and would have tokenised them: separators restricted to space/dot.
+- S-NNNN (like C-NNNN) is counted then appended outside the journal lock: two server
+  processes creating an entry at the same instant could reuse a number (not observed).
+  Status changes are dated at recording time (ts_utc) in the crisis timeline, except a
+  "prévenu" entry that gives the notification time.

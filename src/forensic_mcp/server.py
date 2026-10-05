@@ -54,10 +54,16 @@ TOOL_CLASSES = {
     "list_results": "read", "replay": "action_on_demand", "record_finding": "journal",
     "list_findings": "read", "report_export": "journal", "checklist_status": "read",
     "crisis_add_event": "journal", "crisis_timeline": "read", "sitrep_draft": "journal",
-    "containment_suggestions": "read"}
+    "containment_suggestions": "read", "stakeholder_upsert": "journal",
+    "stakeholder_list": "read", "stakeholder_suggest": "read", "comms_log": "journal"}
 TOOL_NAMES = list(TOOL_CLASSES)
 ANNOTATIONS = {"read": READ, "journal": JOURNAL, "action_on_demand": ON_DEMAND}
 Result = Annotated[CallToolResult, dict[str, Any]]
+Role = Literal["direction", "rssi", "dsi", "dpo", "juridique", "communication", "rh",
+               "assurance_cyber", "prestataire_it", "autorite_protection_donnees", "client",
+               "fournisseur", "autre"]
+StakeholderStatus = Literal["a_prevenir", "prevenu", "accuse_reception", "sans_objet",
+                            "a_revoir"]
 
 
 class Citation(BaseModel):
@@ -299,9 +305,11 @@ def build_server(cfg: Config | None = None) -> MCPServer:
 
     @tool("crisis_timeline")
     async def crisis_timeline(case: str = "",
-                              kind: Literal["event", "decision", "action"] | None = None,
+                              kind: Literal["event", "decision", "action",
+                                            "communication"] | None = None,
                               limit: int = 50, offset: int = 0) -> Result:
-        """The crisis timeline in UTC order, read from the audit journal (EF-12)."""
+        """The crisis timeline in UTC order, read from the audit journal (EF-12), with the
+        stakeholder status changes and logged communications (kind "communication", EF-15)."""
         return await run("crisis_timeline", {"case": case, "kind": kind, "limit": limit,
                                              "offset": offset})
 
@@ -310,9 +318,9 @@ def build_server(cfg: Config | None = None) -> MCPServer:
                                              "communication"],
                            case: str = "", title: str = "") -> Result:
         """Draft situation report (EF-13, French, templates/sitrep.md): situation, impact,
-        actions, prochaines étapes, décisions attendues — written by the server from VALIDATED
-        findings and the crisis timeline only (pending findings are listed as awaiting
-        validation). A draft to be reviewed by the crisis manager before it is sent."""
+        actions, prochaines étapes, décisions attendues, communications — written by the server
+        from VALIDATED findings, the crisis timeline and the stakeholder board only (pending
+        findings and stakeholders not yet told are listed as such, never stated as done). A draft to be reviewed by the crisis manager before it is sent."""
         return await run("sitrep_draft", {"audience": audience, "case": case, "title": title})
 
     @tool("containment_suggestions")
@@ -323,9 +331,59 @@ def build_server(cfg: Config | None = None) -> MCPServer:
         infrastructure)."""
         return await run("containment_suggestions", {"incident_type": incident_type})
 
+    # ---- stakeholder coordination (EF-15, task 6.2): the server never sends anything --------
+    @tool("stakeholder_upsert")
+    async def stakeholder_upsert(
+            case: str, role: Role, name: str | None = None, organisation: str | None = None,
+            channel: Literal["telephone", "courriel", "reunion", "ticket", "autre"] | None = None,
+            owner: str | None = None, notify_by_utc: str | None = None,
+            status: StakeholderStatus | None = None, note: str | None = None,
+            source: str | None = None, stakeholder_id: str | None = None) -> Result:
+        """Add or update one entry S-NNNN of the stakeholder board (EF-15): who must be told
+        (role from a closed list, name), by whom (owner), by when (notify_by_utc, ISO-8601 WITH
+        an offset; with status prevenu / accuse_reception it is the time the person was told and
+        cannot be in the future), channel, status (default a_prevenir at creation, unchanged on
+        update). Update: give stakeholder_id, or the same case + role + name. Each call appends
+        a journal event, nothing is rewritten. Record only what the crisis cell decided or did:
+        this tool sends NOTHING to anyone."""
+        return await run("stakeholder_upsert", {
+            "case": case, "role": role, "name": name, "organisation": organisation,
+            "channel": channel, "owner": owner, "notify_by_utc": notify_by_utc,
+            "status": status, "note": note, "source": source, "stakeholder_id": stakeholder_id})
+
+    @tool("stakeholder_list")
+    async def stakeholder_list(case: str = "", status: StakeholderStatus | None = None,
+                               role: Role | None = None, limit: int = 50,
+                               offset: int = 0) -> Result:
+        """Current stakeholder board rebuilt from the audit journal (EF-15): open entries first,
+        en_retard computed by the server, each row citing its journal events (audit_id)."""
+        return await run("stakeholder_list", {"case": case, "status": status, "role": role,
+                                              "limit": limit, "offset": offset})
+
+    @tool("stakeholder_suggest")
+    async def stakeholder_suggest(case: str, incident_type: Literal[
+            "ransomware", "compte_compromis", "exfiltration", "autre"]) -> Result:
+        """Stakeholders to PROPOSE for an incident type (rules/stakeholders.yaml): order,
+        indicative delay, reason and rule id, each "à valider"; writes nothing to the board and
+        sends nothing. Legal or contractual delays: "à confirmer par le juridique"."""
+        return await run("stakeholder_suggest", {"case": case, "incident_type": incident_type})
+
+    @tool("comms_log")
+    async def comms_log(case: str, stakeholder_id: str,
+                        direction: Literal["sortante", "entrante"], summary: str, at_utc: str,
+                        source: str | None = None) -> Result:
+        """Record a communication ALREADY made by a person with a board entry (direction
+        sortante / entrante; at_utc ISO-8601 WITH an offset, not in the future). Journaled and
+        shown in the crisis timeline; the status is NOT changed (stakeholder_upsert does it).
+        This tool sends nothing."""
+        return await run("comms_log", {"case": case, "stakeholder_id": stakeholder_id,
+                                       "direction": direction, "summary": summary,
+                                       "at_utc": at_utc, "source": source})
+
     @mcp.prompt(name="playbook_poste_compromis",
                 description="Playbook poste Windows compromis pour un cas donné. Sans section : "
-                            "SKILL.md seul. section = artefacts, citations, checklist ou arbre.")
+                            "SKILL.md seul. section = artefacts, citations, checklist, arbre, "
+                            "confinement ou coordination.")
     def playbook_poste_compromis(case: str, section: str | None = None) -> str:
         """SKILL.md, or one reference, for clients without skills (local model, ET-06/ET-07)."""
         return playbook.render(case, section)

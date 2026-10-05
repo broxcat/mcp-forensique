@@ -63,6 +63,8 @@ Après chaque étape, rappeler à l'analyste ce qui reste dans `checklist_status
 **Crise** ([confinement](references/confinement.md)) : consigner événements, décisions et
 actions avec `crisis_add_event` (heure UTC, responsable, source) ; `sitrep_draft(audience)`
 ne reprend que les constats validés ; `containment_suggestions` propose, ne fait jamais.
+Parties prenantes ([coordination](references/coordination.md)) : `stakeholder_suggest` propose,
+`stakeholder_upsert` / `comms_log` consignent ce qui a été décidé et fait ; rien n'est envoyé.
 
 ## Règles de citation (résumé)
 
@@ -90,3 +92,4 @@ qualifier une ligne de suspecte, consulter l'[interprétation des artefacts](ref
 - [Interprétation des artefacts](references/interpretation_artefacts.md) — normal ou suspect, pièges
 - [Règles de citation](references/regles_citation.md) — EF-10, EF-11
 - [Confinement et crise](references/confinement.md) — EF-12, EF-13, EF-14
+- [Coordination des parties prenantes](references/coordination.md) — EF-15

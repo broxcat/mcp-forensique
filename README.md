@@ -76,7 +76,7 @@ claude mcp add --transport http forensic http://localhost:8000/mcp --header "Aut
 `http://localhost:3000`, serveur MCP à déclarer avec l'URL interne `http://forensic:8000/mcp` et
 le même jeton.
 
-## 4. Outils exposés (45), prompt et ressources MCP
+## 4. Outils exposés (49), prompt et ressources MCP
 
 | Domaine | Outils |
 |---|---|
@@ -89,10 +89,21 @@ le même jeton.
 | Constats et rapport | `record_finding`, `list_findings`, `report_export` |
 | Playbook (skill) | `checklist_status(case)` : étapes de la checklist faites / à faire pour un hôte, déduites du journal d'audit |
 | Assistant de crise | `crisis_add_event`, `crisis_timeline` (chronologie de crise journalisée), `sitrep_draft(audience)` (brouillon de point de situation à partir des constats validés), `containment_suggestions(incident_type)` (mesures proposées, jamais exécutées) |
+| Coordination des parties prenantes | `stakeholder_suggest(case, incident_type)` (qui prévenir, ordre, délai indicatif, « à valider », rien n'est écrit), `stakeholder_upsert` (entrée `S-NNNN` du tableau : rôle, nom, canal, responsable, échéance, statut), `stakeholder_list` (tableau courant recalculé depuis le journal, retards), `comms_log` (consigne une communication déjà faite) |
+
+**Le serveur n'envoie rien** : aucun outil n'envoie de message, de courriel ni n'appelle qui
+que ce soit. Le tableau de coordination consigne ce que la cellule de crise a décidé et fait ;
+une communication sortante consignée ne change pas le statut (une personne le passe à
+`prevenu`). Les délais légaux ou contractuels sont toujours « à confirmer par le juridique » ;
+en mode cloud, noms, numéros et adresses saisis sont remplacés par `PERSON_n` / `CONTACT_n`.
+Exemple : `stakeholder_suggest(case="WS-042", incident_type="ransomware")`, puis
+`stakeholder_upsert(case="WS-042", role="dpo", owner="RSSI", notify_by_utc="2026-10-06T16:00:00+02:00")`,
+puis, une fois la personne jointe, `comms_log(...)` et `stakeholder_upsert(stakeholder_id="S-0001", role="dpo", case="WS-042", status="prevenu")`.
+Le tableau alimente la section 6 du sitrep et la chronologie de crise.
 
 La skill « playbook poste compromis » est dans `skills/playbook-poste-compromis/` (Claude Code :
 copier ou lier ce dossier dans `.claude/skills/`). Pour les clients sans skills (Open WebUI,
-modèle local), le même contenu est exposé comme prompt MCP `playbook_poste_compromis(case, section)` (SKILL.md seul par défaut ; sections `artefacts`, `citations`, `checklist`, `arbre`, `confinement`, aussi en ressources `playbook://references/<section>`).
+modèle local), le même contenu est exposé comme prompt MCP `playbook_poste_compromis(case, section)` (SKILL.md seul par défaut ; sections `artefacts`, `citations`, `checklist`, `arbre`, `confinement`, `coordination`, aussi en ressources `playbook://references/<section>`).
 
 Chaque réponse suit le même contrat ([`docs/output_schema.json`](docs/output_schema.json)) :
 `result_id`, `audit_id`, empreinte de la preuve, lignes numérotées `_row`, page suivante

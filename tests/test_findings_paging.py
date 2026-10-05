@@ -93,4 +93,15 @@ def test_every_exposed_tool_has_a_test() -> None:
     sources += Path(__file__).read_text(encoding="utf-8").split("def test_every_exposed")[0]
     missing = [t for t in server.TOOL_NAMES if not re.search(rf'"{t}"', sources)]
     assert missing == [], f"tools without a test: {missing}"
-    assert len(server.TOOL_NAMES) == 45
+    assert len(server.TOOL_NAMES) == 49
+
+
+def test_readme_tool_table_matches_the_server() -> None:
+    """README §4 lists exactly the exposed tools, with the right count in its heading."""
+    readme = (TESTS.parent / "README.md").read_text(encoding="utf-8")
+    m = re.search(r"^## 4\. Outils exposés \((\d+)\)(.*?)^## ", readme, re.M | re.S)
+    assert m, "README §4 heading not found"
+    table = [ln for ln in m.group(2).splitlines() if ln.startswith("| ")]
+    named = {t for ln in table for t in re.findall(r"`([a-z0-9_]+)(?:`|\()", ln)}
+    assert named == set(server.TOOL_NAMES), (named ^ set(server.TOOL_NAMES))
+    assert int(m.group(1)) == len(server.TOOL_NAMES)

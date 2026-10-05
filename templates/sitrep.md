@@ -24,6 +24,10 @@
 
 {{decisions_attendues}}
 
+## 6. Communications avec les parties prenantes
+
+{{communications}}
+
 ---
 
 {{pied}}

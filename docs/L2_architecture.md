@@ -205,6 +205,8 @@ outil d'action exigerait une confirmation humaine nominative, jamais celle du LL
 | `crisis_add_event`, `crisis_timeline` | EF-12 | journal / lecture | non |
 | `sitrep_draft(audience)` | EF-13 | journal (écrit `sitrep.md`, comme `report_export`) | non |
 | `containment_suggestions(incident_type)` | EF-14 | lecture (suggestions « à valider », jamais exécutées) | non |
+| `stakeholder_upsert`, `comms_log` | EF-15 | journal (consigne ce qu'une personne a décidé ou fait ; n'envoie rien) | non |
+| `stakeholder_list`, `stakeholder_suggest(incident_type)` | EF-15 | lecture (suggestions « à valider ») | `stakeholder_list` oui |
 | Extraction de fichiers ou de mémoire de processus (`--dump`) | — | **action** | non exposé |
 
 La validation d'un finding par l'analyste n'est **pas** un outil MCP : le LLM ne doit pas pouvoir
@@ -382,7 +384,7 @@ d'attaque augmente (Volatility 2 n'est plus maintenu, plus d'analyseurs de forma
 | 4.3c Extraction depuis une image disque (modification du Dockerfile, accord préalable) | — | J11 (12/10) |
 | 4.4 Pagination, `record_finding`, test de référence, README — **M4** | J10 | J11–J12 (M4 au 13/10) |
 | P5 Skill playbook | J11–J12 | J13 |
-| P6 Assistant de crise — **M5** gel des fonctionnalités | J13 | J14 (EF-15, priorité C, abandonné) |
+| P6 Assistant de crise — **M5** gel des fonctionnalités | J13 | J14 (EF-15, priorité C : abandonné au Gantt, puis réalisé en 6.2 le 05/10 à la demande de L. Plancke) |
 | P7 Évaluation / P8 L7 | J14–J15 / J16 | J15–J16, L7 rédigé en parallèle |
 | P9 Démonstration | J17–J18 | inchangé |
 

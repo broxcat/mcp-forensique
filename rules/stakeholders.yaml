@@ -1,0 +1,73 @@
+# Stakeholder coordination (EF-15, task 6.2). Read by stakeholder_upsert (closed list of roles)
+# and stakeholder_suggest (who to contact per incident type, order, indicative delay); documented
+# in skills/playbook-poste-compromis/references/coordination.md (kept in sync by a test).
+# SUGGESTIONS for the crisis cell: always "à valider"; the server never sends anything.
+# No real name, number or address in this file. No legal deadline is stated as certain: every
+# legal, regulatory or contractual delay is "à confirmer par le juridique". This is not legal
+# advice. French text: it is shown to the analysts and the crisis cell.
+legal_delay: "à confirmer par le juridique"
+roles:
+  direction: "Direction générale"
+  rssi: "RSSI"
+  dsi: "DSI"
+  dpo: "DPO (délégué à la protection des données)"
+  juridique: "Service juridique"
+  communication: "Communication"
+  rh: "Ressources humaines"
+  assurance_cyber: "Assureur cyber"
+  prestataire_it: "Prestataire IT / infogérant"
+  autorite_protection_donnees: "Autorité de protection des données"
+  client: "Client(s) concerné(s)"
+  fournisseur: "Fournisseur concerné"
+  autre: "Autre partie prenante"
+# legal: true -> the delay shown is always legal_delay, never a number.
+common:
+  - {id: sh_rssi, role: rssi, ordre: 1, delai: "immédiat (indicatif)",
+     motif: "Pilotage de la réponse à incident et de la cellule de crise"}
+  - {id: sh_dsi, role: dsi, ordre: 1, delai: "immédiat (indicatif)",
+     motif: "Décisions sur le système d'information (confinement, continuité)"}
+  - {id: sh_direction, role: direction, ordre: 2, delai: "dans l'heure qui suit la qualification (indicatif, selon le plan de crise)",
+     motif: "Arbitrages et décisions de la cellule de crise"}
+  - {id: sh_juridique, role: juridique, ordre: 2, delai: "dès la qualification (indicatif)",
+     motif: "Évaluer les obligations de notification (autorités, assureur, clients, contrats) et le dépôt de plainte"}
+  - {id: sh_dpo, role: dpo, ordre: 2, delai: "dès que des données personnelles peuvent être concernées (indicatif)",
+     motif: "Évaluer si des données personnelles sont concernées et s'il s'agit d'une violation de données"}
+incident_types:
+  ransomware:
+    label: "Rançongiciel"
+    contacts:
+      - {id: rw_prestataire, role: prestataire_it, ordre: 1, delai: "immédiat (indicatif)",
+         motif: "Appui au confinement et à la restauration, si l'infrastructure est infogérée"}
+      - {id: rw_assurance, role: assurance_cyber, ordre: 3, legal: true,
+         motif: "Déclaration de sinistre selon le contrat (délai contractuel à vérifier)"}
+      - {id: rw_autorite, role: autorite_protection_donnees, ordre: 3, legal: true,
+         motif: "Si des données personnelles sont concernées : l'obligation de notifier l'autorité de protection des données est à évaluer par le DPO / le juridique"}
+      - {id: rw_communication, role: communication, ordre: 3, delai: "avant toute prise de parole externe (indicatif)",
+         motif: "Préparer les messages internes et externes validés par la direction"}
+  compte_compromis:
+    label: "Compte compromis"
+    contacts:
+      - {id: cc_prestataire, role: prestataire_it, ordre: 1, delai: "immédiat (indicatif)",
+         motif: "Réinitialisation et révocation des sessions si l'annuaire ou la messagerie sont infogérés"}
+      - {id: cc_rh, role: rh, ordre: 3, delai: "selon la décision de la direction (indicatif)",
+         motif: "Si le compte est celui d'un salarié : information et accompagnement"}
+      - {id: cc_fournisseur, role: fournisseur, ordre: 3, delai: "selon les contrats (à vérifier)",
+         motif: "Si un service externe (SaaS) est concerné : révocation côté fournisseur"}
+      - {id: cc_autorite, role: autorite_protection_donnees, ordre: 4, legal: true,
+         motif: "Si des données personnelles ont été consultées : l'obligation de notifier l'autorité de protection des données est à évaluer par le DPO / le juridique"}
+  exfiltration:
+    label: "Exfiltration de données"
+    contacts:
+      - {id: ex_autorite, role: autorite_protection_donnees, ordre: 3, legal: true,
+         motif: "Si des données personnelles sont concernées : l'obligation de notifier l'autorité de protection des données est à évaluer par le DPO / le juridique"}
+      - {id: ex_client, role: client, ordre: 3, legal: true,
+         motif: "Si des données de clients sont concernées : information selon les contrats et la décision de la direction"}
+      - {id: ex_assurance, role: assurance_cyber, ordre: 3, legal: true,
+         motif: "Déclaration de sinistre selon le contrat (délai contractuel à vérifier)"}
+      - {id: ex_communication, role: communication, ordre: 4, delai: "avant toute prise de parole externe (indicatif)",
+         motif: "Préparer les messages, en cas de publication des données"}
+  autre:
+    label: "Autre incident"
+    contacts:
+      - {id: au_autre, role: autre, ordre: 3, delai: "à définir par la cellule de crise",
+         motif: "Toute autre partie prenante identifiée par la cellule de crise"}

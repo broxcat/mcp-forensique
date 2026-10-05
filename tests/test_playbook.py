@@ -26,11 +26,12 @@ async def _call(c, tool, args):
 def test_checklist_yaml_matches_reference_and_tools() -> None:
     md = (REFS / "checklist_collecte.md").read_text(encoding="utf-8")
     ids = [s["id"] for s in checklist()]
-    assert len(ids) == len(set(ids)) == 21
+    assert len(ids) == len(set(ids)) == 22  # 6.2: + stakeholders
     assert set(re.findall(r"\| `([a-z_]+)` \|", md)) == set(ids)
     for s in checklist():
         assert s["phase"] and s["label"] and s["detect"]["type"] in (
-            "case_toml", "registered", "tool_call", "findings", "decided", "report_final")
+            "case_toml", "registered", "tool_call", "findings", "decided", "report_final",
+            "stakeholders")
         for t in s["detect"].get("tools", []):
             assert t in server.TOOL_NAMES, (s["id"], t)
 
@@ -58,7 +59,7 @@ async def test_checklist_status_from_journal(cfg) -> None:
     (ev / "WS-099").mkdir()
     async with Client(server.build_server(cfg)) as c:
         empty = await _call(c, "checklist_status", {"case": "WS-042"})
-        assert empty["summary"].startswith("1/21")  # only case.toml
+        assert empty["summary"].startswith("1/22")  # only case.toml
         r = await _call(c, "vol_pslist", {"path": "WS-042/memory/mem.raw"})
         await _call(c, "vol_cmdline", {"path": "WS-042/memory/mem.raw"})
         await _call(c, "query_results", {"result_id": r["result_id"], "limit": 1})  # same rid

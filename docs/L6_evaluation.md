@@ -22,7 +22,7 @@ investigation classique, au regard des objectifs du CDC :
 
 ## 2. Dispositif évalué
 
-- Serveur `forensic-mcp` (45 outils, journal d'audit chaîné, contre-vérification des constats,
+- Serveur `forensic-mcp` (49 outils, journal d'audit chaîné, contre-vérification des constats,
   validation hors bande), image Docker épinglée (commit à indiquer : **À COMPLÉTER**).
 - Skill `playbook-poste-compromis` (SKILL.md + 5 références), chargée dans Claude Code ou
   fournie par le prompt MCP au modèle local.

@@ -9,6 +9,8 @@
 #   findings             at least one finding accepted by the cross-check cites the case
 #   decided              no finding of the case is still "à valider" or "à revoir"
 #   report_final         a successful report_export(final=true)
+#   stakeholders         the case has a stakeholder board (stakeholder_update / comms_logged
+#                        events, EF-15) and no entry is still "à prévenir" or "à revoir"
 steps:
   - {id: case_folder, phase: cadrage, human: true, tool: list_evidence,
      label: "Dossier <HÔTE>/ sous la racine des preuves, avec case.toml (classification lab / internal / client)",
@@ -73,3 +75,6 @@ steps:
   - {id: report, phase: validation, tool: report_export,
      label: "Rapport final exporté (hash de tête du journal conservé hors du poste)",
      detect: {type: report_final}}
+  - {id: stakeholders, phase: coordination, human: true, tool: stakeholder_list,
+     label: "Parties prenantes identifiées et prévenues (tableau de coordination, plus aucune « à prévenir » ni « à revoir »)",
+     detect: {type: stakeholders}}

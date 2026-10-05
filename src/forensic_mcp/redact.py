@@ -23,7 +23,11 @@ from .config import CLASSIFICATIONS, Config
 from .safety import SafetyError
 
 IPV4 = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})(?![\d.])")
-TOKEN = re.compile(r"\b(?:HOST|USER|IP_EXT|IP_INT)_\d+\b")
+TOKEN = re.compile(r"\b(?:HOST|USER|IP_EXT|IP_INT|PERSON|CONTACT)_\d+\b")
+# Contact details typed into the stakeholder board (EF-15): e-mail addresses and phone numbers.
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+# French-style numbers (0X XX XX XX XX, +33 X XX XX XX XX); no '-' so result ids never match.
+PHONE = re.compile(r"(?<![\w+])(?:\+\d{1,3}[ .]?|0)\d(?:[ .]?\d{2}){4}(?!\w|\.\d)")
 HOST_COLS = {"computer", "computername", "hostname", "host", "machinename", "workstationname",
              "domain", "targetdomainname", "subjectdomainname"}
 USER_COLS = {"user", "username", "account", "accountname", "targetusername", "subjectusername"}
@@ -131,6 +135,16 @@ class Pseudonymizer:
             tok = f"{kind}_{self.count[kind]}"
             self.fwd[key], self.rev[tok] = tok, value
         return self.fwd[key]
+
+    def people(self, names: list[str], texts: list[str]) -> None:
+        """Stakeholder board (EF-15): names -> PERSON_n, e-mails / phone numbers found in the
+        free text -> CONTACT_n; then replaced everywhere in this case's responses."""
+        for n in names:
+            if n and n.strip().lower() not in GENERIC and not TOKEN.fullmatch(n.strip()):
+                self.token("PERSON", n.strip())
+        for t in texts:
+            for m in [*EMAIL.findall(t or ""), *PHONE.findall(t or "")]:
+                self.token("CONTACT", m)
 
     def _ip(self, m: re.Match[str]) -> str:
         try:

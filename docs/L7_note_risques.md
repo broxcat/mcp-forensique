@@ -271,6 +271,7 @@ sans empreinte ; paquets système de base non épinglés ; surface d'attaque des
 | Absences prises pour des preuves | notes serveur, `observation` vérifiée, journalisation du lab | surinterprétation du texte libre |
 | Hallucinations | contre-vérification de chaque valeur citée | interprétation non vérifiable |
 | Validation / excès de confiance | validation hors bande, rapport final bloqué | TTY contournable, nom non authentifié |
+| Message envoyé ou décidé à la place de l'humain (coordination, EF-15) | le serveur n'envoie rien : `stakeholder_suggest` propose « à valider », `comms_log` consigne une communication déjà faite sans changer le statut, aucun outil vers l'extérieur (testé) | le texte libre saisi par le LLM (nom, note) n'est pas vérifié ; un statut « prévenu » reste une déclaration |
 | Contournement par le client | pas de shell (décision 3), journal chaîné | règles côté client, journal réécrivable |
 | Injection de consignes | marqueurs, paramètres typés, pas d'outil d'action | influence résiduelle, analyseurs exposés |
 | Preuves importées de Windows | manifeste, empreintes, import journalisé | binaire réellement exécuté non prouvable |

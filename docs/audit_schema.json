@@ -21,6 +21,7 @@
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
     },
+    "stakeholder_status": {"enum": ["a_prevenir", "prevenu", "accuse_reception", "sans_objet", "a_revoir"]},
     "actor": {
       "type": "object",
       "required": ["kind"],
@@ -53,7 +54,7 @@
         "type": {
           "enum": ["evidence_registered", "evidence_verified", "tool_call", "suggestion",
                    "validation", "action_request", "action_confirmed", "crisis_event",
-                   "imported_from_windows"]
+                   "imported_from_windows", "stakeholder_update", "comms_logged"]
         },
         "actor": {"$ref": "#/$defs/actor"},
         "case": {"description": "Case / host identifier, e.g. WS-042.", "type": "string"}
@@ -190,6 +191,43 @@
               "source": {"description": "finding_id, audit_id or free text origin.", "type": "string"},
               "crisis_id": {"type": "string", "pattern": "^C-[0-9]{4,}$"},
               "source_ref": {"description": "IDs named in source and checked to exist (findings, audit_ids, results).", "type": "object"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"type": {"const": "stakeholder_update"}}},
+          "then": {
+            "description": "Stakeholder board (EF-15): creation or change of entry S-NNNN. Only the fields given in the call are present; the current state is folded from these events. Nothing is ever sent by the server.",
+            "required": ["stakeholder_id", "action", "role", "status", "previous_status"],
+            "properties": {
+              "stakeholder_id": {"type": "string", "pattern": "^S-[0-9]{4,}$"},
+              "action": {"enum": ["create", "update"]},
+              "role": {"enum": ["direction", "rssi", "dsi", "dpo", "juridique", "communication", "rh", "assurance_cyber", "prestataire_it", "autorite_protection_donnees", "client", "fournisseur", "autre"]},
+              "status": {"$ref": "#/$defs/stakeholder_status"},
+              "previous_status": {"oneOf": [{"$ref": "#/$defs/stakeholder_status"}, {"type": "null"}]},
+              "name": {"type": "string", "maxLength": 120},
+              "organisation": {"type": "string", "maxLength": 120},
+              "owner": {"type": "string", "maxLength": 120},
+              "channel": {"enum": ["telephone", "courriel", "reunion", "ticket", "autre"]},
+              "notify_by_utc": {"$ref": "#/$defs/utc"},
+              "note": {"type": "string", "maxLength": 500},
+              "source": {"type": "string", "maxLength": 300},
+              "source_ref": {"type": "object"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"type": {"const": "comms_logged"}}},
+          "then": {
+            "description": "A communication already made by a person with a board entry (EF-15); recorded, never sent by the server.",
+            "required": ["stakeholder_id", "direction", "summary", "at_utc"],
+            "properties": {
+              "stakeholder_id": {"type": "string", "pattern": "^S-[0-9]{4,}$"},
+              "direction": {"enum": ["sortante", "entrante"]},
+              "summary": {"type": "string", "minLength": 3, "maxLength": 1000},
+              "at_utc": {"$ref": "#/$defs/utc"},
+              "source": {"type": "string", "maxLength": 300},
+              "source_ref": {"type": "object"}
             }
           }
         }

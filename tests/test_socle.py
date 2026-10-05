@@ -69,7 +69,12 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
                                        "description": "Alerte EDR", "owner": "SOC",
                                        "source": "SOC"}),
                  ("crisis_timeline", {}), ("sitrep_draft", {"audience": "direction"}),
-                 ("containment_suggestions", {"incident_type": "ransomware"})]
+                 ("containment_suggestions", {"incident_type": "ransomware"}),
+                 ("stakeholder_upsert", {"case": "", "role": "dpo"}),
+                 ("stakeholder_list", {}),
+                 ("stakeholder_suggest", {"case": "", "incident_type": "exfiltration"}),
+                 ("comms_log", {"case": "", "stakeholder_id": "S-0001", "direction": "sortante",
+                                "summary": "Appel au DPO", "at_utc": "2026-09-29T14:05:00Z"})]
         seen = {"vol3_run"}
         for tool, args in calls:
             r = await c.call_tool(tool, args)

@@ -1,5 +1,5 @@
 """Task 6.1: crisis assistant — crisis timeline (EF-12), sitrep draft (EF-13), containment
-suggestions (EF-14). EF-15 (stakeholder board, C) is not built."""
+suggestions (EF-14). EF-15 (stakeholder board) is tested in test_stakeholders.py (6.2)."""
 import re
 from pathlib import Path
 
