@@ -45,8 +45,21 @@ Today: J6 (05/10). WARNING: container forensic-mcp STILL runs the STALE parent c
   05/10: mounts C:\...\scp-forensique, recreated ~6 min before the 6.2 session; see §11 "Two
   clones"); decision pending. 6.2 was tested in a one-off container from THIS repo
   (`docker compose run -d --rm --no-deps --name forensic-task62 forensic sleep infinity`).
-  Current task: 6.2 DONE (05/10). Feature freeze (M5) since 6.1 (5fb5e21); 6.2 added after it
-  on explicit request (L. Plancke). Human: lab + attack + ground truth (L3), timed sessions
+  Current task: 6.3 DONE (05/10). Feature freeze (M5) since 6.1 (5fb5e21); 6.2 and 6.3 added
+  after it on explicit request (L. Plancke).
+Done: 6.3 (05/10, request L. Plancke; subject of the majeure, objectives O4/O5) — (1)
+  eval/score.py `completeness` (3 separate measures, no weighting): checklist steps done on the
+  journal up to the session end with the SERVER's logic (checklist_ops.evaluate, now a pure
+  function shared with checklist_status; case_folder = disk -> "non mesurable depuis le
+  journal"; "@rid" inputs mapped through the producing call), accepted findings cited /
+  validated / pending, last sitrep's sections filled vs "à compléter" (read from its
+  sitrep.md; "edited after generation" = sha256 != journaled sitrep_sha256; unreadable ->
+  "À MESURER"); CLI --output-root / --case; findings_ops.findings_from_events and
+  stakeholder_ops.board_from_events (pure). docs/L6_evaluation.md §5 definitions, §6.1 three
+  rows "À MESURER", §7 dev check on the synthetic case (checklist 8/21, validated 2/5, sitrep
+  4/6, labelled "pas une évaluation"). (2) docs/L7_note_risques.md §12 "Sur-confiance de
+  l'analyste junior" (risk / observed facts — none from a junior session yet / hypotheses /
+  mitigation in place / proposed / residual), synthesis row (now §13). 49 tools; pytest 162. Human: lab + attack + ground truth (L3), timed sessions
   classic / cloud / local (L6 protocol), trials of the skill, F-0001..F-0003 decisions.
 Done: 6.2 (05/10, request L. Plancke; EF-15, cited by the majeure's subject) — stakeholder
   coordination, the server never sends anything. stakeholder_ops.py: stakeholder_upsert
@@ -585,6 +598,9 @@ prompts so the local-model client can use it.
   `stakeholder_update` / `comms_logged`; sitrep section 6, crisis timeline kind
   "communication", checklist step `stakeholders`. The server proposes and records; it never
   sends a message; legal delays are never stated ("à confirmer par le juridique").
+- **6.3 Complétude de la documentation + risque junior (done 05/10, on request):**
+  `eval/score.py` completeness (checklist / findings / sitrep, from the journal), L6 §5–6
+  ("À MESURER"), L7 §12 junior analyst over-confidence (observed vs hypotheses).
 
 ### P7 — Évaluation comparative (J14–J15, 15–16/10) · L6 rapport d'évaluation
 Human runs the classic then the assisted investigation (CDC §6 protocol). Agent writes
@@ -870,3 +886,14 @@ statements and rejects one with a wrong IP.
   processes creating an entry at the same instant could reuse a number (not observed).
   Status changes are dated at recording time (ts_utc) in the crisis timeline, except a
   "prévenu" entry that gives the notification time.
+- Documentation completeness (6.3): a sitrep written by the server alone can never be complete
+  (Impact and Décisions attendues are left "à compléter" on purpose), so the measure counts
+  what a PERSON added; edits are detected by the journaled sitrep sha256. The checklist
+  measure reuses the server's code (checklist_ops.evaluate) instead of a copy, so the two
+  cannot drift; case.toml is on disk, not in the journal, and is reported as not measurable
+  rather than guessed. The measure is per journal: sessions sharing one OUTPUT_DIR would count
+  earlier work (L6 protocol rule 5: one output folder per session).
+- Design gap found while writing L7 §12 (6.3): L2 §10 says the final report "requires the
+  senior reviewer's name"; the code only requires an analyst name (no level, no second
+  reviewer), while compliance.md marked over-confidence "fait". Now recorded as an écart; not
+  implemented (decision for the team).

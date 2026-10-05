@@ -92,6 +92,10 @@ remplie à la main). Définitions :
 | Citations valides | citations recontrôlées sans écart par `record_finding` |
 | Hallucinations | constats rejetés par la contre-vérification du serveur (valeur, ligne, résultat ou ATT&CK inexistants), avec leurs motifs |
 | Délais | début de session → premier constat, première validation, premier sitrep |
+| Complétude de la documentation (6.3) | trois mesures séparées, sans pondération ni note globale, calculées depuis le journal à la fin de la session (événements jusqu'au dernier `audit_id` de la session) : |
+| — checklist | étapes de `rules/checklist.yaml` faites / étapes mesurables, avec **la logique même de `checklist_status`** appliquée au journal ; l'étape `case_folder` (présence de `case.toml`, sur disque) n'est pas mesurable depuis le journal et est listée à part ; les étapes restantes sont listées |
+| — constats | parmi les constats de la session acceptés par le serveur : nombre de constats cités, validés par l'analyste (statut courant du journal), en attente, rejetés par l'analyste ; part des constats acceptés qui sont validés |
+| — sitrep | dernier `sitrep_draft` réussi de la session : sections de `sitrep.md` renseignées / sections, une section étant « à compléter » si elle est vide ou contient « à compléter » ; « Rien à signaler à ce stade. » compte comme renseigné mais est listé ; le fichier relu et complété par une personne est mesuré tel quel et signalé « modifié après génération » (empreinte différente de celle journalisée). Par construction, un sitrep non relu laisse « Impact » et « Décisions attendues » à compléter |
 
 ## 6. Résultats
 
@@ -110,6 +114,9 @@ remplie à la main). Définitions :
 | Constats validés / rejetés par l'analyste | — | **À MESURER** | **À MESURER** |
 | Délai jusqu'au sitrep conforme (O4 < 10 min) | **À MESURER** | **À MESURER** | **À MESURER** |
 | Appels journalisés / chaîne vérifiée (O3) | — | **À MESURER** | **À MESURER** |
+| Complétude — étapes de la checklist faites | — | **À MESURER** | **À MESURER** |
+| Complétude — constats acceptés validés par l'analyste | — | **À MESURER** | **À MESURER** |
+| Complétude — sections du sitrep renseignées | **À MESURER** (même grille, à la main) | **À MESURER** | **À MESURER** |
 
 ### 6.2 Détail par étape du scénario
 
@@ -140,6 +147,7 @@ de l'évaluation.
 | `evtx_query` (preset logons, Security.evtx réel) | 8,0 s, 2 007 lignes | 02/10 |
 | Génération d'un sitrep par le serveur | 0,14 s | copie du journal réel, 03/10 ; **ne mesure pas O4**, qui est le délai humain jusqu'au sitrep relu |
 | Contrôle de `eval/score.py` sur le cas synthétique WS-042 | faits 4/6, IOC 3/4, 7 constats faux rejetés sur 12 | cas de test conçu pour l'outil de notation, **pas une évaluation** |
+| Contrôle de la mesure de complétude sur le même cas synthétique (05/10) | checklist 8 / 21 étapes mesurables, constats validés 2 / 5, sitrep 4 / 6 sections | même cas de test, **pas une évaluation** |
 
 ## 8. Discussion
 

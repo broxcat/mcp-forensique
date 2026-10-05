@@ -71,8 +71,13 @@ BLOCKING = ("à valider", "à revoir")  # a final report refuses these
 def load_findings(audit_file: Path, with_citations: bool = False) -> list[dict[str, Any]]:
     """Every finding with its CURRENT status, rebuilt from the journal: the latest analyst
     `validation` event wins; nothing is ever deleted (rejected findings stay listed)."""
+    return findings_from_events(audit.iter_events(audit_file), with_citations)
+
+
+def findings_from_events(events: Any, with_citations: bool = False) -> list[dict[str, Any]]:
+    """load_findings over decoded journal events (also used by eval/score.py, 6.3)."""
     out: dict[str, dict[str, Any]] = {}
-    for e in audit.iter_events(audit_file):
+    for e in events:
         if e["type"] == "suggestion":
             f = {"finding_id": e["finding_id"], "kind": e["kind"],
                  "status": STATUS_LABEL[e["status"]], "confidence": e["confidence"],

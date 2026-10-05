@@ -10,7 +10,10 @@ session (window of audit_ids or UTC times), then computes:
   - citations: valid / invalid (re-checked by record_finding when the finding was recorded);
   - hallucinations: findings rejected by the server cross-check, with their reasons;
   - findings by current status (à valider / validé / rejeté / à revoir / rejeté par le serveur);
-  - times: session start -> first finding, first validation, first sitrep (objective O4).
+  - times: session start -> first finding, first validation, first sitrep (objective O4);
+  - documentation completeness (6.3): checklist steps done (server's own checklist logic run
+    on the journal up to the session end), accepted findings cited and validated, sitrep
+    sections filled vs still "à compléter" (last sitrep of the session, read from its result).
 Nothing is estimated: a metric that cannot be computed is null with the reason ("À MESURER").
 Output: JSON (--json) and a French Markdown table (stdout or --markdown).
 
@@ -21,7 +24,9 @@ Run inside the container:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -31,11 +36,15 @@ import jsonschema
 import yaml
 
 from forensic_mcp import audit
+from forensic_mcp.checklist_ops import NOT_IN_JOURNAL, evaluate
 from forensic_mcp.findings_ops import STATUS_LABEL, value_matches
 
 HERE = Path(__file__).resolve().parent
 SCHEMA = HERE / "ground_truth.schema.json"
 TODO = "À MESURER"
+TO_COMPLETE = re.compile(r"à compléter", re.I)
+NOTHING = "Rien à signaler à ce stade."
+SECTION = re.compile(r"^## (\d+)\. (.+)$", re.M)
 
 
 def _ts(s: str) -> datetime:
@@ -99,8 +108,86 @@ def _cites_fact(c: dict[str, Any], producer: dict[str, Any] | None, fact: dict[s
     return True
 
 
+def _journal_rel_source(events: list[dict[str, Any]]) -> Any:
+    """Evidence-relative path of a tool input, from the journal only: "@<result_id>/x" is
+    mapped to the input of the call that produced that extraction."""
+    producers: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if e["type"] == "tool_call" and e.get("result_id") and e["result_id"] not in producers:
+            producers[e["result_id"]] = e
+
+    def rel(path: str, depth: int = 0) -> str | None:
+        if not path.startswith("@"):
+            return path.strip("/")
+        prod = producers.get(path[1:].split("/", 1)[0])
+        src = (prod.get("params") or {}).get("path") if prod else None
+        return rel(str(src), depth + 1) if src and depth < 5 else None
+    return rel
+
+
+def _sitrep_sections(text: str) -> list[tuple[str, str]]:
+    """(title, content) of each "## N. Title" section; the footer after "---" is dropped."""
+    parts = SECTION.split(text)
+    out = []
+    for i in range(1, len(parts) - 2, 3):
+        body = parts[i + 2].split("\n---", 1)[0].strip()
+        out.append((f"{parts[i]}. {parts[i + 1].strip()}", body))
+    return out
+
+
+def completeness(session: list[dict[str, Any]], all_events: list[dict[str, Any]], case: str,
+                 status: dict[str, dict[str, Any]], output_root: Path | None) -> dict[str, Any]:
+    """Documentation completeness (6.3), computed from the journal (and the sitrep result the
+    journal points to). Nothing is estimated: what cannot be read is reported as such."""
+    end = session[-1]["audit_id"]
+    upto = [e for e in all_events if e["audit_id"] <= end]
+    rows, _ = evaluate(upto, case, None, _journal_rel_source(upto))
+    measurable = [r for r in rows if r["statut"] != NOT_IN_JOURNAL]
+    done = [r for r in measurable if r["statut"] == "fait"]
+    out: dict[str, Any] = {"checklist": {
+        "case": case, "steps": len(rows), "measurable": len(measurable), "done": len(done),
+        "rate": round(len(done) / len(measurable), 3) if measurable else None,
+        "to_do": [r["id"] for r in measurable if r["statut"] != "fait"],
+        "not_measurable": [r["id"] for r in rows if r["statut"] == NOT_IN_JOURNAL]}}
+
+    accepted = [e for e in session if e["type"] == "suggestion"
+                and e["status"] != "rejected_by_server"]
+    st = [status[e["finding_id"]]["status"] for e in accepted]
+    out["findings"] = {
+        "accepted": len(accepted),
+        "cited": sum(1 for e in accepted if e["citations"]),
+        "validated": st.count(STATUS_LABEL["validated"]),
+        "pending": sum(1 for s in st if s in ("à valider", "à revoir")),
+        "rejected_by_analyst": st.count(STATUS_LABEL["rejected"]),
+        "validated_rate": round(st.count(STATUS_LABEL["validated"]) / len(accepted), 3)
+        if accepted else None}
+
+    call = next((e for e in reversed(session) if e["type"] == "tool_call"
+                 and e["tool"] == "sitrep_draft" and e.get("outcome") == "ok"), None)
+    f = (Path(output_root) / call["result_id"] / "sitrep.md") if call and output_root else None
+    if call is None:
+        out["sitrep"] = f"{TODO} : aucun sitrep_draft réussi dans la session"
+    elif f is None or not f.is_file():
+        out["sitrep"] = f"{TODO} : sitrep.md de {call['result_id']} introuvable (dossier de sortie)"
+    else:
+        text = f.read_text(encoding="utf-8")
+        secs = _sitrep_sections(text)
+        todo = [title for title, body in secs if not body or TO_COMPLETE.search(body)]
+        out["sitrep"] = {
+            "result_id": call["result_id"], "audit_id": call["audit_id"],
+            "audience": (call.get("params") or {}).get("audience"),
+            "sections": len(secs), "filled": len(secs) - len(todo),
+            "rate": round((len(secs) - len(todo)) / len(secs), 3) if secs else None,
+            "to_complete": todo,
+            "nothing_to_report": [title for title, body in secs if body == NOTHING],
+            "edited_after_generation": hashlib.sha256(f.read_bytes()).hexdigest()
+            != call.get("sitrep_sha256")}
+    return out
+
+
 def score(gt: dict[str, Any], session: list[dict[str, Any]],
-          all_events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+          all_events: list[dict[str, Any]] | None = None, output_root: Path | None = None,
+          case: str | None = None) -> dict[str, Any]:
     all_events = all_events if all_events is not None else session
     calls = [e for e in session if e["type"] == "tool_call"]
     producers: dict[str, dict[str, Any]] = {}
@@ -139,6 +226,10 @@ def score(gt: dict[str, Any], session: list[dict[str, Any]],
                                         "reasons": e["cross_check"].get("mismatches", [])}
                                        for e in rejected]},
     }
+    if session:
+        out["completeness"] = completeness(
+            session, all_events, (case if case is not None else gt.get("case")) or "", status,
+            output_root)
 
     # times (O4: start -> first sitrep)
     first = {t: next((e["ts_utc"] for e in session if pred(e)), None) for t, pred in {
@@ -238,6 +329,23 @@ def render_markdown(r: dict[str, Any]) -> str:
         ("Délai jusqu'au premier sitrep (s, objectif O4 < 600)", t["to_first_sitrep"] or TODO),
         ("Durée de la session (s)", t["session_duration"] or TODO),
     ]
+    c = r.get("completeness") or {}
+    if c:
+        ck, fd, sr = c["checklist"], c["findings"], c["sitrep"]
+        rows += [
+            ("Complétude — étapes de la checklist faites (mesurables depuis le journal)",
+             f"{ck['done']} / {ck['measurable']} ({_pct(ck['rate'])})"
+             + (f" ; non mesurable : {', '.join(ck['not_measurable'])}"
+                if ck["not_measurable"] else "")),
+            ("Complétude — constats acceptés : cités / validés par l'analyste",
+             f"{fd['cited']} / {fd['validated']} sur {fd['accepted']} "
+             f"({_pct(fd['validated_rate'])} validés)"),
+            ("Complétude — sections du sitrep renseignées (sans « à compléter »)",
+             sr if isinstance(sr, str) else
+             f"{sr['filled']} / {sr['sections']} ({_pct(sr['rate'])})"
+             + (f" ; à compléter : {', '.join(sr['to_complete'])}" if sr["to_complete"] else "")
+             + (" ; modifié après génération" if sr["edited_after_generation"] else "")),
+        ]
     head = (f"Session du cas {r['case']} — journal audit_id {r['session']['from_audit_id']} à "
             f"{r['session']['to_audit_id']} ({r['session']['start_utc']} → "
             f"{r['session']['end_utc']}) ; vérité terrain : {r['ground_truth_status']}.")
@@ -253,6 +361,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--to-audit-id", type=int)
     ap.add_argument("--since", help="UTC ISO-8601, e.g. 2026-10-15T09:00:00Z")
     ap.add_argument("--until")
+    ap.add_argument("--output-root", type=Path,
+                    help="results folder holding the sitrep (default: the journal's folder)")
+    ap.add_argument("--case", help="checklist case folder (default: the ground truth's case)")
     ap.add_argument("--json", type=Path, help="write the JSON result here")
     ap.add_argument("--markdown", type=Path, help="write the French table here (else stdout)")
     a = ap.parse_args(argv)
@@ -269,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
     if not session:
         print("refused: no journal event in this window", file=sys.stderr)
         return 2
-    result = score(gt, session, events)
+    result = score(gt, session, events, a.output_root or a.journal.parent, a.case)
     result["journal"] = {"path": str(a.journal), "lines": rep["lines"],
                          "head_hash": rep["head_hash"]}
     if a.json:

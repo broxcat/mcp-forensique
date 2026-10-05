@@ -76,30 +76,34 @@ def _late(st: dict[str, Any], now: datetime) -> bool:
     return bool(due and st["status"] in OPEN and due < now)
 
 
+def board_from_events(events: Any, case: str | None = None) -> dict[str, dict[str, Any]]:
+    """Current state of every entry, folded from decoded journal events (case None / "" = all)."""
+    board: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if e["type"] == "stakeholder_update":
+            sid = e["stakeholder_id"]
+            st = board.setdefault(sid, {
+                "stakeholder_id": sid, "case": e.get("case", ""), **dict.fromkeys(FIELDS),
+                "created_audit_id": e["audit_id"], "created_utc": e["ts_utc"],
+                "last_contact_utc": None, "last_direction": None, "communications": 0})
+            st.update(role=e["role"], status=e["status"], **{f: e[f] for f in FIELDS if f in e})
+            st["last_audit_id"], st["updated_utc"] = e["audit_id"], e["ts_utc"]
+        elif e["type"] == "comms_logged" and e.get("stakeholder_id") in board:
+            st = board[e["stakeholder_id"]]
+            st["communications"] += 1
+            st["last_audit_id"] = e["audit_id"]
+            last = to_utc(st["last_contact_utc"])
+            if last is None or to_utc(e["at_utc"]) >= last:
+                st["last_contact_utc"], st["last_direction"] = e["at_utc"], e["direction"]
+    return {k: v for k, v in board.items() if not case or v["case"] == case}
+
+
 class StakeholderOps:
     """Mixed into ops.Engine (uses cfg, actor, _listing, _crisis_policy, _source_ref)."""
 
     def stakeholder_board(self, case: str | None = None) -> dict[str, dict[str, Any]]:
         """Current state of every entry, folded from the journal (case None or "" = all)."""
-        board: dict[str, dict[str, Any]] = {}
-        for e in audit.iter_events(self.cfg.audit_file):
-            if e["type"] == "stakeholder_update":
-                sid = e["stakeholder_id"]
-                st = board.setdefault(sid, {
-                    "stakeholder_id": sid, "case": e.get("case", ""), **dict.fromkeys(FIELDS),
-                    "created_audit_id": e["audit_id"], "created_utc": e["ts_utc"],
-                    "last_contact_utc": None, "last_direction": None, "communications": 0})
-                st.update(role=e["role"], status=e["status"],
-                          **{f: e[f] for f in FIELDS if f in e})
-                st["last_audit_id"], st["updated_utc"] = e["audit_id"], e["ts_utc"]
-            elif e["type"] == "comms_logged" and e.get("stakeholder_id") in board:
-                st = board[e["stakeholder_id"]]
-                st["communications"] += 1
-                st["last_audit_id"] = e["audit_id"]
-                last = to_utc(st["last_contact_utc"])
-                if last is None or to_utc(e["at_utc"]) >= last:
-                    st["last_contact_utc"], st["last_direction"] = e["at_utc"], e["direction"]
-        return {k: v for k, v in board.items() if not case or v["case"] == case}
+        return board_from_events(audit.iter_events(self.cfg.audit_file), case)
 
     def _learn_people(self, ps: Pseudonymizer | None, case: str) -> None:
         """Cloud mode: every name / contact of the case's board becomes a token before the

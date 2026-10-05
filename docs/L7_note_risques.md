@@ -2,7 +2,8 @@
 
 *Brouillon du 03/10/2026 (phase P8 avancée en P7), rédigé par l'agent de développement à partir
 du journal des constats (CLAUDE.md §11) tenu depuis le 29/09. Chaque risque est illustré par un
-cas **réellement observé** dans ce projet. Les résultats de l'évaluation (L6) ne sont pas encore
+cas **réellement observé** dans ce projet ; seule exception, le §12 (analyste junior), où les
+faits observés et les hypothèses non encore vérifiées sont séparés. Les résultats de l'évaluation (L6) ne sont pas encore
 disponibles : les passages qui en dépendent sont marqués **À COMPLÉTER APRÈS L6**. L'appréciation
 de la gravité est laissée à l'équipe.*
 
@@ -104,7 +105,8 @@ lui-même ; ou l'analyste fait confiance à une anomalie présentée avec assura
 **Résiduel.** Le contrôle « terminal interactif » est un ralentisseur, pas une barrière : un
 client avec shell peut ouvrir un pseudo-terminal. Le nom de l'analyste est saisi, pas
 authentifié. La qualité de la relecture humaine n'est pas mesurable par l'outil : coût et
-qualité de la validation **À COMPLÉTER APRÈS L6**.
+qualité de la validation **À COMPLÉTER APRÈS L6**. Cas particulier de l'analyste junior qui
+valide sans vraiment contrôler : §12.
 
 ## 5. Contournement des garde-fous par le client
 
@@ -264,13 +266,66 @@ clé de cache versionnée ; contrôles de construction sur le statut réel.
 **Résiduel.** Empreintes des outils EZ en confiance au premier usage ; paquets Python épinglés
 sans empreinte ; paquets système de base non épinglés ; surface d'attaque des analyseurs (§6).
 
-## 12. Synthèse
+## 12. Sur-confiance de l'analyste junior
+
+**Risque.** Un analyste peu expérimenté reprend les propositions de l'assistant comme des
+conclusions : il valide un constat sans relire la ligne citée, prend une anomalie de la table
+de règles pour une preuve, lit « aucun résultat » comme « aucune activité », ou n'ose pas
+contredire une formulation assurée. Les garde-fous exigent une décision humaine ; ils ne
+garantissent pas que cette décision soit éclairée. Ce risque est distinct du §4 (mécanique de
+validation) : ici la validation a bien lieu, mais elle n'est pas un vrai contrôle.
+
+**Observé.** Aucune session avec un analyste junior n'a encore été jouée : les faits ci-dessous
+sont ceux du projet qui nourrissent ce risque, pas des cas de sur-confiance d'un junior.
+- 4.2 : la table de règles a produit des anomalies d'apparence sûre qui étaient de faux positifs
+  (`iexplore.exe` pris pour une imitation d'`explorer.exe`, chemin `\??\` jugé anormal) ; le
+  format « règle, sévérité, ATT&CK » paraît affirmatif même quand il se trompe.
+- 4.3 : un preset EVTX vide a d'abord été rendu par le serveur comme « journal Security ABSENT »
+  alors que le journal était présent : une affirmation fausse et assurée venant de l'outil.
+- 4.3d : l'agent de développement a écrit « 37 outils MCP » (36 en réalité) dans un message de
+  commit ; seul un test l'a détecté. Un LLM énonce un chiffre faux avec la même assurance qu'un
+  chiffre juste.
+- 4.4 : la contre-vérification de `record_finding` prouve que la valeur citée est dans la ligne,
+  pas que l'interprétation est juste : « accepté par le serveur » n'est pas « vrai ».
+- L2 §10 prévoyait que l'export final exige le nom d'un relecteur senior : **ce n'est pas
+  implémenté** (la validation demande un nom d'analyste, sans niveau ni second relecteur).
+
+**Hypothèses (non observées, à vérifier en L6).**
+- Validation en série : délai très court entre constat et validation, motifs génériques.
+- Part de constats validés proche de 100 % alors que la précision des constats est plus basse.
+- Constats de type `observation` (absence de trace dans un artefact) relus comme l'absence d'un
+  comportement.
+- Un junior suit les `next_steps` du serveur et explore moins hors de l'arbre de triage.
+
+**Parade (en place).**
+- Constats « à valider » jusqu'à une décision nominative et motivée, hors MCP ; citations
+  recontrôlées au moment de la validation avec la valeur actuelle de la cellule ; un constat
+  rejeté par le serveur ne peut pas être validé.
+- Rapport final refusé tant qu'un constat est « à valider » ou « à revoir » ; le sitrep
+  n'affirme que des constats validés et sépare les communications confirmées de celles en
+  attente.
+- Anomalies présentées comme des pistes (`references/interpretation_artefacts.md` : normal,
+  suspect, pièges) ; une `observation` porte la phrase du serveur « aucune trace dans cet
+  artefact », pas celle du LLM.
+- Mesures L6 qui rendent le risque visible : part des constats acceptés validés, délai jusqu'à
+  la première validation, précision des constats (`eval/score.py`).
+
+**Parade proposée (non implémentée, à décider par l'équipe).** Exiger pour l'export final un
+relecteur senior distinct de l'analyste qui a validé (prévu en L2 §10) ; refuser un motif de
+validation vide de sens ; contre-vérification d'un échantillon de constats validés par un senior.
+
+**Résiduel.** Le serveur ne sait pas qui est junior : le nom est saisi, pas authentifié, et sans
+niveau ; la qualité d'une relecture n'est pas mesurable par l'outil. Ampleur réelle du risque :
+**À COMPLÉTER APRÈS L6**.
+
+## 13. Synthèse
 
 | Risque | Parade principale | Résiduel principal |
 |---|---|---|
 | Absences prises pour des preuves | notes serveur, `observation` vérifiée, journalisation du lab | surinterprétation du texte libre |
 | Hallucinations | contre-vérification de chaque valeur citée | interprétation non vérifiable |
 | Validation / excès de confiance | validation hors bande, rapport final bloqué | TTY contournable, nom non authentifié |
+| Sur-confiance de l'analyste junior (§12) | « à valider », citations recontrôlées, rapport bloqué, mesures L6 | relecteur senior non exigé (prévu L2 §10) ; ampleur **À COMPLÉTER APRÈS L6** |
 | Message envoyé ou décidé à la place de l'humain (coordination, EF-15) | le serveur n'envoie rien : `stakeholder_suggest` propose « à valider », `comms_log` consigne une communication déjà faite sans changer le statut, aucun outil vers l'extérieur (testé) | le texte libre saisi par le LLM (nom, note) n'est pas vérifié ; un statut « prévenu » reste une déclaration |
 | Contournement par le client | pas de shell (décision 3), journal chaîné | règles côté client, journal réécrivable |
 | Injection de consignes | marqueurs, paramètres typés, pas d'outil d'action | influence résiduelle, analyseurs exposés |
