@@ -1,0 +1,81 @@
+# Tool catalog (task 6.4): what the README adds to the server's own tools/list. Names,
+# parameters, read-only hint and class come from the SERVER (scripts/tool_inventory.py); this
+# file only gives, per tool, its category, a French one-line purpose, the journal events written
+# besides the automatic `tool_call`, and `windows_only: true` for tools fed by an export made on
+# Windows. tests/test_inventory.py fails if a server tool is missing here, if a name here is not
+# a server tool, or if the README block differs from what the script generates.
+categories:
+  - title: "Socle"
+    description: "État du serveur, preuves, résultats, rejeu. Une preuve non encore enregistrée est hachée (SHA-256 complet) et journalisée `evidence_registered` au premier appel d'un outil d'analyse."
+    tools: [tool_status, list_evidence, register_evidence, verify_evidence, query_results, list_results, replay]
+  - title: "Volatility 3 (mémoire)"
+    description: "Image mémoire Windows sous la racine des preuves. Les anomalies (règles, ATT&CK), le décodage PowerShell et les IOC sont calculés par le serveur."
+    tools: [vol_list_plugins, vol_pslist, vol_pstree, vol_cmdline, vol_netscan, vol_malfind, vol_dlllist, vol_printkey, vol3_run]
+  - title: "Volatility 2 (images anciennes)"
+    description: "Volatility 2.6 avec un profil ; `--plugins`, `-w` et `-D` ne sont jamais passés."
+    tools: [vol2_list_plugins, vol2_imageinfo, vol2_run]
+  - title: "Eric Zimmerman (journaux, $MFT, registre, artefacts Windows)"
+    description: "17 outils EZ, options typées du registre `rules/ez_registry.json`. PECmd, SQLECmd, WxTCmd, SrumECmd et SumECmd ne tournent pas sous Linux : export fait sous Windows puis importé (« import Windows »)."
+    tools: [ez_list_tools, ez_run, evtx_query, mft_search, shimcache_query, amcache_query, lnk_query, jumplist_query, recyclebin_query, ez_import, prefetch_query, browser_history, srum_query]
+  - title: "Images disque (The Sleuth Kit)"
+    description: "Images raw/dd, E01, VMDK, VHD lues sans montage ; les fichiers extraits s'utilisent ensuite comme `@<result_id>/<chemin>`."
+    tools: [disk_info, disk_list, disk_extract, disk_extract_file]
+  - title: "Constats, chronologie et rapport"
+    description: "Aucun de ces outils ne valide un constat : la validation est faite par un analyste, hors MCP."
+    tools: [timeline, record_finding, list_findings, report_export, checklist_status]
+  - title: "Assistant de crise"
+    description: "Le serveur consigne et propose ; aucune mesure n'est exécutée."
+    tools: [crisis_add_event, crisis_timeline, sitrep_draft, containment_suggestions]
+  - title: "Coordination des parties prenantes"
+    description: "Le serveur n'envoie aucun message ; les délais légaux sont « à confirmer par le juridique »."
+    tools: [stakeholder_suggest, stakeholder_upsert, stakeholder_list, comms_log]
+tools:
+  tool_status: {role: "Moteurs installés et versions ; nombre d'outils MCP, commit du code chargé au démarrage, heure de démarrage, mode LLM"}
+  list_evidence: {role: "Fichiers sous la racine des preuves : taille, état d'enregistrement, SHA-256, cas et classification"}
+  register_evidence: {role: "Hache une preuve (SHA-256 complet) avant analyse", journal: "`evidence_registered`"}
+  verify_evidence: {role: "Recalcule l'empreinte d'une preuve enregistrée et la compare (contrôle « après »)", journal: "`evidence_verified`"}
+  query_results: {role: "Filtre, trie ou pagine les lignes d'un résultat précédent"}
+  list_results: {role: "Résultats déjà produits : outil, plugin, entrée, code de sortie, nombre de lignes"}
+  replay: {role: "Rejoue un appel mémoire ou EZ journalisé et compare l'empreinte de la sortie", journal: "`action_request` / `action_confirmed` si l'appel rejoué est sensible"}
+  vol_list_plugins: {role: "Plugins Volatility 3 installés (plugins sensibles signalés)"}
+  vol_pslist: {role: "Processus (windows.pslist) et règles de détection"}
+  vol_pstree: {role: "Arborescence des processus (windows.pstree)"}
+  vol_cmdline: {role: "Lignes de commande ; PowerShell encodé décodé par le serveur"}
+  vol_netscan: {role: "Connexions réseau (windows.netscan), correspondance avec les IOC"}
+  vol_malfind: {role: "Régions de code injecté ; `dump=true` extrait les régions après confirmation", journal: "`action_request` / `action_confirmed` si `dump=true`"}
+  vol_dlllist: {role: "DLL chargées et chemin de l'image par processus"}
+  vol_printkey: {role: "Clé de registre lue en mémoire (par exemple les clés Run)"}
+  vol3_run: {role: "Tout autre plugin Volatility 3, options typées vérifiées dans l'aide du plugin", journal: "`action_request` / `action_confirmed` pour un plugin sensible (identifiants, extraction) ou `dump=true`"}
+  vol2_list_plugins: {role: "Plugins et profils Volatility 2.6 (sensibles et refusés signalés)"}
+  vol2_imageinfo: {role: "Profils Volatility 2 suggérés pour une image (long, mis en cache par empreinte)"}
+  vol2_run: {role: "Tout plugin Volatility 2.6 avec un profil ; plugins exigeant `--dump-dir` refusés", journal: "`action_request` / `action_confirmed` pour un plugin d'identifiants"}
+  ez_list_tools: {role: "Les 17 outils EZ : artefacts acceptés, entrée, sortie, options typées, exécution Linux ou Windows"}
+  ez_run: {role: "Lance un outil EZ sur un fichier ou dossier de preuve ; les 5 outils Windows-only sont refusés (voir `ez_import`)"}
+  evtx_query: {role: "Journaux d'événements (EvtxECmd) : presets, identifiants, fenêtre UTC, texte ; un preset vide indique le journal ou la politique d'audit requis"}
+  mft_search: {role: "Recherche dans une $MFT (MFTECmd) : chemin, extension, fenêtre UTC sur un horodatage"}
+  shimcache_query: {role: "ShimCache d'une ruche SYSTEM (AppCompatCacheParser)"}
+  amcache_query: {role: "Amcache.hve (AmcacheParser) : nom, SHA-1, fenêtre UTC"}
+  lnk_query: {role: "Raccourcis LNK (LECmd) : cible, fenêtre UTC"}
+  jumplist_query: {role: "Jump lists (JLECmd) : cible, fenêtre UTC"}
+  recyclebin_query: {role: "Corbeille, fichiers $I / INFO2 (RBCmd) : nom, date de suppression"}
+  ez_import: {role: "Importe un export fait sous Windows par `scripts/run_ez_windows.ps1` : manifeste, empreintes des sorties et de l'entrée vérifiés", journal: "`imported_from_windows`", windows_only: true}
+  prefetch_query: {role: "Prefetch (PECmd) à partir d'un export Windows : exécutable, fenêtre UTC", journal: "`imported_from_windows` au premier import de l'export", windows_only: true}
+  browser_history: {role: "Historique de navigation (SQLECmd) à partir d'un export Windows : URL ou titre, fenêtre UTC", journal: "`imported_from_windows` au premier import de l'export", windows_only: true}
+  srum_query: {role: "SRUM (SrumECmd) à partir d'un export Windows : application, table, fenêtre UTC", journal: "`imported_from_windows` au premier import de l'export", windows_only: true}
+  disk_info: {role: "Table de partitions d'une image disque (mmls) ; donne `partition_offset`"}
+  disk_list: {role: "Liste récursive des fichiers d'un système de fichiers (fls), fichiers effacés compris"}
+  disk_extract: {role: "Extrait des artefacts par cibles fixes (icat), en lecture seule ; `sam_security` après confirmation", journal: "`evidence_registered` par fichier extrait (image source, inode) ; `action_request` / `action_confirmed` pour `sam_security`"}
+  disk_extract_file: {role: "Extrait des fichiers choisis par inode dans la liste de `disk_list`, effacés compris", journal: "`evidence_registered` par fichier extrait ; `action_request` / `action_confirmed` pour une ruche d'identifiants"}
+  timeline: {role: "Chronologie UTC d'un cas (processus mémoire, EVTX, $MFT) à partir des résultats déjà produits ; chaque événement cite son résultat et sa ligne"}
+  record_finding: {role: "Enregistre UN constat (fait, hypothèse, recommandation, observation = absence vérifiée) ; chaque valeur citée est recontrôlée, sinon rejet", journal: "`suggestion` (« à valider » ou rejeté par le serveur)"}
+  list_findings: {role: "Constats et statut courant lu dans le journal"}
+  report_export: {role: "Rapport Markdown depuis les constats journalisés ; `final=true` refusé tant qu'un constat est à valider ou à revoir", journal: "`evidence_verified` (« après ») pour chaque preuve si `final=true`"}
+  checklist_status: {role: "Étapes de la checklist faites / à faire pour un hôte, déduites du journal"}
+  crisis_add_event: {role: "Ajoute une entrée C-NNNN à la chronologie de crise (heure avec décalage, responsable, source vérifiée)", journal: "`crisis_event`"}
+  crisis_timeline: {role: "Chronologie de crise en UTC, avec les changements de statut et communications des parties prenantes"}
+  sitrep_draft: {role: "Brouillon de point de situation (6 sections) depuis les constats validés, la chronologie et le tableau des parties prenantes ; écrit `sitrep.md`"}
+  containment_suggestions: {role: "Mesures de confinement à proposer pour un type d'incident, toutes « à valider », jamais exécutées"}
+  stakeholder_suggest: {role: "Parties prenantes à proposer pour un type d'incident (ordre, délai indicatif, règle), « à valider » ; n'écrit rien"}
+  stakeholder_upsert: {role: "Crée ou met à jour une entrée S-NNNN du tableau (rôle, nom, canal, responsable, échéance, statut)", journal: "`stakeholder_update`"}
+  stakeholder_list: {role: "Tableau courant recalculé depuis le journal, retards calculés par le serveur"}
+  comms_log: {role: "Consigne une communication déjà faite par une personne ; ne change pas le statut", journal: "`comms_logged`"}

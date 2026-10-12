@@ -52,6 +52,26 @@ class Outcome:
     audit_extra: dict[str, Any] = field(default_factory=dict)
 
 
+def code_version() -> str:
+    """Commit of the checked-out code, read from .git (no git binary in the image); "unknown"
+    outside a clone. Uncommitted changes are not detected."""
+    git = Path(__file__).resolve().parents[2] / ".git"
+    try:
+        head = (git / "HEAD").read_text(encoding="utf-8").strip()
+        if not head.startswith("ref: "):
+            return head[:12]
+        ref = head[5:]
+        branch = ref.rsplit("/", 1)[-1]
+        if (git / ref).is_file():
+            return f"{(git / ref).read_text(encoding='utf-8').strip()[:12]} ({branch})"
+        for line in (git / "packed-refs").read_text(encoding="utf-8").splitlines():
+            if line.endswith(" " + ref):
+                return f"{line.split()[0][:12]} ({branch})"
+    except OSError:
+        pass
+    return "unknown"
+
+
 def _rows_digest(rows: list[dict[str, Any]]) -> str:
     return hashlib.sha256(audit.canonical(rows).encode()).hexdigest()
 
@@ -63,6 +83,10 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, ImportOps, FindingsOps,
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
         self.actor = {"kind": "llm", "client": f"mcp; llm_mode={cfg.llm_mode}"}
+        # What this running server is (tool_status): read once, at start — a server started
+        # before a `git pull` keeps reporting the code it actually loaded.
+        self.code, self.started_utc = code_version(), audit.utc_now()
+        self.mcp_tools: int | None = None  # set by server.build_server
 
     def _journal(self, rec: dict[str, Any], t0: float, outcome: str, **extra: Any) -> int:
         ev = audit.append(self.cfg.audit_file, "tool_call", self.actor, **rec,
@@ -161,8 +185,14 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, ImportOps, FindingsOps,
         items = [{"tool": t, "installed": True, "exposed": t != "dotnet",
                   "version": vol3 if t == "vol3" else ("2.6" if t == "vol2" else None)}
                  for t in sorted(tools)]
-        return self._listing("tool_status", params, items,
-                             f"{len(tools)} tools installed, exposed: vol3 {vol3}, vol2 2.6, 17 EZ tools, sleuthkit (disk_*)")
+        server = (f"server: {self.mcp_tools} MCP tools, code {self.code}, started "
+                  f"{self.started_utc}, llm_mode {self.cfg.llm_mode}")
+        out = self._listing("tool_status", params, items,
+                            f"{len(tools)} tools installed, exposed: vol3 {vol3}, vol2 2.6, "
+                            f"17 EZ tools, sleuthkit (disk_*) ; {server}")
+        out.payload["notes"] = [server, f"evidence root {self.cfg.evidence_root}, output root "
+                                        f"{self.cfg.output_root}"]
+        return out
 
     async def op_list_evidence(self, params: dict[str, Any], conf: Any = None) -> Outcome:
         base = safety.jail_path(params.get("subdir") or ".", self.cfg.evidence_root)

@@ -81,6 +81,7 @@ def build_server(cfg: Config | None = None) -> MCPServer:
     """Create the MCPServer with every tool bound to `cfg`."""
     cfg = cfg or load_config()
     eng = Engine(cfg)
+    eng.mcp_tools = len(TOOL_NAMES)
     mcp = MCPServer("forensic-mcp", instructions=INSTRUCTIONS)
 
     def tool(name: str) -> Any:

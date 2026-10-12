@@ -41,12 +41,30 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 ## 2. STATUS (update at the end of every task)
 
 ```
-Today: J6 (05/10). WARNING: container forensic-mcp STILL runs the STALE parent clone (seen
-  05/10: mounts C:\...\scp-forensique, recreated ~6 min before the 6.2 session; see §11 "Two
-  clones"); decision pending. 6.2 was tested in a one-off container from THIS repo
-  (`docker compose run -d --rm --no-deps --name forensic-task62 forensic sleep infinity`).
-  Current task: 6.3 DONE (05/10). Feature freeze (M5) since 6.1 (5fb5e21); 6.2 and 6.3 added
-  after it on explicit request (L. Plancke).
+Today: J11 (12/10). WARNING: the container forensic-mcp is STOPPED (exited) and is STILL the
+  one created from the STALE parent clone (docker inspect 12/10: /app = C:\...\scp-forensique,
+  see §11 "Two clones"); decision pending: remove it and `docker compose up -d` from THIS repo
+  (README §3). Docker Desktop was not running on 12/10 (started by the agent for the tests).
+  6.2–6.4 were tested in one-off containers from THIS repo
+  (`docker compose run -d --rm --no-deps --name forensic-task64 forensic sleep infinity`).
+  Current task: 6.4 DONE (12/10). Feature freeze (M5) since 6.1 (5fb5e21); 6.2, 6.3 and 6.4
+  added after it on explicit request (L. Plancke).
+Done: 6.4 (12/10, request L. Plancke; L4 README, ET-01/ET-09) — inventory asked to the SERVER
+  (in-memory MCP client): 49 tools, 1 prompt (playbook_poste_compromis(case, section)), 6
+  resources. Of the 44 names given by the user, 43 exist; `verify_audit` is NOT a tool (only
+  audit.verify_report in code, used by report_export / sitrep_draft / score.py); 6 server
+  tools were not in the list (replay, shimcache_query, amcache_query, lnk_query,
+  jumplist_query, recyclebin_query). scripts/tool_inventory.py (--json / --write / --check)
+  generates the README tables from tools/list + docs/tool_catalog.yaml (category, French
+  purpose, journal events, windows_only). README rewritten (11 sections: install + .env,
+  one deployment folder, clients + llm modes, tools, out-of-server commands, Windows-only
+  flow, known limits, security model, tests, pinned versions). tool_status now reports the
+  MCP tool count, the commit of the code loaded at server start (ops.code_version reads .git;
+  no git binary in the image; uncommitted changes not detected), start time and llm_mode.
+  .env.example: COMPOSE_PROJECT_NAME=forensic-mcp (.env NOT modified). tests/test_inventory.py
+  (4; replaces the 6.2 README test); 4 stale-README mutations tried: all fail. pytest 165.
+  NOT verified: effect of COMPOSE_PROJECT_NAME on a second clone (no compose up run); the
+  new tool_status and the 49 tools over a real stdio / HTTP client; Open WebUI registration.
 Done: 6.3 (05/10, request L. Plancke; subject of the majeure, objectives O4/O5) — (1)
   eval/score.py `completeness` (3 separate measures, no weighting): checklist steps done on the
   journal up to the session end with the SERVER's logic (checklist_ops.evaluate, now a pure
@@ -601,6 +619,10 @@ prompts so the local-model client can use it.
 - **6.3 Complétude de la documentation + risque junior (done 05/10, on request):**
   `eval/score.py` completeness (checklist / findings / sitrep, from the journal), L6 §5–6
   ("À MESURER"), L7 §12 junior analyst over-confidence (observed vs hypotheses).
+- **6.4 README and tool inventory (done 12/10, on request):** README rewritten and checked
+  against the code; its tool tables are generated from the server
+  (`scripts/tool_inventory.py --write`, `docs/tool_catalog.yaml`) and a test fails when they
+  are out of date. After adding or changing a tool: update the catalog, run `--write`.
 
 ### P7 — Évaluation comparative (J14–J15, 15–16/10) · L6 rapport d'évaluation
 Human runs the classic then the assisted investigation (CDC §6 protocol). Agent writes
@@ -893,6 +915,22 @@ statements and rejects one with a wrong IP.
   cannot drift; case.toml is on disk, not in the journal, and is reported as not measurable
   rather than guessed. The measure is per journal: sessions sharing one OUTPUT_DIR would count
   earlier work (L6 protocol rule 5: one output folder per session).
+- Documentation drift (6.4): the user's own list of 44 tools named `verify_audit`, which the
+  server never exposed, and missed 6 real tools; the README still described a deployment
+  without the single-folder warning although the "two clones" incident was known. A tool
+  list written from memory, by a person or an LLM, drifts: the README tables are now
+  generated from tools/list and tested. Residual: the French purpose and journal column come
+  from a hand-written catalog (docs/tool_catalog.yaml); tests only check that the events
+  exist, that "sensitive" matches the server class and that no tool is missing or invented.
+- The 6.2 README test would not have caught a wrong description or a wrong parameter: it only
+  compared names. Agent error in 6.4 caught by reading the generated table: the generator hid
+  vol3_run's `offset` (a memory address) as if it were paging; and a first "stale README"
+  check silently did nothing (shell quoting), so the passing tests proved nothing until the
+  mutation was redone and seen to fail.
+- No way to tell which code a running server has was a cause of the "two clones" incident:
+  tool_status now gives the tool count and the commit read at start. Limits: read from .git
+  (bind mount), "unknown" outside a clone, uncommitted edits invisible; the server classes
+  a tool "read" even when it journals an import or a first registration.
 - Design gap found while writing L7 §12 (6.3): L2 §10 says the final report "requires the
   senior reviewer's name"; the code only requires an analyst name (no level, no second
   reviewer), while compliance.md marked over-confidence "fait". Now recorded as an écart; not
