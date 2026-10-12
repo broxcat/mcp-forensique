@@ -27,20 +27,23 @@ def jail_path(path: str | Path, evidence_root: str | Path) -> Path:
     return resolved
 
 
-EXTRACT_RE = re.compile(r"^[0-9]{8}-[0-9]{6}-disk_extract-[0-9a-f]{6}$")
+# Results whose extracted/ folder is a read-only input root: disk_extract(_file) and, since
+# 6.5, mem_extract_vad (vol2 vaddump / vol3 windows.vadinfo).
+EXTRACT_RE = re.compile(r"^[0-9]{8}-[0-9]{6}-(disk_extract|vol2_vaddump|vol3_windows\.vadinfo)"
+                        r"-[0-9a-f]{6}$")
 
 
 def jail_input(path: str | Path, evidence_root: str | Path,
                output_root: str | Path | None = None) -> Path:
     """Evidence root, or the second read-only root (task 4.3c): "@<result_id>/<path>" = a file
-    copied by disk_extract into output_root/<result_id>/extracted/. Same resolve + is_relative_to
+    copied by disk_extract or mem_extract_vad into output_root/<result_id>/extracted/. Same resolve + is_relative_to
     rule; any other place under output_root is refused."""
     s = str(path)
     if not s.startswith("@"):
         return jail_path(path, evidence_root)
     rid, _, rest = s[1:].partition("/")
     if output_root is None or not EXTRACT_RE.fullmatch(rid):
-        raise SafetyError(f"not an extraction reference: {s!r} (expected @<disk_extract result_id>/...)")
+        raise SafetyError(f"not an extraction reference: {s!r} (expected @<disk_extract or mem_extract_vad result_id>/...)")
     base = (Path(output_root) / rid / "extracted").resolve()
     if not base.is_dir():
         raise SafetyError(f"unknown extraction: {rid}")

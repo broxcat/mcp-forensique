@@ -318,7 +318,44 @@ validation vide de sens ; contre-vérification d'un échantillon de constats val
 niveau ; la qualité d'une relecture n'est pas mesurable par l'outil. Ampleur réelle du risque :
 **À COMPLÉTER APRÈS L6**.
 
-## 13. Synthèse
+## 13. Limites assumées du périmètre
+
+**Risque.** Qu'une limite voulue soit prise pour une réponse : l'assistant ne sait pas, et
+l'analyste comprend « il n'y a rien ».
+
+**Observé (12/10, image mémoire Windows XP SP2 d'exercice, quinze questions).**
+- Le serveur interrogé était l'ancien conteneur (24 outils, sans `record_finding`) : les
+  réponses ont été citées à la main, sans contre-vérification (§5, « deux clones »).
+- Volatility 3 ne lit pas Windows XP : les sept outils typés échouaient sur une erreur de
+  symboles brute, sans dire quoi faire.
+- Les règles prévues pour Windows Vista et suivants ont signalé en sévérité haute
+  `services.exe` et `lsass.exe` lancés par `winlogon.exe`, ce qui est normal sous XP : deux
+  fausses anomalies sur un système sain de ce point de vue.
+- Plusieurs questions n'ont pas de réponse dans le périmètre : mot de passe en clair à partir
+  de l'empreinte NT, JavaScript malveillant à désobfusquer, shellcode à analyser, empreinte à
+  chercher sur un service de réputation en ligne.
+
+**Parade en place.**
+- Le serveur s'arrête à l'empreinte du mot de passe : il n'y a pas d'outil de cassage, et
+  `hashdump` reste soumis à la confirmation d'un analyste nommé.
+- Pas de rétro-ingénierie de code malveillant (hors périmètre du cahier des charges) : aucun
+  outil de désobfuscation ni d'analyse de shellcode. `vol2_yarascan` et `mem_extract_vad`
+  s'arrêtent à « cette chaîne est à cette adresse » et « voici l'empreinte de cette région ».
+- Aucun accès réseau sortant : pas d'outil VirusTotal ni équivalent, les preuves et leurs
+  empreintes ne quittent pas l'environnement cloisonné.
+- Message explicite sur une image XP (« utiliser `vol2_run` ») au lieu de l'erreur de symboles ;
+  règle de parenté adaptée quand l'image n'a pas de `wininit.exe` ; `tool_status` indique le
+  nombre d'outils et le commit du code en service.
+
+**Résiduel.**
+- Une question hors périmètre reste sans réponse outillée : l'analyste la traite avec ses
+  propres outils, hors journal, donc sans trace ni contre-vérification.
+- L'empreinte d'une région mémoire ressemble à une empreinte de fichier : la comparer à une
+  base de réputation donnerait un faux « inconnu ». La réponse de l'outil le dit ; rien ne
+  l'empêche.
+- Sous XP tout passe par `vol2_run`, moins typé, et par Volatility 2, qui n'est plus maintenu.
+
+## 14. Synthèse
 
 | Risque | Parade principale | Résiduel principal |
 |---|---|---|
@@ -334,6 +371,7 @@ niveau ; la qualité d'une relecture n'est pas mesurable par l'outil. Ampleur r�
 | Confidentialité / secrets | classification, pseudonymisation, règle 11 | couverture partielle de la pseudonymisation |
 | Traçabilité / preuve | journal chaîné, hachage avant/après | dépend d'une copie du hash hors poste |
 | Chaîne d'approvisionnement | épinglage et empreintes | confiance au premier usage |
+| Limites assumées du périmètre (§13) | pas de cassage de mot de passe, pas de rétro-ingénierie, pas d'accès réseau ; messages explicites | questions traitées hors outil, donc hors journal |
 
 **À COMPLÉTER APRÈS L6** : risques observés pendant les sessions chronométrées, en particulier
 les écarts entre les modes cloud et local.

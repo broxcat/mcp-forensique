@@ -25,7 +25,7 @@ async def test_readme_tool_tables_are_the_servers(cfg) -> None:
     inv = await inv_mod.inventory(cfg)
     cat = inv_mod.catalog()
     names = [t["name"] for t in inv["tools"]]
-    assert inv["tool_count"] == len(names) == len(server.TOOL_NAMES) == 49
+    assert inv["tool_count"] == len(names) == len(server.TOOL_NAMES) == 51
     # the README block is exactly what the server + catalog generate (fails when out of date)
     block = inv_mod.readme_block(README)
     assert block == inv_mod.render(inv, cat), \

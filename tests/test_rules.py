@@ -27,7 +27,7 @@ def test_rule_table_has_the_seven_rules_with_attack_ids() -> None:
     ids = {r["id"] for r in analyzers.rules()["rules"]}
     assert {"office_spawns_shell", "encoded_powershell", "system_process_wrong_parent",
             "duplicate_singleton", "masquerade_name", "unusual_path",
-            "external_connection"} <= ids
+            "external_connection", "browser_spawns_document_reader"} <= ids
     for r in analyzers.rules()["rules"]:
         assert all(t.startswith("T1") for t in r["attack"])
 
@@ -38,6 +38,41 @@ def test_office_spawns_shell(tmp_path: Path) -> None:
                {"PID": 4312, "PPID": 2980, "ImageFileName": "cmd.exe"},
                {"PID": 700, "PPID": 500, "ImageFileName": "powershell.exe"})
     assert _ids(res) == ["office_spawns_shell"] and res["anomalies"][0]["rows"] == [2]
+
+
+def test_xp_layout_winlogon_parent_is_not_flagged(tmp_path: Path) -> None:
+    """6.5: on Windows XP / 2003 (no wininit.exe) winlogon.exe starts services and lsass."""
+    xp = _run(tmp_path / "xp", "pslist",
+              {"PID": 644, "PPID": 548, "Name": "winlogon.exe"},
+              {"PID": 688, "PPID": 644, "Name": "services.exe"},
+              {"PID": 700, "PPID": 644, "Name": "lsass.exe"},
+              {"PID": 880, "PPID": 688, "Name": "svchost.exe"})
+    assert xp["anomalies"] == []
+    bad = _run(tmp_path / "xp2", "pslist",
+               {"PID": 644, "PPID": 548, "Name": "winlogon.exe"},
+               {"PID": 500, "PPID": 644, "Name": "explorer.exe"},
+               {"PID": 700, "PPID": 500, "Name": "lsass.exe"})
+    assert _ids(bad) == ["system_process_wrong_parent"]
+    vista = _run(tmp_path / "v", "pslist",
+                 {"PID": 400, "PPID": 320, "Name": "wininit.exe"},
+                 {"PID": 644, "PPID": 548, "Name": "winlogon.exe"},
+                 {"PID": 700, "PPID": 644, "Name": "lsass.exe"})
+    assert _ids(vista) == ["system_process_wrong_parent"]
+
+
+def test_browser_spawns_document_reader(tmp_path: Path) -> None:
+    """6.5: the pair seen on the XP image (vol2 pslist columns Name / PID / PPID)."""
+    res = _run(tmp_path, "pslist",
+               {"PID": 888, "PPID": 1756, "Name": "firefox.exe"},
+               {"PID": 1752, "PPID": 888, "Name": "AcroRd32.exe"},
+               {"PID": 1800, "PPID": 1756, "Name": "AcroRd32.exe"},   # started by the shell
+               {"PID": 1900, "PPID": 888, "Name": "plugin-container.exe"})
+    assert _ids(res) == ["browser_spawns_document_reader"]
+    a = res["anomalies"][0]
+    assert a["rows"] == [2] and a["severity"] == "medium" and a["attack"] == ["T1189", "T1203"]
+    assert "firefox.exe (PID 888)" in a["explanation"] and "PID 1752" in a["explanation"]
+    assert {"tool": "vol_cmdline", "args": {"pid": 1752},
+            "why": "which document the reader opened"} in res["next_steps"]
 
 
 def test_encoded_powershell_any_prefix(tmp_path: Path) -> None:

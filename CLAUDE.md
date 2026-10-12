@@ -32,7 +32,8 @@ host analysis, production SIEM integration, malware reverse engineering.
 registry, browser history, shellbags, jump lists, SRUM, recycle bin…). Rule 8 still holds:
 plugin/tool names come from the discovered list or the registry, every option is a typed
 parameter. vol2 `--plugins`, `-w/--write`, `-D/--dump-dir` stay forbidden (code execution /
-writes). Sensitive plugins (credentials, dumps) run only after human confirmation. Linux/macOS
+writes); since 6.5 the server itself sets `--dump-dir` to the result folder in
+`mem_extract_vad` only, never a caller. Sensitive plugins (credentials, dumps) run only after human confirmation. Linux/macOS
 plugins become reachable although Linux/macOS host analysis stays out of the CDC scope (not
 tested, not evaluated). Gantt impact: see §8 and L2 §12.
 
@@ -41,14 +42,51 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 ## 2. STATUS (update at the end of every task)
 
 ```
-Today: J11 (12/10). WARNING: the container forensic-mcp is STOPPED (exited) and is STILL the
-  one created from the STALE parent clone (docker inspect 12/10: /app = C:\...\scp-forensique,
-  see §11 "Two clones"); decision pending: remove it and `docker compose up -d` from THIS repo
-  (README §3). Docker Desktop was not running on 12/10 (started by the agent for the tests).
-  6.2–6.4 were tested in one-off containers from THIS repo
-  (`docker compose run -d --rm --no-deps --name forensic-task64 forensic sleep infinity`).
-  Current task: 6.4 DONE (12/10). Feature freeze (M5) since 6.1 (5fb5e21); 6.2, 6.3 and 6.4
-  added after it on explicit request (L. Plancke).
+Today: J11 (12/10). Deployment FIXED in 6.5: the container forensic-mcp now runs from THIS
+  repo (docker inspect: /app = ...\scp-forensique\scp-forensique), Compose project
+  `forensic-mcp` (COMPOSE_PROJECT_NAME in .env, added with the user's agreement), volumes
+  pinned by name in docker-compose.yml (scp-forensique_vol3-cache, scp-forensique_open-webui:
+  data kept). EVIDENCE_DIR stays ./evidence (user's choice): Bob.vmem is NOT there, it is in
+  the parent clone's evidence folder. Check before every session: tool_status must give the
+  tool count (51) and the commit of `git rev-parse --short=12 HEAD`; after a commit or a pull,
+  `docker compose restart forensic` (the commit is read at server start).
+  Tests still run in one-off containers from THIS repo
+  (`docker compose run -d --rm --no-deps --name forensic-task65 forensic sleep infinity`).
+  Current task: 6.5 DONE (12/10). Feature freeze (M5) since 6.1 (5fb5e21); 6.2 to 6.5 added
+  after it on explicit request (L. Plancke).
+Done: 6.5 (12/10, request L. Plancke; EF-01, EF-09, EXT-01, guardrails) — STEP 0 deployment:
+  root cause = both clones are folders named `scp-forensique`, so both had the Compose project
+  name `scp-forensique` and the fixed container name `forensic-mcp`; the last `up` (from the
+  parent, stale at task 4.3, 24 tools, no record_finding) owned the container, while
+  open-webui belonged to this repo. Fix: old containers removed, COMPOSE_PROJECT_NAME set,
+  `docker compose up -d --build` from this repo; tool_status over real HTTP on the running
+  server: 49 tools, code 9cf81e881d3f = HEAD, then 51 tools after the 6.5 code. Journals were
+  NOT shared: the old container wrote to the parent's output/ (157 lines, untouched); this
+  repo's journal had 96 lines (hash unchanged before the fix) and only gained the agent's
+  tool_status calls on the running server.
+  STEP 1 (tooling only, Bob.vmem read-only in a one-off container, scratch /output):
+  record_finding exists and cross-checks: true citation accepted "à valider", wrong PPID
+  rejected ("row has '888'"), no citation rejected; journal verify ok. The 15-question report
+  mentioned by the user was not attached: Q1/Q2/Q4/Q6/Q9 were not replayed one by one.
+  STEP 2: (1) vol3 cannot read Windows XP: `_legacy_hint` turns the symbol error into
+  "Windows XP / 2003 image detected ... use vol2_run" (+ next_steps, journaled tool_error);
+  (2) new read tool vol2_yarascan (one literal string or hex bytes in ONE process, no regex,
+  no rule file; quotes/backslashes escaped); (3) new sensitive tool mem_extract_vad (one VAD
+  of one process, vol2 vaddump or vol3 vadinfo --dump, SHA-256, registered as derived
+  evidence `@<result_id>/...`, always confirmed by a named analyst); (4) rule
+  browser_spawns_document_reader (medium, T1189 + T1203); (5) vol2_run had no `key`: added
+  (printkey -K). Also fixed, found by the real check: services.exe / lsass.exe under
+  winlogon.exe were flagged HIGH on XP (no wininit.exe before Vista). 51 tools; pytest 177.
+  Real figures on Bob.vmem (XP SP2 x86, 512 MiB): vol2_imageinfo 88.5 s; vol2 pslist 27
+  rows, 1 anomaly (firefox.exe 888 -> AcroRd32.exe 1752); printkey with key 187 s, 3 rows;
+  yarascan "http://" in PID 1752: 129 matches, 124 s; mem_extract_vad PID 888 base
+  0x5ad70000: 229376 bytes, same SHA-256 as a manual vaddump.
+  NOT verified: mem_extract_vad through vol3 on a real image (fake tool only); the form
+  confirmation of mem_extract_vad with a real client (the real check used a test callback,
+  not a human); vol2 dumpfiles -Q gave no file on this image, so file-object extraction is
+  not offered; the new tools over the live server on Bob.vmem (not under ./evidence).
+  NOT done on purpose (out of scope): password cracking from the NT hash, JavaScript /
+  shellcode analysis, VirusTotal or any outbound lookup (README §8, L7 §13).
 Done: 6.4 (12/10, request L. Plancke; L4 README, ET-01/ET-09) — inventory asked to the SERVER
   (in-memory MCP client): 49 tools, 1 prompt (playbook_poste_compromis(case, section)), 6
   resources. Of the 44 names given by the user, 43 exist; `verify_audit` is NOT a tool (only
@@ -623,6 +661,11 @@ prompts so the local-model client can use it.
   against the code; its tool tables are generated from the server
   (`scripts/tool_inventory.py --write`, `docs/tool_catalog.yaml`) and a test fails when they
   are out of date. After adding or changing a tool: update the catalog, run `--write`.
+- **6.5 Stale deployment + XP / memory-extraction gaps (done 12/10, on request):** container
+  recreated from this repo (COMPOSE_PROJECT_NAME, pinned volume names); XP hint on the vol3
+  tools; `vol2_run(key)`; `vol2_yarascan`; `mem_extract_vad` (sensitive, the only place where
+  the server sets vol2 `--dump-dir`, on its own result folder); rule
+  `browser_spawns_document_reader`; XP parent layout. `tests/test_memory_xp.py`.
 
 ### P7 — Évaluation comparative (J14–J15, 15–16/10) · L6 rapport d'évaluation
 Human runs the classic then the assisted investigation (CDC §6 protocol). Agent writes
@@ -935,3 +978,31 @@ statements and rejects one with a wrong IP.
   senior reviewer's name"; the code only requires an analyst name (no level, no second
   reviewer), while compliance.md marked over-confidence "fait". Now recorded as an écart; not
   implemented (decision for the team).
+- Two clones, root cause and fix (6.5, 12/10): the stale server answered a whole analysis
+  session (Bob.vmem, 15 questions) with 24 tools and no record_finding, one week after the
+  incident was first written down. Writing a risk in a README does not fix it: the fix was a
+  project name in .env, a `docker rm`, and a tool_status that names the commit. Residual:
+  COMPOSE_PROJECT_NAME lives in the untracked .env (a fresh clone copies it from
+  .env.example or is unprotected); the commit shown is the one read at start, so a server not
+  restarted after a pull still shows the old one (correct, but easy to misread).
+- Volatility 3 does not read Windows XP / 2003 (observed on Bob.vmem: "Symbol type not in
+  symbol_table_name1 SymbolTable: _ETHREAD", exit 1, 0 rows). Known limit of the tool. Before
+  6.5 the seven typed tools returned "0 rows (exit code 1)": an analyst or an LLM could read
+  it as "no process". Now an explicit message and a next step to vol2_run. Agent error caught
+  by the real check: the first detection looked for the text in stderr while vol3 prints it on
+  stdout; the unit test passed because the fake tool had been written from the same wrong
+  assumption. A fake must be copied from a captured real output, stream by stream.
+- Rules written for Vista+ gave two HIGH anomalies on a healthy XP process tree (services.exe
+  and lsass.exe started by winlogon.exe). Fixed for images without wininit.exe; other rules
+  and lists (system_dirs, expected parents) are still Vista+ and untested on XP.
+- vol2 yarascan builds a YARA rule around the caller's string (`$a = "<text>"`; a leading
+  "{" or "/" switches to hex or regex): a free string is rule injection. Mitigation: literal
+  text only, quotes and backslashes escaped by the server, "{" and "/" refused as first
+  character, hex bytes validated; `--yara-file` never passed.
+- A memory-region hash looks like a file hash: mem_extract_vad says in every answer that it
+  must not be compared with a file hash or a reputation service. The vol2 JSON renderer of
+  vaddump lists the VADs and writes nothing (exit 0): text mode is forced, and "nothing
+  extracted" is journaled as a tool_error.
+- Out of scope on purpose (6.5): cracking the NT hash, deobfuscating JavaScript / analysing
+  shellcode, VirusTotal. Residual: the analyst answers those outside the server, so outside
+  the journal (L7 §13).

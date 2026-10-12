@@ -8,11 +8,20 @@ office_parents: [winword.exe, excel.exe, powerpnt.exe, outlook.exe, msaccess.exe
                  visio.exe, onenote.exe]
 shells: [powershell.exe, pwsh.exe, cmd.exe, wscript.exe, cscript.exe, mshta.exe, rundll32.exe,
          regsvr32.exe, certutil.exe, bitsadmin.exe]
+# Browser -> document reader (6.5, seen on a Windows XP image: firefox.exe -> AcroRd32.exe).
+browsers: [firefox.exe, iexplore.exe, chrome.exe, msedge.exe, opera.exe, safari.exe, brave.exe]
+document_readers: [acrord32.exe, acrobat.exe, foxitreader.exe, foxitpdfreader.exe,
+                   sumatrapdf.exe, winword.exe, excel.exe, powerpnt.exe, wordview.exe]
 # Expected parent of system processes (Windows Vista and later).
 expected_parents:
   svchost.exe: [services.exe]
   services.exe: [wininit.exe]
   lsass.exe: [wininit.exe]
+# Windows XP / 2003 have no wininit.exe: winlogon.exe starts services.exe and lsass.exe. Used
+# only when the process list of the image holds no wininit.exe (6.5, false positive seen on XP).
+expected_parents_without_wininit:
+  services.exe: [winlogon.exe]
+  lsass.exe: [winlogon.exe]
 singletons: [lsass.exe, services.exe, wininit.exe]
 # Names compared by edit distance (1-2) for masquerading; kept to names of 7+ characters.
 system_binaries: [svchost.exe, lsass.exe, services.exe, csrss.exe, smss.exe, wininit.exe,
@@ -35,6 +44,17 @@ rules:
     next_steps:
       - {tool: vol_cmdline, args: {pid: "{pid}"}, why: "command line of the process started by Office"}
       - {tool: vol_netscan, args: {pid: "{pid}"}, why: "network connections of that process"}
+  # A browser opening a document in an external reader is also what a user does with a download:
+  # medium, a lead to verify (which document, what the reader did next), never a finding. No
+  # T1566.001: the parent/child pair says the document came through the browser, not by e-mail.
+  - id: browser_spawns_document_reader
+    severity: medium
+    attack: [T1189, T1203]
+    explanation: "{parent_name} (PID {ppid}) started the document reader {name} (PID {pid}): a document opened from the web, the usual path of a reader exploit (to verify)."
+    next_steps:
+      - {tool: vol_cmdline, args: {pid: "{pid}"}, why: "which document the reader opened"}
+      - {tool: vol_malfind, args: {pid: "{pid}"}, why: "injected code in the reader process"}
+      - {tool: vol_netscan, args: {pid: "{pid}"}, why: "network connections of the reader"}
   - id: encoded_powershell
     severity: high
     attack: [T1059.001, T1027]

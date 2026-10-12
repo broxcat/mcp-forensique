@@ -171,6 +171,9 @@ def _process_rules(ctx: dict[str, Any], fam: str, data: list[dict[str, Any]], ou
     office, shells = set(t["office_parents"]), set(t["shells"])
     counts: dict[str, list[dict[str, Any]]] = {}
     done: set[tuple[str, int]] = set()
+    expected = dict(t["expected_parents"])
+    if not any(str(p.get("name", "")).lower() == "wininit.exe" for p in procs.values()):
+        expected.update(t["expected_parents_without_wininit"])  # Windows XP / 2003 layout
     for row in data:
         pid = _int(_get(row, PID))
         if pid is None or (("row", pid) in done):
@@ -183,7 +186,10 @@ def _process_rules(ctx: dict[str, Any], fam: str, data: list[dict[str, Any]], ou
         rows = [row["_row"]]
         if name in shells and parent in office:
             out.flag("office_spawns_shell", rows, pid, name=name, ppid=ppid, parent_name=parent)
-        exp = t["expected_parents"].get(name)
+        if name in t["document_readers"] and parent in t["browsers"]:
+            out.flag("browser_spawns_document_reader", rows, pid, name=name, ppid=ppid,
+                     parent_name=parent)
+        exp = expected.get(name)
         if exp and parent and parent not in exp:
             out.flag("system_process_wrong_parent", rows, pid, name=name, ppid=ppid,
                      parent_name=parent, expected=" or ".join(exp))

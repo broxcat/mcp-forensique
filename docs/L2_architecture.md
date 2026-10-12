@@ -364,7 +364,9 @@ historique de navigation, shellbags, jump lists, SRUM, corbeille…).
   aide (`vol <plugin> -h`), jamais inventée.
 - Volatility 2 : `--plugins` (chargement de code Python arbitraire), `-w/--write` (écriture dans
   l'image) et `-D/--dump-dir` (écriture de fichiers) restent interdits ; les plugins vol2 qui
-  n'ont de sortie qu'avec `-D` sont refusés.
+  n'ont de sortie qu'avec `-D` sont refusés. Seule exception (6.5) : `mem_extract_vad` fixe
+  lui-même `--dump-dir` sur le dossier du résultat pour extraire une seule région mémoire, après
+  confirmation d'un analyste nommé ; l'appelant ne choisit jamais ce chemin.
 - Plugins sensibles (identifiants : `hashdump`, `lsadump`, `cachedump` ; extractions :
   `dumpfiles`, `procdump`, `pedump`, `--dump`…) : classe **action**, exécutés seulement après
   confirmation humaine nominative, journalisés dans tous les cas.

@@ -6,6 +6,7 @@ that the plugin's own help declares; anything else is refused."""
 from __future__ import annotations
 
 import json
+import os
 import re
 import secrets
 from pathlib import Path
@@ -25,6 +26,17 @@ SENSITIVE_VOL3 = re.compile(r"hashdump|lsadump|cachedump|dumpfiles|pedump|layerw
 SENSITIVE_VOL2 = {"hashdump", "lsadump", "cachedump", "truecryptmaster", "truecryptpassphrase"}
 KEY_RE = re.compile(r"^[^-\x00-\x1f][^\x00-\x1f]{0,511}$")
 PROFILE_RE = re.compile(r"^[A-Za-z0-9_]+$")
+# vol2 plugin to use when a typed vol3 tool cannot read the image (Windows XP / 2003).
+VOL2_EQUIVALENT = {"vol_pslist": "pslist", "vol_pstree": "pstree", "vol_cmdline": "cmdline",
+                   "vol_netscan": "connscan", "vol_malfind": "malfind", "vol_dlllist": "dlllist",
+                   "vol_printkey": "printkey"}
+# vol3 2.28 on an XP/2003 image: a symbol table is found but it has no _ETHREAD.
+XP_SIGNATURE = re.compile(r"Symbol type not in \S+ SymbolTable: _ETHREAD")
+NO_SYMBOLS = re.compile(r"Unable to validate the plugin requirements: .*symbol_table_name")
+LEGACY_PROFILE = re.compile(r"^Win(XP|2003)")
+YARA_TEXT = re.compile(r"^[\x20-\x7e]{3,128}$")
+YARA_HEX = re.compile(r"^[0-9A-Fa-f]{2}(?: ?[0-9A-Fa-f]{2}){1,63}$")
+DUMP_NAME = re.compile(r"(0x[0-9a-fA-F]+)-(0x[0-9a-fA-F]+)")
 
 
 class Approval(BaseModel):
@@ -54,6 +66,42 @@ def _pid(v: Any) -> int:
     return v
 
 
+def _key(v: Any) -> str:
+    if not isinstance(v, str) or not KEY_RE.match(v):
+        raise ValueError("key must be a registry path (no control character, no leading '-')")
+    return v
+
+
+def yara_string(text: Any, hex_bytes: Any) -> str:
+    """The ONE string vol2 yarascan searches (-Y): an escaped text or a hex byte sequence.
+    vol2 wraps it into `rule r1 {strings: $a = "<text>" condition: $a}`; a leading "{" or "/"
+    would make it a hex or regex string, and an unescaped quote would end the string and let
+    the caller write rule syntax."""
+    if (text is None) == (hex_bytes is None):
+        raise ValueError("give exactly one of text or hex_bytes")
+    if hex_bytes is not None:
+        if not isinstance(hex_bytes, str) or not YARA_HEX.match(hex_bytes.strip()):
+            raise ValueError("hex_bytes must be 2-64 bytes written as hex pairs, e.g. '4d 5a 90'")
+        h = hex_bytes.replace(" ", "").lower()
+        return "{ " + " ".join(h[i:i + 2] for i in range(0, len(h), 2)) + " }"
+    if not isinstance(text, str) or not YARA_TEXT.match(text):
+        raise ValueError("text must be 3-128 printable ASCII characters")
+    if text[0] in "{/":
+        raise ValueError("text cannot start with '{' or '/' (vol2 would read it as a hex or "
+                         "regex pattern): start one character later")
+    return text.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _printable(hexdata: str, wide: bool) -> str:
+    try:
+        raw = bytes.fromhex(hexdata)
+    except ValueError:
+        return ""
+    if wide:
+        raw = raw[::2]
+    return "".join(chr(b) if 0x20 <= b < 0x7f else "." for b in raw)
+
+
 class MemoryOps:
     """Mixed into ops.Engine (uses its cfg, actor, _policy, _restore_path, _page)."""
 
@@ -66,6 +114,8 @@ class MemoryOps:
                 return await self.sensitive_reason(orig.get("tool", ""), orig.get("params", {}))
             if tool == "disk_extract_file":
                 return await self.extract_file_sensitive(params)
+            if tool == "mem_extract_vad":
+                return "memory extraction (one VAD of one process)"
             if tool == "disk_extract":
                 from .engines.sleuthkit import SENSITIVE_TARGETS
                 return ("credential hives (SAM/SECURITY)"
@@ -115,13 +165,14 @@ class MemoryOps:
 
     async def _memory_result(self, tool: str, params: dict[str, Any], real: dict[str, Any],
                              path: Path, ps: Any, ev: dict[str, Any], r: dict[str, Any],
-                             engine: str, pid_filter: int | None = None) -> Any:
+                             engine: str, pid_filter: int | None = None,
+                             page: dict[str, Any] | None = None) -> Any:
         from .ops import Outcome  # circular at import time
 
         analysis = analyzers.analyze(self.cfg.output_root, ev["sha256"], r["plugin"],
                                      results.iter_rows(r["dir"]))
         filters = {"column": "PID", "equals": str(pid_filter)} if pid_filter is not None else {}
-        q = self._page(r["dir"], **filters)
+        q = self._page(r["dir"], **filters, **(page or {}))
         status = "" if r["exit_code"] == 0 else f" (exit code {r['exit_code']})"
         n_anom = len(analysis["anomalies"])
         extra: dict[str, Any] = {"exit_code": r["exit_code"],
@@ -139,8 +190,8 @@ class MemoryOps:
             summary=f"{total} rows from {r['plugin']}{status}. {n_anom} anomalies"
                     + (f" ({', '.join(sorted({a['severity'] for a in analysis['anomalies']}))})"
                        if n_anom else "") + ".",
-            rows=q["rows"], row_count=total, limit=q["limit"], result_id=r["result_id"],
-            truncated=q["truncated"], extra=extra,
+            rows=q["rows"], row_count=total, offset=q["offset"], limit=q["limit"],
+            result_id=r["result_id"], truncated=q["truncated"], extra=extra,
             next_call=None if pid_filter is None else {"tool": "query_results", "args": {
                 "result_id": r["result_id"], "column": "PID", "equals": str(pid_filter)}})
         return Outcome(payload, real, argv=r["argv"], engine=engine, evidence_sha256=ev["sha256"],
@@ -186,8 +237,48 @@ class MemoryOps:
             await self._confirm(tool, real, reason, conf)
         ev = evidence.check_before_use(self.cfg, path, self.actor)
         r = await volatility3.run(self.cfg, path, full, opts, ev["sha256"])
-        return await self._memory_result(tool, params, real, path, ps, ev, r,
-                                         f"volatility3 {r['version']}", pid_filter)
+        out = await self._memory_result(tool, params, real, path, ps, ev, r,
+                                        f"volatility3 {r['version']}", pid_filter)
+        self._legacy_hint(tool, params, ev, r, out)
+        return out
+
+    def _legacy_profiles(self, sha256: str) -> list[str]:
+        cache = Path(self.cfg.output_root) / ".toolcache" / "vol2_imageinfo.json"
+        return [p for p in _read_json(cache).get(sha256, {}).get("profiles", [])
+                if LEGACY_PROFILE.match(p)]
+
+    def _legacy_hint(self, tool: str, params: dict[str, Any], ev: dict[str, Any],
+                     r: dict[str, Any], out: Any) -> None:
+        """A vol3 run that failed on symbols says what to do instead of a raw symbol error:
+        Windows XP / 2003 images are not supported by Volatility 3 (known limit, not a bug)."""
+        if r["exit_code"] == 0 or not NO_SYMBOLS.search(r["stderr_tail"]):
+            return
+        profiles = self._legacy_profiles(ev["sha256"])
+        xp = bool(profiles) or bool(XP_SIGNATURE.search(r["stderr_tail"]))
+        plugin = VOL2_EQUIVALENT.get(tool)
+        if xp:
+            msg = ("Windows XP / 2003 image detected"
+                   + (f" (vol2 profile {profiles[0]})" if profiles else " (vol3 symbol table "
+                      "without _ETHREAD)")
+                   + ": Volatility 3 does not support it, so the vol_* tools and vol3_run "
+                     "cannot read this image. Use vol2_run"
+                   + (f" (plugin {plugin})" if plugin else "")
+                   + (f" with profile {profiles[0]}." if profiles
+                      else " with a profile from vol2_imageinfo."))
+        else:
+            msg = ("Volatility 3 found no usable symbol table for this image (no symbols for "
+                   "this Windows build, or offline symbol cache). If vol2_imageinfo suggests a "
+                   "profile, use vol2_run instead.")
+        steps = [{"tool": "vol2_imageinfo", "args": {"path": params["path"]},
+                  "why": "vol2 profile of this image"}]
+        if profiles and plugin:
+            steps = [{"tool": "vol2_run", "args": {"path": params["path"], "plugin": plugin,
+                                                    "profile": profiles[0]},
+                      "why": "same question with Volatility 2, which supports this image"}]
+        out.payload["summary"] = msg
+        out.payload["notes"] = [msg, *out.payload.get("notes", [])]
+        out.payload["next_steps"] = steps
+        out.error = msg
 
     async def _typed(self, tool: str, params: dict[str, Any], conf: Any = None) -> Any:
         return await self._vol3(tool, params, TYPED_VOL3[tool], conf)
@@ -274,7 +365,8 @@ class MemoryOps:
                              "vol2_imageinfo)")
         known = await volatility2.plugin_options(self.cfg, plugin)
         opts: list[str] = []
-        for name, flag, conv in (("pid", "--pid", _pid), ("offset", "--offset", _offset)):
+        for name, flag, conv in (("pid", "--pid", _pid), ("offset", "--offset", _offset),
+                                 ("key", "--key", _key)):
             if real.get(name) is not None:
                 if flag not in known:
                     raise ValueError(f"vol2 {plugin} has no {flag} option")
@@ -285,6 +377,139 @@ class MemoryOps:
         r = await volatility2.run(self.cfg, path, plugin, profile, opts, ev["sha256"])
         return await self._memory_result("vol2_run", params, real, path, ps, ev, r,
                                          "volatility2 2.6")
+
+    async def _vol2_profile(self, real: dict[str, Any], plugin: str) -> tuple[str, set[str]]:
+        inf = await volatility2.info(self.cfg)
+        if plugin not in inf.get("Plugins", {}):
+            raise ValueError(f"the installed vol2 has no {plugin} plugin")
+        profile = str(real["profile"])
+        if not PROFILE_RE.match(profile) or profile not in inf.get("Profiles", {}):
+            raise ValueError(f"unknown vol2 profile {profile!r} (see vol2_list_plugins / "
+                             "vol2_imageinfo)")
+        return profile, await volatility2.plugin_options(self.cfg, plugin)
+
+    async def op_vol2_yarascan(self, params: dict[str, Any], conf: Any = None) -> Any:
+        """One string searched in the address space of ONE process (vol2 yarascan -p -Y)."""
+        real, path, ps = self._prepare(params)
+        profile, known = await self._vol2_profile(real, "yarascan")
+        if real.get("pid") is None:
+            raise ValueError("pid is required: this tool searches the memory of one process")
+        extra = (["--wide"] if real.get("wide") else []) + (
+            ["--case"] if real.get("case_insensitive") else [])
+        missing = [f for f in ["--pid", "--yara-rules", *extra] if f not in known]
+        if missing:
+            raise ValueError(f"vol2 yarascan has no {', '.join(missing)} option")
+        opts = [f"--pid={_pid(real['pid'])}",
+                f"--yara-rules={yara_string(real.get('text'), real.get('hex_bytes'))}", *extra]
+        ev = evidence.check_before_use(self.cfg, path, self.actor)
+        r = await volatility2.run(self.cfg, path, "yarascan", profile, opts, ev["sha256"])
+        rows = []
+        for row in results.iter_rows(r["dir"]):
+            if "Data" not in row:  # text fallback: keep the lines as they are
+                rows.append({k: v for k, v in row.items() if k != "_row"})
+                continue
+            owner = str(row.get("Owner", ""))
+            m = re.search(r"Pid (\d+)", owner)
+            addr = row.get("Address")
+            rows.append({"Owner": owner, "PID": int(m.group(1)) if m else None,
+                         "Address": hex(addr) if isinstance(addr, int) else addr,
+                         "Text": _printable(str(row["Data"]), bool(real.get("wide"))),
+                         "Data": row["Data"]})
+        _write_rows(r["dir"], rows)
+        r["row_count"] = len(rows)
+        out = await self._memory_result(
+            "vol2_yarascan", params, real, path, ps, ev, r, "volatility2 2.6",
+            page={"limit": real.get("limit") or 50, "offset": real.get("offset") or 0})
+        out.payload["summary"] = (f"{len(rows)} matches in the memory of PID {real['pid']}"
+                                  + (f" (exit code {r['exit_code']})" if r["exit_code"] else "")
+                                  + ". Text = printable bytes from the match on.")
+        out.payload["notes"] = [
+            "Text is the server's ASCII rendering of the bytes in Data ('.' = non printable"
+            + ("; wide: every second byte" if real.get("wide") else "") + ").",
+            "0 match means the string is not in the pages of this process that are present in "
+            "the image (paged-out memory is not searched), not that it never existed."]
+        return out
+
+    async def op_mem_extract_vad(self, params: dict[str, Any], conf: Any = None) -> Any:
+        """Memory counterpart of disk_extract_file: ONE memory region (VAD) of ONE process is
+        written under the result folder, hashed and registered as derived evidence. Never a
+        whole process, never the whole image; always confirmed by a named analyst."""
+        real, path, ps = self._prepare(params)
+        pid = _pid(real.get("pid"))
+        try:
+            addr = _offset(real.get("address"))
+        except ValueError as exc:
+            raise ValueError(str(exc).replace("offset", "address")) from exc
+        cap = self.cfg.max_output_mb * 1024 * 1024
+        if real.get("profile"):
+            profile, known = await self._vol2_profile(real, "vaddump")
+            flags = ["--pid", "--base", "--max-size", "--dump-dir"]
+        else:
+            profile = None
+            full = volatility3.resolve_plugin("windows.vadinfo",
+                                              await volatility3.list_plugins(self.cfg))
+            known = set(await volatility3.plugin_options(self.cfg, full))
+            flags = ["--pid", "--address", "--maxsize", "--dump"]
+        missing = [f for f in flags if f not in known]
+        if missing:
+            raise ValueError(f"the installed engine has no {', '.join(missing)} option")
+        await self._confirm("mem_extract_vad", real,
+                            "memory extraction (one VAD of one process)", conf)
+        ev = evidence.check_before_use(self.cfg, path, self.actor)
+        if profile:
+            engine = "volatility2 2.6"
+            r = await volatility2.run(
+                self.cfg, path, "vaddump", profile,
+                [f"--pid={pid}", f"--base={addr:#x}", f"--max-size={cap}"], ev["sha256"],
+                dump=True)
+            produced = sorted((r["dir"] / "extracted").iterdir())
+        else:
+            r = await volatility3.run(self.cfg, path, full, [
+                "--pid", str(pid), "--address", str(addr), "--maxsize", str(cap), "--dump"],
+                ev["sha256"])
+            engine = f"volatility3 {r['version']}"
+            (r["dir"] / "extracted").mkdir()
+            produced = sorted(p for p in (r["dir"] / "files").iterdir() if p.is_file())
+        rows = []
+        for n, src in enumerate(produced, 1):
+            m = DUMP_NAME.search(src.name)
+            start, end = (m.group(1).lower(), m.group(2).lower()) if m else (None, None)
+            dest = r["dir"] / "extracted" / (f"pid{pid}_vad_{start}-{end}.dmp" if m
+                                             else f"pid{pid}_region_{n}.dmp")
+            os.replace(src, dest)
+            digest = results.sha256_file(dest)
+            os.chmod(dest, 0o444)
+            reg = evidence.register_derived(
+                self.cfg, dest, digest, self.actor, source_image=ev["path"],
+                source_sha256=ev["sha256"], pid=pid, vad_start=start, vad_end=end)
+            rows.append({"pid": pid, "vad_start": start, "vad_end": end,
+                         "path": evidence.relpath(self.cfg, dest), "size": reg["size"],
+                         "sha256": digest, "engine_file_name": src.name,
+                         "registration_audit_id": reg["audit_id"]})
+        _write_rows(r["dir"], rows)
+        r["row_count"] = len(rows)
+        out = await self._memory_result("mem_extract_vad", params, real, path, ps, ev, r, engine)
+        notes = ["The SHA-256 is the hash of a memory region as it was in the image (pages "
+                 "absent from the image are zero-filled). It is NOT the hash of the file on "
+                 "disk: do not compare it with a file hash from another source.",
+                 'Use the "path" column (@<result_id>/...) as input of ez_run (e.g. bstrings).']
+        if rows:
+            out.payload["summary"] = (f"{len(rows)} memory region of PID {pid} extracted, "
+                                      f"hashed and registered ({rows[0]['size']} bytes).")
+        else:
+            msg = (f"nothing extracted: PID {pid} has no VAD "
+                   + ("starting at" if profile else "containing") + f" {addr:#x} within "
+                   f"{self.cfg.max_output_mb} MB (see the vadinfo plugin for the regions of "
+                   "this process)")
+            out.payload["summary"], out.error = msg, msg
+            notes.insert(0, msg)
+        out.payload["notes"] = notes
+        return out
+
+
+def _write_rows(d: Path, rows: list[dict[str, Any]]) -> None:
+    (d / "rows.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False, default=str) + "\n"
+                                          for r in rows), encoding="utf-8")
 
 
 def _read_json(p: Path) -> dict[str, Any]:

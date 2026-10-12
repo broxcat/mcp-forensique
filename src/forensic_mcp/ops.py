@@ -29,7 +29,8 @@ from .memory_ops import TYPED_VOL3, MemoryOps
 from .stakeholder_ops import StakeholderOps
 from .redact import TOKEN, Pseudonymizer, case_for, pseudonymizer_for
 
-REPLAYABLE = set(TYPED_VOL3) | {"vol3_run", "vol2_run", "vol2_imageinfo", "ez_run"}
+REPLAYABLE = set(TYPED_VOL3) | {"vol3_run", "vol2_run", "vol2_imageinfo", "vol2_yarascan",
+                                 "ez_run"}
 MAX_LISTED = 500
 
 

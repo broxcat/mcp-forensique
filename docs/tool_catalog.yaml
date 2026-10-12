@@ -9,11 +9,11 @@ categories:
     description: "État du serveur, preuves, résultats, rejeu. Une preuve non encore enregistrée est hachée (SHA-256 complet) et journalisée `evidence_registered` au premier appel d'un outil d'analyse."
     tools: [tool_status, list_evidence, register_evidence, verify_evidence, query_results, list_results, replay]
   - title: "Volatility 3 (mémoire)"
-    description: "Image mémoire Windows sous la racine des preuves. Les anomalies (règles, ATT&CK), le décodage PowerShell et les IOC sont calculés par le serveur."
-    tools: [vol_list_plugins, vol_pslist, vol_pstree, vol_cmdline, vol_netscan, vol_malfind, vol_dlllist, vol_printkey, vol3_run]
+    description: "Image mémoire Windows sous la racine des preuves. Les anomalies (règles, ATT&CK), le décodage PowerShell et les IOC sont calculés par le serveur. Volatility 3 ne lit pas les images Windows XP / 2003 : ces outils le disent et renvoient vers `vol2_run`. `mem_extract_vad` fonctionne avec les deux moteurs."
+    tools: [vol_list_plugins, vol_pslist, vol_pstree, vol_cmdline, vol_netscan, vol_malfind, vol_dlllist, vol_printkey, vol3_run, mem_extract_vad]
   - title: "Volatility 2 (images anciennes)"
-    description: "Volatility 2.6 avec un profil ; `--plugins`, `-w` et `-D` ne sont jamais passés."
-    tools: [vol2_list_plugins, vol2_imageinfo, vol2_run]
+    description: "Volatility 2.6 avec un profil (seul moteur pour Windows XP / 2003). `--plugins` et `-w` ne sont jamais passés ; `-D` n'est jamais accepté d'un appelant (seul `mem_extract_vad` le fixe lui-même, vers le dossier du résultat)."
+    tools: [vol2_list_plugins, vol2_imageinfo, vol2_run, vol2_yarascan]
   - title: "Eric Zimmerman (journaux, $MFT, registre, artefacts Windows)"
     description: "17 outils EZ, options typées du registre `rules/ez_registry.json`. PECmd, SQLECmd, WxTCmd, SrumECmd et SumECmd ne tournent pas sous Linux : export fait sous Windows puis importé (« import Windows »)."
     tools: [ez_list_tools, ez_run, evtx_query, mft_search, shimcache_query, amcache_query, lnk_query, jumplist_query, recyclebin_query, ez_import, prefetch_query, browser_history, srum_query]
@@ -48,7 +48,9 @@ tools:
   vol3_run: {role: "Tout autre plugin Volatility 3, options typées vérifiées dans l'aide du plugin", journal: "`action_request` / `action_confirmed` pour un plugin sensible (identifiants, extraction) ou `dump=true`"}
   vol2_list_plugins: {role: "Plugins et profils Volatility 2.6 (sensibles et refusés signalés)"}
   vol2_imageinfo: {role: "Profils Volatility 2 suggérés pour une image (long, mis en cache par empreinte)"}
-  vol2_run: {role: "Tout plugin Volatility 2.6 avec un profil ; plugins exigeant `--dump-dir` refusés", journal: "`action_request` / `action_confirmed` pour un plugin d'identifiants"}
+  vol2_yarascan: {role: "Cherche UNE chaîne (texte littéral ou octets hexadécimaux, pas d'expression régulière) dans la mémoire d'UN processus"}
+  mem_extract_vad: {role: "Extrait UNE région mémoire (VAD) d'UN processus, la hache (SHA-256) et l'enregistre comme preuve dérivée ; jamais un processus entier", journal: "`action_request` / `action_confirmed` à chaque appel ; `evidence_registered` pour la région extraite"}
+  vol2_run: {role: "Tout plugin Volatility 2.6 avec un profil, options typées `pid`, `offset`, `key` ; plugins exigeant `--dump-dir` refusés", journal: "`action_request` / `action_confirmed` pour un plugin d'identifiants"}
   ez_list_tools: {role: "Les 17 outils EZ : artefacts acceptés, entrée, sortie, options typées, exécution Linux ou Windows"}
   ez_run: {role: "Lance un outil EZ sur un fichier ou dossier de preuve ; les 5 outils Windows-only sont refusés (voir `ez_import`)"}
   evtx_query: {role: "Journaux d'événements (EvtxECmd) : presets, identifiants, fenêtre UTC, texte ; un preset vide indique le journal ou la politique d'audit requis"}

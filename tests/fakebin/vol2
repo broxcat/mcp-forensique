@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fake Volatility 2.6 for unit tests: --info, -h, imageinfo, JSON output and a text-only plugin."""
 import json
+import os
 import sys
 
 INFO = """Volatility Foundation Volatility Framework 2.6
@@ -19,8 +20,11 @@ Plugins
 cmdline                    - Display process command-line arguments
 hashdump                   - Dumps passwords hashes (LM/NTLM) from memory
 imageinfo                  - Identify information for the image
+printkey                   - Print a registry key, and its subkeys and values
 procdump                   - Dump a process to an executable file sample
 pslist                     - Print all running processes by following the EPROCESS lists
+vaddump                    - Dumps out the vad sections to a file
+yarascan                   - Scan process or kernel memory with Yara signatures
 """
 GLOBAL = """Usage: Volatility - A memory forensics analysis platform.
 
@@ -42,7 +46,25 @@ PLUGIN_OPTS = {
                "  -P, --physical-offset", "                        Display physical offsets"],
     "cmdline": ["  -o OFFSET, --offset=OFFSET", "  -p PID, --pid=PID     Operate on these PIDs"],
     "procdump": ["  -D DUMP_DIR, --dump-dir=DUMP_DIR", "  -p PID, --pid=PID     PIDs"],
+    # copied from the real `vol2 <plugin> -h` (2.6 standalone)
+    "printkey": ["  -o HIVE_OFFSET, --hive-offset=HIVE_OFFSET",
+                 "                        Hive offset (virtual)",
+                 "  -K KEY, --key=KEY     Registry Key"],
+    "yarascan": ["  -o OFFSET, --offset=OFFSET",
+                 "  -p PID, --pid=PID     Operate on these Process IDs (comma-separated)",
+                 "  -C, --case            Make the search case insensitive",
+                 "  -W, --wide            Match wide (unicode) strings",
+                 "  -Y YARA_RULES, --yara-rules=YARA_RULES",
+                 "                        Yara rules (as a string)",
+                 "  -y YARA_FILE, --yara-file=YARA_FILE",
+                 "  -D DUMP_DIR, --dump-dir=DUMP_DIR"],
+    "vaddump": ["  -p PID, --pid=PID     Operate on these Process IDs (comma-separated)",
+                "  -D DUMP_DIR, --dump-dir=DUMP_DIR",
+                "                        Directory in which to dump the VAD files",
+                "  -b BASE, --base=BASE  Dump VAD with BASE address (in hex)",
+                "  -M 1073741824, --max-size=1073741824"],
 }
+URL = b"http://203.0.113.10/a.pdf"
 PSLIST = {"columns": ["Offset(V)", "Name", "PID", "PPID", "Thds", "Hnds", "Sess", "Wow64",
                       "Start", "Exit"],
           "rows": [[18446738026458983216, "System", 4, 0, 87, 547, -1, 0,
@@ -62,7 +84,7 @@ def main() -> int:
         print(INFO)
         return 0
     plugin = next((a for a in args if a in ("pslist", "cmdline", "hashdump", "imageinfo",
-                                             "procdump")), "")
+                                             "procdump", "printkey", "yarascan", "vaddump")), "")
     if "-h" in args:
         print(GLOBAL + "\n".join(PLUGIN_OPTS.get(plugin, [])))
         return 0
@@ -75,6 +97,31 @@ def main() -> int:
         doc = PSLIST
     elif plugin == "hashdump":
         doc = HASHDUMP
+    elif plugin == "printkey":
+        doc = {"columns": ["Registry", "KeyName", "ValName", "ValData"],
+               "rows": [["software", (opt(args, "--key") or "ROOT").rsplit("\\", 1)[-1],
+                         "VMware Tools", "C:\\Program Files\\VMware\\VMwareTray.exe"]]}
+    elif plugin == "yarascan":
+        rule = opt(args, "--yara-rules") or ""
+        wide = "--wide" in args
+        data = URL.decode().encode("utf-16-le") if wide else URL + b"\x00\x05"
+        hit = opt(args, "--pid") == "1752" and (rule == "http://" or rule.startswith("{ 68 74"))
+        doc = {"columns": ["Rule", "Owner", "Address", "Data"],
+               "rows": [["r1", "AcroRd32.exe: (Pid 1752)", 27492610, data.hex()]] if hit else []}
+    elif plugin == "vaddump":  # like the real one: files only in text mode
+        dump = opt(args, "--dump-dir")
+        if fmt == "json" or not dump:
+            return 1
+        lines = ["Pid        Process              Start      End        Result",
+                 "---------- -------------------- ---------- ---------- ------"]
+        if opt(args, "--pid") == "1752" and opt(args, "--base") == "0x1f0000":
+            name = "AcroRd32.exe.2268020.0x001f0000-0x001f0fff.dmp"
+            with open(os.path.join(dump, name), "wb") as fh:
+                fh.write(b"%PDF" + b"\x00" * 4092)
+            lines.append(f"      1752 AcroRd32.exe         0x001f0000 0x001f0fff {dump}/{name}")
+        with open(out, "w") as fh:
+            fh.write("\n".join(lines) + "\n")
+        return 0
     elif plugin == "cmdline":  # text-only plugin: fails in JSON, works in text
         if fmt == "json":
             print("ERROR   : volatility.debug    : Plugin cmdline is unable to produce output "

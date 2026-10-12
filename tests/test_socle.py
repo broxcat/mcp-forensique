@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from mcp import Client
+from mcp.types import ElicitResult
 
 from export_helpers import jsonl, make_export
 from forensic_mcp import audit, config, contract, evidence, results, runner, safety, schemas, server
@@ -38,7 +39,10 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
     pf, sq, sr = (make_export(cfg.evidence_root, "LAB", t, "mem.raw", {f"{t}.json": jsonl([{"x": 1}])},
                               stamp=f"2026100{i}T000000Z")
                   for i, t in enumerate(("PECmd", "SQLECmd", "SrumECmd")))
-    async with Client(server.build_server(cfg)) as c:
+    async def approve(context, params):  # mem_extract_vad always asks a named analyst
+        return ElicitResult(action="accept", content={"approve": True, "analyst": "L. Plancke"})
+
+    async with Client(server.build_server(cfg), elicitation_callback=approve) as c:
         run = await c.call_tool("vol3_run", {"path": "mem.raw", "plugin": "windows.pslist"})
         rid, aid = run.structured_content["result_id"], run.structured_content["audit_id"]
         m = {"path": "mem.raw"}
@@ -48,6 +52,9 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
                  ("vol_malfind", m), ("vol_dlllist", m), ("vol_printkey", {**m, "key": "Run"}),
                  ("vol2_list_plugins", {}), ("vol2_imageinfo", m),
                  ("vol2_run", {**m, "plugin": "pslist", "profile": "Win7SP1x64"}),
+                 ("vol2_yarascan", {**m, "profile": "WinXPSP2x86", "pid": 1752,
+                                    "text": "http://"}),
+                 ("mem_extract_vad", {**m, "pid": 4312, "address": "0x1f0000"}),
                  ("ez_list_tools", {}), ("ez_run", {**m, "tool": "bstrings"}),
                  ("evtx_query", {**m, "preset": "persistence"}), ("mft_search", m),
                  ("timeline", {"around": "2026-10-06T14:31:00Z"}),
@@ -200,7 +207,7 @@ async def test_tools_are_annotated_and_actions_only_on_demand(cfg) -> None:
     assert set(tools) == set(server.TOOL_CLASSES)
     on_demand = {n for n, c in server.TOOL_CLASSES.items() if c == "action_on_demand"}
     assert on_demand == {"vol_malfind", "vol3_run", "vol2_run", "replay", "disk_extract",
-                         "disk_extract_file"}
+                         "disk_extract_file", "mem_extract_vad"}
     for name, ann in tools.items():
         cls = server.TOOL_CLASSES[name]
         assert cls in ("read", "journal", "action_on_demand"), name

@@ -22,7 +22,7 @@ async def _run(cfg, plugin, pid=None):
 
 async def test_plugins_parsed_and_resolved(cfg) -> None:
     plugins = await volatility3.list_plugins(cfg)
-    assert "windows.netscan.NetScan" in plugins and len(plugins) == 12
+    assert "windows.netscan.NetScan" in plugins and len(plugins) == 13
     assert plugins["windows.malfind.Malfind"]["deprecated"]
     assert await volatility3.version(cfg) == "2.28.2"
     r = volatility3.resolve_plugin

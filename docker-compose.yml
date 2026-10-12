@@ -42,5 +42,9 @@ services:
       - forensic
 
 volumes:
+  # Fixed names: the data survives a change of Compose project name (6.5). They are the volumes
+  # created when the project was still named after the folder.
   vol3-cache:
+    name: scp-forensique_vol3-cache
   open-webui:
+    name: scp-forensique_open-webui
