@@ -46,6 +46,14 @@ Today: J16 (17/10). ONE deployment folder since 6.6a: the parent clone
   C:\Users\brokcat\Documents\scp-forensique\ is neutralised (every project file renamed
   `*.OLD`; only evidence/, output/ and this repo are left under it), and .env now holds
   ABSOLUTE EVIDENCE_DIR/OUTPUT_DIR, so a `compose up` run from anywhere mounts THIS repo.
+  Since 17/10 (user's request) EVIDENCE_DIR points OUTSIDE the git tree:
+  C:/Users/brokcat/Documents/scp-forensique/evidence (the parent's folder) — reason: evidence
+  must not live inside the repo. Checked identical before the move (one file
+  banking-malware.vmem, 2147483648 bytes, sha256 33879b41…5910c8, same mtime on both sides,
+  = the registry entry audit_id 159), and after `compose up -d`: /evidence still read-only
+  (touch -> Read-only file system), list_evidence 1 file with the same sha256,
+  verify_evidence "unchanged since registration", 51 tools / code de93915fada2, chain ok.
+  OUTPUT_DIR is unchanged (stays in the repo, with output/archive/).
   Check before every session: tool_status must give the tool count (51) and the commit of
   `git rev-parse --short=12 HEAD`; after a commit or a pull, `docker compose restart forensic`
   (the commit is read at server start). Tests still run in one-off containers from THIS repo
