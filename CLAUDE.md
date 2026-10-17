@@ -42,18 +42,36 @@ tested, not evaluated). Gantt impact: see §8 and L2 §12.
 ## 2. STATUS (update at the end of every task)
 
 ```
-Today: J11 (12/10). Deployment FIXED in 6.5: the container forensic-mcp now runs from THIS
-  repo (docker inspect: /app = ...\scp-forensique\scp-forensique), Compose project
-  `forensic-mcp` (COMPOSE_PROJECT_NAME in .env, added with the user's agreement), volumes
-  pinned by name in docker-compose.yml (scp-forensique_vol3-cache, scp-forensique_open-webui:
-  data kept). EVIDENCE_DIR stays ./evidence (user's choice): Bob.vmem is NOT there, it is in
-  the parent clone's evidence folder. Check before every session: tool_status must give the
-  tool count (51) and the commit of `git rev-parse --short=12 HEAD`; after a commit or a pull,
-  `docker compose restart forensic` (the commit is read at server start).
-  Tests still run in one-off containers from THIS repo
+Today: J16 (17/10). ONE deployment folder since 6.6a: the parent clone
+  C:\Users\brokcat\Documents\scp-forensique\ is neutralised (every project file renamed
+  `*.OLD`; only evidence/, output/ and this repo are left under it), and .env now holds
+  ABSOLUTE EVIDENCE_DIR/OUTPUT_DIR, so a `compose up` run from anywhere mounts THIS repo.
+  Check before every session: tool_status must give the tool count (51) and the commit of
+  `git rev-parse --short=12 HEAD`; after a commit or a pull, `docker compose restart forensic`
+  (the commit is read at server start). Tests still run in one-off containers from THIS repo
   (`docker compose run -d --rm --no-deps --name forensic-task65 forensic sleep infinity`).
-  Current task: 6.5 DONE (12/10). Feature freeze (M5) since 6.1 (5fb5e21); 6.2 to 6.5 added
-  after it on explicit request (L. Plancke).
+Current task: 6.6a DONE (17/10); next 6.6b (vol2/vol3 plugin coverage + preloaded symbols).
+  Feature freeze (M5) since 6.1 (5fb5e21); 6.2 to 6.6 added after it on explicit request
+  (L. Plancke).
+Done: 6.6a (17/10, request L. Plancke; ET-04, ET-08, chain of evidence) — the two clones had
+  forked: the parent kept 150 extra calls (199 events, last 2026-10-16T16:14Z, 42 of them
+  written that day by an ephemeral container started from the parent) while this repo's
+  journal stopped on 12/10 (99 events) with a registry listing files that no longer exist.
+  Measured first: evidence identical on both sides (banking-malware.vmem, sha256 33879B41…),
+  35 result folders byte-identical, 92 only in the parent, 26 only here, the two chains share
+  their first 43 lines then fork (not concatenable). Decision of the user (option A): the
+  parent chain becomes the live one. output/archive/2026-10-16-chain-parent/ (full copy taken
+  before anything was touched) and output/archive/2026-10-12-chain-nested/ (this repo's 12/10
+  chain: 99 events + its 26 result folders) both still verify (audit.verify_report ok, 199 and
+  99 lines); the live journal is the parent's (199 lines, sha 25937195…, chain ok, head
+  0f422010… after the first new call). Accepted cost of option A: list_findings shows 0
+  findings — the 3 `suggestion` events and the 02/10 report live in the nested archive, still
+  citable by result_id but no longer served. Nothing deleted: the parent's `*.OLD` items and
+  its own evidence/ + output/ stay on disk until the user removes them. After
+  `docker compose up -d`: /app, /evidence (ro) and /output all bind this repo, volume
+  scp-forensique_vol3-cache reused (26 MB; Compose warns it was created under the old project
+  name — harmless), tool_status = 51 tools, code 8805a65c1cc7 (main) = HEAD, 20/20 tools
+  installed, list_evidence 1 file, list_results 125, pytest 177 passed.
 Done: 6.5 (12/10, request L. Plancke; EF-01, EF-09, EXT-01, guardrails) — STEP 0 deployment:
   root cause = both clones are folders named `scp-forensique`, so both had the Compose project
   name `scp-forensique` and the fixed container name `forensic-mcp`; the last `up` (from the
