@@ -20,6 +20,9 @@ categories:
   - title: "Images disque (The Sleuth Kit)"
     description: "Images raw/dd, E01, VMDK, VHD lues sans montage ; les fichiers extraits s'utilisent ensuite comme `@<result_id>/<chemin>`."
     tools: [disk_info, disk_list, disk_extract, disk_extract_file]
+  - title: "Réseau (captures pcap, tshark)"
+    description: "Captures `.pcap` / `.pcapng` lues comme des fichiers (tshark, capinfos) : jamais d'interface réseau. Les filtres sont typés (adresse validée par `ipaddress`, port 1-65535, protocole d'une liste fermée, fenêtre UTC ISO-8601) et le filtre d'affichage est construit par le serveur ; les recherches de texte (domaine, URI, SNI) sont appliquées sur les lignes déjà analysées. Les conversations sont agrégées par le serveur (`-z` n'est jamais passé)."
+    tools: [pcap_info, pcap_conversations, pcap_dns_query, pcap_http_objects, pcap_tls_info, net_extract_pcap]
   - title: "Constats, chronologie et rapport"
     description: "Aucun de ces outils ne valide un constat : la validation est faite par un analyste, hors MCP."
     tools: [timeline, record_finding, list_findings, report_export, checklist_status]
@@ -68,6 +71,12 @@ tools:
   disk_list: {role: "Liste récursive des fichiers d'un système de fichiers (fls), fichiers effacés compris"}
   disk_extract: {role: "Extrait des artefacts par cibles fixes (icat), en lecture seule ; `sam_security` après confirmation", journal: "`evidence_registered` par fichier extrait (image source, inode) ; `action_request` / `action_confirmed` pour `sam_security`"}
   disk_extract_file: {role: "Extrait des fichiers choisis par inode dans la liste de `disk_list`, effacés compris", journal: "`evidence_registered` par fichier extrait ; `action_request` / `action_confirmed` pour une ruche d'identifiants"}
+  pcap_info: {role: "Résumé d'une capture (capinfos) : format, encapsulation, nombre de paquets, taille, limite de capture, premier et dernier paquet en UTC"}
+  pcap_conversations: {role: "Conversations d'une capture (adresses, ports, transport, paquets et octets par sens, premier/dernier UTC), agrégées par le serveur"}
+  pcap_dns_query: {role: "Requêtes et réponses DNS : nom demandé, type, réponses A/AAAA/CNAME, code de retour, heure UTC"}
+  pcap_http_objects: {role: "Inventaire des objets HTTP en clair (méthode, hôte, URI, agent, code, type et taille) ; aucun fichier n'est découpé de la capture"}
+  pcap_tls_info: {role: "Poignées de main TLS : SNI (nom contacté), version, suite de chiffrement, empreintes JA3/JA3S ; le contenu reste chiffré"}
+  net_extract_pcap: {role: "Copie les paquets correspondant à un filtre typé dans un nouveau pcapng, haché et enregistré comme preuve dérivée ; jamais la capture entière", journal: "`action_request` / `action_confirmed` à chaque appel ; `evidence_registered` pour la copie filtrée"}
   timeline: {role: "Chronologie UTC d'un cas (processus mémoire, EVTX, $MFT) à partir des résultats déjà produits ; chaque événement cite son résultat et sa ligne"}
   record_finding: {role: "Enregistre UN constat (fait, hypothèse, recommandation, observation = absence vérifiée) ; chaque valeur citée est recontrôlée, sinon rejet", journal: "`suggestion` (« à valider » ou rejeté par le serveur)"}
   list_findings: {role: "Constats et statut courant lu dans le journal"}

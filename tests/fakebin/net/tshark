@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Fake tshark (task 6.7). The "capture" is a JSON file {"packets": [{field: value}, ...]};
+`-T fields -e ...` prints the asked fields tab-separated and `-w` writes a filtered copy.
+
+The stub evaluates the SUBSET of the display-filter language the server can build (a bare
+protocol name, ip/ipv6.addr ==, tcp/udp.port ==, frame.time_epoch >= / <=, joined by && with
+|| inside a group), so the tests see real filtering; anything else would mean the server built
+a filter it is not supposed to be able to build, and the stub fails loudly.
+A file named *broken* fails like an unreadable capture.
+"""
+import json
+import re
+import sys
+
+PROTOCOLS = ("tcp", "udp", "icmp", "dns", "http", "tls")
+
+
+def _ports(p):
+    return {str(p.get(k)) for k in ("tcp.srcport", "tcp.dstport", "udp.srcport", "udp.dstport")}
+
+
+def _term(p, term):
+    term = term.strip()
+    protocols = str(p.get("frame.protocols", ""))
+    if term in PROTOCOLS:
+        return term in protocols.split(":")
+    m = re.fullmatch(r"(ip|ipv6)\.addr == (\S+)", term)
+    if m:
+        return m.group(2) in (p.get("ip.src"), p.get("ip.dst"),
+                              p.get("ipv6.src"), p.get("ipv6.dst"))
+    m = re.fullmatch(r"(tcp|udp)\.port == (\d+)", term)
+    if m:
+        return m.group(2) in _ports(p)
+    m = re.fullmatch(r"frame\.time_epoch (>=|<=) ([\d.]+)", term)
+    if m:
+        when = float(p.get("frame.time_epoch") or 0)
+        return when >= float(m.group(2)) if m.group(1) == ">=" else when <= float(m.group(2))
+    m = re.fullmatch(r"(\w+)\.(\S+) == (\d+)", term)      # e.g. tls.handshake.type == 1
+    if m:
+        return str(p.get(f"{m.group(1)}.{m.group(2)}", "")) == m.group(3)
+    m = re.fullmatch(r"(\w+)\.(\S+)", term)               # e.g. http.request (field present)
+    if m:
+        return m.group(1) in protocols.split(":")
+    print(f"fake tshark: unsupported filter term {term!r}", file=sys.stderr)
+    sys.exit(3)
+
+
+def _matches(p, filt):
+    for group in filt.split(" && "):
+        group = group.strip().lstrip("(").rstrip(")")
+        if not any(_term(p, alt) for alt in group.split(" || ")):
+            return False
+    return True
+
+
+argv = sys.argv[1:]
+if "--version" in argv:
+    print("TShark (Wireshark) 4.0.17 (fake stub)")
+    sys.exit(0)
+if "-r" not in argv:
+    print("tshark: no input file", file=sys.stderr)
+    sys.exit(1)
+infile = argv[argv.index("-r") + 1]
+if "broken" in infile:
+    print(f'tshark: The file "{infile}" appears to be damaged or corrupt.', file=sys.stderr)
+    sys.exit(2)
+try:
+    with open(infile, encoding="utf-8") as fh:
+        packets = json.load(fh)["packets"]
+except Exception as exc:  # same shape as the real message
+    print(f'tshark: The file "{infile}" is not a capture file ({exc}).', file=sys.stderr)
+    sys.exit(2)
+
+filt = argv[argv.index("-Y") + 1] if "-Y" in argv else ""
+if filt:
+    packets = [p for p in packets if _matches(p, filt)]
+
+if "-w" in argv:
+    with open(argv[argv.index("-w") + 1], "w", encoding="utf-8") as fh:
+        json.dump({"packets": packets}, fh)
+    sys.exit(0)
+
+fields = [argv[i + 1] for i, a in enumerate(argv) if a == "-e"]
+for p in packets:
+    print("\t".join(str(p.get(f, "")) for f in fields))

@@ -42,6 +42,13 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
     async def approve(context, params):  # mem_extract_vad always asks a named analyst
         return ElicitResult(action="accept", content={"approve": True, "analyst": "L. Plancke"})
 
+    # one-packet capture for the pcap_* tools (fake tshark reads a JSON "capture", task 6.7)
+    (Path(cfg.evidence_root) / "net.pcap").write_text(json.dumps({"packets": [
+        {"frame.number": 1, "frame.time_epoch": "1792161000.000000", "frame.len": 85,
+         "frame.protocols": "eth:ethertype:ip:udp:dns", "ip.src": "192.168.56.101",
+         "ip.dst": "203.0.113.10", "udp.srcport": 50000, "udp.dstport": 53,
+         "dns.qry.name": "c2.example.test"}]}), encoding="utf-8")
+
     async with Client(server.build_server(cfg), elicitation_callback=approve) as c:
         run = await c.call_tool("vol3_run", {"path": "mem.raw", "plugin": "windows.pslist"})
         rid, aid = run.structured_content["result_id"], run.structured_content["audit_id"]
@@ -81,7 +88,13 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
                  ("stakeholder_list", {}),
                  ("stakeholder_suggest", {"case": "", "incident_type": "exfiltration"}),
                  ("comms_log", {"case": "", "stakeholder_id": "S-0001", "direction": "sortante",
-                                "summary": "Appel au DPO", "at_utc": "2026-09-29T14:05:00Z"})]
+                                "summary": "Appel au DPO", "at_utc": "2026-09-29T14:05:00Z"}),
+                 ("pcap_info", {"path": "net.pcap"}),
+                 ("pcap_conversations", {"path": "net.pcap"}),
+                 ("pcap_dns_query", {"path": "net.pcap"}),
+                 ("pcap_http_objects", {"path": "net.pcap"}),
+                 ("pcap_tls_info", {"path": "net.pcap"}),
+                 ("net_extract_pcap", {"path": "net.pcap", "ip": "203.0.113.10"})]
         seen = {"vol3_run"}
         for tool, args in calls:
             r = await c.call_tool(tool, args)
@@ -207,7 +220,7 @@ async def test_tools_are_annotated_and_actions_only_on_demand(cfg) -> None:
     assert set(tools) == set(server.TOOL_CLASSES)
     on_demand = {n for n, c in server.TOOL_CLASSES.items() if c == "action_on_demand"}
     assert on_demand == {"vol_malfind", "vol3_run", "vol2_run", "replay", "disk_extract",
-                         "disk_extract_file", "mem_extract_vad"}
+                         "disk_extract_file", "mem_extract_vad", "net_extract_pcap"}
     for name, ann in tools.items():
         cls = server.TOOL_CLASSES[name]
         assert cls in ("read", "journal", "action_on_demand"), name

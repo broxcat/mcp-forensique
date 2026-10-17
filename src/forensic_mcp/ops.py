@@ -16,7 +16,7 @@ from mcp.types import CallToolResult
 
 from . import audit, contract, evidence, results, safety, schemas
 from .config import Config, load_tools
-from .engines import volatility3
+from .engines import tshark, volatility3
 from .artefact_ops import ArtefactOps
 from .checklist_ops import ChecklistOps
 from .crisis_ops import CrisisOps
@@ -26,11 +26,13 @@ from .findings_ops import FindingsOps
 from .report import ReportOps
 from .import_ops import ImportOps
 from .memory_ops import TYPED_VOL3, MemoryOps
+from .net_ops import NetOps
 from .stakeholder_ops import StakeholderOps
 from .redact import TOKEN, Pseudonymizer, case_for, pseudonymizer_for
 
 REPLAYABLE = set(TYPED_VOL3) | {"vol3_run", "vol2_run", "vol2_imageinfo", "vol2_yarascan",
-                                 "ez_run"}
+                                 "ez_run", "pcap_info", "pcap_conversations", "pcap_dns_query",
+                                 "pcap_http_objects", "pcap_tls_info"}
 MAX_LISTED = 500
 
 
@@ -77,7 +79,7 @@ def _rows_digest(rows: list[dict[str, Any]]) -> str:
     return hashlib.sha256(audit.canonical(rows).encode()).hexdigest()
 
 
-class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, ImportOps, FindingsOps,
+class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, FindingsOps,
              ReportOps, ChecklistOps, CrisisOps, StakeholderOps):
     """Operations bound to one Config (memory operations in memory_ops.MemoryOps)."""
 
@@ -183,6 +185,10 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, ImportOps, FindingsOps,
             vol3 = await volatility3.version(self.cfg)
         except Exception as exc:  # report, don't crash the listing
             vol3 = f"error: {exc}"
+        try:
+            net = await tshark.version(self.cfg)
+        except Exception as exc:
+            net = f"tshark error: {exc}"
         items = [{"tool": t, "installed": True, "exposed": t != "dotnet",
                   "version": vol3 if t == "vol3" else ("2.6" if t == "vol2" else None)}
                  for t in sorted(tools)]
@@ -190,7 +196,7 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, ImportOps, FindingsOps,
                   f"{self.started_utc}, llm_mode {self.cfg.llm_mode}")
         out = self._listing("tool_status", params, items,
                             f"{len(tools)} tools installed, exposed: vol3 {vol3}, vol2 2.6, "
-                            f"17 EZ tools, sleuthkit (disk_*) ; {server}")
+                            f"17 EZ tools, sleuthkit (disk_*), {net} (pcap_*) ; {server}")
         out.payload["notes"] = [server, f"evidence root {self.cfg.evidence_root}, output root "
                                         f"{self.cfg.output_root}"]
         return out

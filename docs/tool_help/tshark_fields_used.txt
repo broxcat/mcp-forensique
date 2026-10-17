@@ -1,0 +1,35 @@
+# Fields used by engines/tshark.py, as listed by `tshark -G fields` of the installed
+# version (TShark (Wireshark) 4.0.17 (Git v4.0.17 packaged as 4.0.17-0+deb12u3).). Written by scripts/capture_net_help.sh.
+dns.a
+dns.aaaa
+dns.cname
+dns.flags.rcode
+dns.flags.response
+dns.qry.name
+dns.qry.type
+frame.len
+frame.number
+frame.protocols
+frame.time_epoch
+http.content_length
+http.content_type
+http.host
+http.request.full_uri
+http.request.method
+http.request.uri
+http.response.code
+http.user_agent
+ip.dst
+ip.src
+ipv6.dst
+ipv6.src
+tcp.dstport
+tcp.srcport
+tls.handshake.ciphersuite
+tls.handshake.extensions_server_name
+tls.handshake.ja3
+tls.handshake.ja3s
+tls.handshake.type
+tls.handshake.version
+udp.dstport
+udp.srcport

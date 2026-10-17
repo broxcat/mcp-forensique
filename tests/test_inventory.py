@@ -17,15 +17,15 @@ spec = importlib.util.spec_from_file_location("tool_inventory", ROOT / "scripts"
 inv_mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(inv_mod)
 README = (ROOT / "README.md").read_text(encoding="utf-8")
-CATEGORY_WORDS = ["Socle", "Volatility 3", "Volatility 2", "Zimmerman", "disque", "Constats",
-                  "crise", "parties prenantes"]
+CATEGORY_WORDS = ["Socle", "Volatility 3", "Volatility 2", "Zimmerman", "disque", "Réseau",
+                  "Constats", "crise", "parties prenantes"]
 
 
 async def test_readme_tool_tables_are_the_servers(cfg) -> None:
     inv = await inv_mod.inventory(cfg)
     cat = inv_mod.catalog()
     names = [t["name"] for t in inv["tools"]]
-    assert inv["tool_count"] == len(names) == len(server.TOOL_NAMES) == 51
+    assert inv["tool_count"] == len(names) == len(server.TOOL_NAMES) == 57
     # the README block is exactly what the server + catalog generate (fails when out of date)
     block = inv_mod.readme_block(README)
     assert block == inv_mod.render(inv, cat), \

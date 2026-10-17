@@ -22,6 +22,7 @@ from .config import Config, load_config
 from .memory_ops import Approval
 from .ops import Engine
 from .server_disk import DISK_TOOLS, register_disk_tools
+from .server_net import NET_TOOLS, register_net_tools
 
 INSTRUCTIONS = (
     "Forensic MCP server (Volatility 3 and 2, Eric Zimmerman tools). Call list_evidence. "
@@ -35,6 +36,11 @@ INSTRUCTIONS = (
     "vol2_list_plugins). Windows XP / 2003 images are not read by Volatility 3: use "
     "vol2_imageinfo then vol2_run. vol2_yarascan searches one string in the memory of one "
     "process; mem_extract_vad extracts and hashes one memory region (analyst confirmation). "
+    "Network captures (.pcap / .pcapng): pcap_info first (period covered), then "
+    "pcap_conversations, pcap_dns_query, pcap_http_objects, pcap_tls_info; net_extract_pcap "
+    "keeps a filtered copy as new registered evidence (analyst confirmation). Capture filters "
+    "are typed (ip, port, proto, start/end): there is no free-form filter, and text searches "
+    "(host, domain, URI) are applied by the server on the parsed rows. "
     "Use query_results to filter or page a result. The server computes the "
     "facts (row_count, anomalies with ATT&CK IDs, decoded commands, IOCs): cite result_id, _row "
     "and audit_id for every claim and never recompute them; record every statement with "
@@ -54,7 +60,8 @@ TOOL_CLASSES = {
     "vol_malfind": "action_on_demand", "vol_dlllist": "read", "vol_printkey": "read",
     "vol3_run": "action_on_demand", "vol2_list_plugins": "read", "vol2_imageinfo": "read",
     "vol2_run": "action_on_demand", "vol2_yarascan": "read",
-    "mem_extract_vad": "action_on_demand", **DISK_TOOLS, "query_results": "read",
+    "mem_extract_vad": "action_on_demand", **DISK_TOOLS, **NET_TOOLS,
+    "query_results": "read",
     "list_results": "read", "replay": "action_on_demand", "record_finding": "journal",
     "list_findings": "read", "report_export": "journal", "checklist_status": "read",
     "crisis_add_event": "journal", "crisis_timeline": "read", "sitrep_draft": "journal",
@@ -264,6 +271,7 @@ def build_server(cfg: Config | None = None) -> MCPServer:
                                              "profile": profile}, ctx, confirmation)
 
     register_disk_tools(tool, run, ask)
+    register_net_tools(tool, run, ask)
 
     @tool("query_results")
     async def query_results(result_id: str, contains: str | None = None,

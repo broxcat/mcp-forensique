@@ -84,6 +84,20 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 USER analyst
 
+# Task 6.7 (approved 17/10/2026 by the user): pcap analysis with tshark. Capture files are read
+# as files; the container can NEVER capture (cap_drop ALL = no CAP_NET_RAW) and the server never
+# passes -i/-k, so no live interface is reachable. wireshark-common brings tshark's dissectors
+# plus capinfos, editcap and mergecap. Versions pinned to the bookworm amd64 binaries (same rule
+# as sleuthkit in 4.3c): a new wireshark security update makes the build FAIL on purpose —
+# review the release notes, then bump the pin here.
+USER root
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      wireshark-common=4.0.17-0+deb12u3 tshark=4.0.17-0+deb12u3 \
+ && rm -rf /var/lib/apt/lists/* \
+ && tshark --version | head -1
+USER analyst
+
 WORKDIR /app
 ENV PYTHONPATH=/app/src \
     FORENSIC_MCP_CONFIG=/app/forensic-mcp.docker.toml

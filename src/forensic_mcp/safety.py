@@ -27,10 +27,10 @@ def jail_path(path: str | Path, evidence_root: str | Path) -> Path:
     return resolved
 
 
-# Results whose extracted/ folder is a read-only input root: disk_extract(_file) and, since
-# 6.5, mem_extract_vad (vol2 vaddump / vol3 windows.vadinfo).
-EXTRACT_RE = re.compile(r"^[0-9]{8}-[0-9]{6}-(disk_extract|vol2_vaddump|vol3_windows\.vadinfo)"
-                        r"-[0-9a-f]{6}$")
+# Results whose extracted/ folder is a read-only input root: disk_extract(_file), since
+# 6.5 mem_extract_vad (vol2 vaddump / vol3 windows.vadinfo) and since 6.7 net_extract_pcap.
+EXTRACT_RE = re.compile(r"^[0-9]{8}-[0-9]{6}-(disk_extract|vol2_vaddump|vol3_windows\.vadinfo"
+                        r"|net_extract_pcap)-[0-9a-f]{6}$")
 
 
 def jail_input(path: str | Path, evidence_root: str | Path,

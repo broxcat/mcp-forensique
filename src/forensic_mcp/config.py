@@ -34,6 +34,8 @@ class Config:
     sleuthkit_dir: Path = Path("/usr/bin")    # mmls, fls, icat (task 4.3c)
     sleuthkit_prefix: list[str] = field(default_factory=list)  # e.g. [python] for test stubs
     max_extract_file_mb: int = 8192           # bound of one file copied by disk_extract
+    tshark_dir: Path = Path("/usr/bin")       # tshark, capinfos (task 6.7)
+    tshark_prefix: list[str] = field(default_factory=list)     # e.g. [python] for test stubs
 
     @property
     def audit_file(self) -> Path:
@@ -42,7 +44,7 @@ class Config:
 
 
 _PATH_KEYS = {"evidence_root", "output_root", "tools_file", "vol3_symbols_dir", "api_token_file",
-              "sleuthkit_dir"}
+              "sleuthkit_dir", "tshark_dir"}
 
 
 def load_config(path: str | Path | None = None) -> Config:

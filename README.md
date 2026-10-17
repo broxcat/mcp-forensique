@@ -89,7 +89,7 @@ deux clones ont le même nom de projet Compose. C'est arrivé pendant le projet 
 docker inspect forensic-mcp --format "{{range .Mounts}}{{.Source}} -> {{.Destination}}{{println}}{{end}}"
 ```
 
-  puis demander `tool_status` à l'assistant : le résumé donne le **nombre d'outils MCP** (51
+  puis demander `tool_status` à l'assistant : le résumé donne le **nombre d'outils MCP** (57
   pour cette version), le **commit du code chargé au démarrage du serveur** et l'heure de
   démarrage. Le commit doit être celui de `git rev-parse --short=12 HEAD` dans ce dépôt ; les
   modifications non commitées ne sont pas détectées.
@@ -139,7 +139,7 @@ défaut ; identifiants, extractions et `dump` ne s'exécutent qu'après confirma
 nommé dans le client MCP, sinon refus journalisé).
 
 <!-- tools:begin (généré par scripts/tool_inventory.py --write, ne pas éditer) -->
-**51 outils**, 1 prompt, 6 ressources (liste demandée au serveur). `*` = paramètre obligatoire. Chaque appel qui atteint le serveur, réussi, refusé ou en échec, écrit un `tool_call` au journal ; la colonne « Journal » donne ce qui s'y ajoute.
+**57 outils**, 1 prompt, 6 ressources (liste demandée au serveur). `*` = paramètre obligatoire. Chaque appel qui atteint le serveur, réussi, refusé ou en échec, écrit un `tool_call` au journal ; la colonne « Journal » donne ce qui s'y ajoute.
 
 ### Socle
 
@@ -213,6 +213,19 @@ Images raw/dd, E01, VMDK, VHD lues sans montage ; les fichiers extraits s'utilis
 | `disk_list` | Liste récursive des fichiers d'un système de fichiers (fls), fichiers effacés compris | `path*` (texte), `partition_offset` (entier), `path_contains` (texte), `deleted` (booléen) ; pagination `limit`, `offset` | lecture seule | — |
 | `disk_extract` | Extrait des artefacts par cibles fixes (icat), en lecture seule ; `sam_security` après confirmation | `path*` (texte), `targets*` (liste de liste fermée de 19 valeurs), `partition_offset` (entier), `include_deleted` (booléen) ; pagination `limit`, `offset` | sensible : confirmation d'un analyste nommé | `evidence_registered` par fichier extrait (image source, inode) ; `action_request` / `action_confirmed` pour `sam_security` |
 | `disk_extract_file` | Extrait des fichiers choisis par inode dans la liste de `disk_list`, effacés compris | `path*` (texte), `inodes*` (liste de entier), `partition_offset` (entier) ; pagination `limit`, `offset` | sensible : confirmation d'un analyste nommé | `evidence_registered` par fichier extrait ; `action_request` / `action_confirmed` pour une ruche d'identifiants |
+
+### Réseau (captures pcap, tshark)
+
+Captures `.pcap` / `.pcapng` lues comme des fichiers (tshark, capinfos) : jamais d'interface réseau. Les filtres sont typés (adresse validée par `ipaddress`, port 1-65535, protocole d'une liste fermée, fenêtre UTC ISO-8601) et le filtre d'affichage est construit par le serveur ; les recherches de texte (domaine, URI, SNI) sont appliquées sur les lignes déjà analysées. Les conversations sont agrégées par le serveur (`-z` n'est jamais passé).
+
+| Outil | Rôle | Paramètres | Classe | Journal (en plus de `tool_call`) |
+|---|---|---|---|---|
+| `pcap_info` | Résumé d'une capture (capinfos) : format, encapsulation, nombre de paquets, taille, limite de capture, premier et dernier paquet en UTC | `path*` (texte) | lecture seule | — |
+| `pcap_conversations` | Conversations d'une capture (adresses, ports, transport, paquets et octets par sens, premier/dernier UTC), agrégées par le serveur | `path*` (texte), `ip` (texte), `port` (entier), `proto` (tcp \| udp \| icmp \| dns \| http \| tls), `start` (texte), `end` (texte) ; pagination `limit`, `offset` | lecture seule | — |
+| `pcap_dns_query` | Requêtes et réponses DNS : nom demandé, type, réponses A/AAAA/CNAME, code de retour, heure UTC | `path*` (texte), `query_name_contains` (texte), `answer_a_contains` (texte), `ip` (texte), `start` (texte), `end` (texte) ; pagination `limit`, `offset` | lecture seule | — |
+| `pcap_http_objects` | Inventaire des objets HTTP en clair (méthode, hôte, URI, agent, code, type et taille) ; aucun fichier n'est découpé de la capture | `path*` (texte), `host_contains` (texte), `uri_contains` (texte), `content_type_contains` (texte), `ip` (texte), `port` (entier), `start` (texte), `end` (texte) ; pagination `limit`, `offset` | lecture seule | — |
+| `pcap_tls_info` | Poignées de main TLS : SNI (nom contacté), version, suite de chiffrement, empreintes JA3/JA3S ; le contenu reste chiffré | `path*` (texte), `server_name_contains` (texte), `ja3_contains` (texte), `ip` (texte), `port` (entier), `start` (texte), `end` (texte) ; pagination `limit`, `offset` | lecture seule | — |
+| `net_extract_pcap` | Copie les paquets correspondant à un filtre typé dans un nouveau pcapng, haché et enregistré comme preuve dérivée ; jamais la capture entière | `path*` (texte), `ip` (texte), `port` (entier), `proto` (tcp \| udp \| icmp \| dns \| http \| tls), `start` (texte), `end` (texte) | sensible : confirmation d'un analyste nommé | `action_request` / `action_confirmed` à chaque appel ; `evidence_registered` pour la copie filtrée |
 
 ### Constats, chronologie et rapport
 
@@ -337,6 +350,18 @@ analysés hors du conteneur durci.
   rétro-ingénierie de code malveillant (désobfuscation de JavaScript, analyse de shellcode),
   ni requête vers l'extérieur (pas de VirusTotal ni d'autre service de réputation : les
   preuves restent en environnement cloisonné).
+- **Captures réseau (tâche 6.7)** : les six outils `pcap_*` / `net_extract_pcap` lisent un
+  fichier `.pcap` / `.pcapng`, **jamais une interface** (`-i` et `-k` ne sont jamais passés et le
+  conteneur n'a aucune capability, donc aucune capture n'est possible). « Pas d'accès réseau à
+  l'exécution » est une **contrainte de code, pas une garantie d'isolement** : le conteneur a un
+  accès sortant réel (vérifié le 17/10), ce sont les argv construits par le serveur qui
+  n'autorisent aucune résolution de noms ni mise à jour (`-n` systématique, aucun socket ouvert
+  par le serveur). Un flux chiffré reste chiffré : `pcap_tls_info` donne le SNI et JA3, pas le
+  contenu. `pcap_http_objects` **inventorie** les objets HTTP en clair (métadonnées) et ne
+  découpe aucun fichier de la capture (`--export-objects` n'est jamais passé) ; pour conserver
+  un flux, `net_extract_pcap` en écrit une copie filtrée, enregistrée comme preuve dérivée.
+  **Pas de détection par signatures** : Suricata / `ids_scan` est reporté après la soutenance,
+  Zeek n'est pas packagé dans Debian bookworm.
 - **17 outils EZ, pas 18** : Hasher n'a pas de build .NET 9, il n'est pas installé.
 - **MFTECmd non vérifié sur une $MFT réelle** (aucun échantillon) : les noms de colonnes de
   `mft_search` sont supposés ; EvtxECmd, lui, a été vérifié sur de vrais journaux.
@@ -368,7 +393,7 @@ Détail et cas observés : `CLAUDE.md` §11 et [`docs/L7_note_risques.md`](docs/
 | Garde-fou | Mise en œuvre |
 |---|---|
 | Lecture seule | montage `:ro` ; jail de chemins (`resolve` + `is_relative_to`, liens résolus) ; seconde racine en lecture seule réservée aux extraits de `disk_extract` |
-| Pas d'argument libre | noms de plugins et d'outils issus de la liste découverte ou du registre ; chaque option est typée et vérifiée dans l'aide réelle de l'outil (`docs/tool_help/`) |
+| Pas d'argument libre | noms de plugins et d'outils issus de la liste découverte ou du registre ; chaque option est typée et vérifiée dans l'aide réelle de l'outil (`docs/tool_help/`) ; les filtres de capture sont construits par le serveur à partir de valeurs typées (aucune chaîne de l'appelant dans l'argv), et `-X`, `-z`, `-o`, `-i`, `-k`, `--export-objects` ne sont jamais passés à tshark (`-w` seulement vers le dossier du résultat) |
 | Traçabilité | journal `/output/audit.jsonl` chaîné par SHA-256 : chaque appel (y compris refusé ou en échec), chaque enregistrement de preuve, chaque constat, chaque décision ; `replay` rejoue un appel et compare la sortie |
 | Chaîne de preuve | SHA-256 complet avant la première analyse, contrôle taille/date avant chaque appel (preuve modifiée ⇒ refus), recontrôle « après » (`verify_evidence`, export final) |
 | Validation humaine | actions sensibles après confirmation nominative dans le client MCP ; constats validés hors bande (§6) ; l'IA ne peut pas valider |
@@ -395,6 +420,12 @@ paquets Python par version exacte (`requirements.lock`), runtime .NET 9.0.20, pa
 forensiques Debian par version, Open WebUI par empreinte, et **SHA-256 de chaque fichier
 téléchargé** (script d'installation .NET, zip de Volatility 2, les 17 zips EZ dans
 `rules/ez_zips.sha256`).
+
+Paquets forensiques Debian épinglés : `sleuthkit=4.11.1+dfsg-1+b1`, `ewf-tools=20140813-1+b1`,
+et depuis la tâche 6.7 `wireshark-common=4.0.17-0+deb12u3` et `tshark=4.0.17-0+deb12u3` (tshark,
+capinfos, editcap, mergecap). Wireshark reçoit des mises à jour de sécurité fréquentes : quand
+Debian en publie une, **le build échoue volontairement** sur la version épinglée — relire la
+publication, puis mettre à jour l'épinglage dans le `Dockerfile`.
 
 Les URL des zips EZ ne portent pas de version : leurs empreintes ont été relevées au premier
 usage (03/10/2026). **Quand Eric Zimmerman publie une nouvelle version, le build échoue

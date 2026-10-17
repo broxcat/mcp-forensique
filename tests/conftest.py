@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from forensic_mcp.config import Config
-from forensic_mcp.engines import volatility2, volatility3, zimmerman
+from forensic_mcp.engines import tshark, volatility2, volatility3, zimmerman
 
 FAKEBIN = Path(__file__).parent / "fakebin"
 
@@ -29,7 +29,9 @@ def cfg(tmp_path: Path) -> Config:
     volatility3._cache.clear()
     volatility3._opt_cache.clear()
     volatility2._cache.clear()
+    tshark._version.clear()
     return Config(evidence_root=ev, output_root=tmp_path / "output", tools_file=tools,
                   api_token_file=tmp_path / "secrets" / "api_token", timeout_seconds=30,
                   sleuthkit_dir=FAKEBIN / "disk", sleuthkit_prefix=[sys.executable],
+                  tshark_dir=FAKEBIN / "net", tshark_prefix=[sys.executable],
                   allowed_hosts=["localhost:8000", "127.0.0.1:8000"])

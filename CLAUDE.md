@@ -58,9 +58,36 @@ Today: J16 (17/10). ONE deployment folder since 6.6a: the parent clone
   `git rev-parse --short=12 HEAD`; after a commit or a pull, `docker compose restart forensic`
   (the commit is read at server start). Tests still run in one-off containers from THIS repo
   (`docker compose run -d --rm --no-deps --name forensic-task65 forensic sleep infinity`).
-Current task: 6.6a DONE (17/10); next 6.6b (vol2/vol3 plugin coverage + preloaded symbols).
-  Feature freeze (M5) since 6.1 (5fb5e21); 6.2 to 6.6 added after it on explicit request
-  (L. Plancke).
+Current task: 6.6a and 6.7 DONE (17/10). STILL OPEN: 6.6b (typed options of vol3_run/vol2_run
+  so every announced plugin is runnable + preloaded symbol packs: needs the user's choice
+  between windows+mac+linux (885 MiB), windows only (801 MiB) or none, then a Dockerfile
+  change). Feature freeze (M5) since 6.1 (5fb5e21); 6.2 to 6.7 added after it on explicit
+  request (L. Plancke).
+Done: 6.7 (17/10, request L. Plancke; EXT-03, outside the CDC) — network forensics on capture
+  FILES, 6 tools (51 -> 57): pcap_info (capinfos -M -S, one typed row, snapshot-length
+  warning), pcap_conversations (the server aggregates the parsed packets: both directions,
+  bytes/packets per direction, first/last UTC — tshark's own `-z conv` is never used),
+  pcap_dns_query, pcap_http_objects (inventory of the HTTP objects, no file carved),
+  pcap_tls_info (SNI, JA3/JA3S), net_extract_pcap (filtered pcapng copy, confirmed by a named
+  analyst, hashed, 0444, registered as derived evidence, reusable as "@<result_id>/...": new
+  prefix in safety.EXTRACT_RE). engines/tshark.py: 4 typed views (packets, dns, http, tls),
+  one parse per (capture, view, filter) cached in output/.toolcache/tshark.json, filters BUILT
+  from typed values (ipaddress, 1-65535, closed protocol list, datetime.fromisoformat) with
+  text searches applied on the rows; FORBIDDEN -X -z -o -i -k --export-objects (tshark only:
+  capinfos' argv is fixed), -w only towards the result folder, -n always; verify_flags()
+  checks every flag against docs/tool_help/{tshark,capinfos}.txt (rule 6) and
+  scripts/capture_net_help.sh captures it. Dockerfile: wireshark-common=4.0.17-0+deb12u3 and
+  tshark=4.0.17-0+deb12u3 pinned (apt cannot run IN the container — all capabilities dropped —
+  so the version was read from the Debian package index; a security update will fail the build
+  on purpose). Real check: tests/pcap_fixture.py writes a real libpcap file byte by byte (DNS
+  query/answer, HTTP GET /a.ps1 + 200, TLS ClientHello with SNI c2.example.test, client
+  192.168.56.101 -> 203.0.113.10) and the REAL tshark 4.0.17 reads it end to end: 5 packets,
+  2 DNS rows with the A answer, 1 HTTP object, 1 SNI, 3 conversations, net_extract_pcap keeps
+  3 packets and the copy is re-read by pcap_tls_info. pytest 205 passed (tests/test_net.py =
+  28, fake stubs tests/fakebin/net/{tshark,capinfos}). Deferred after the defence (user's
+  decision): ids_scan / Suricata, Zeek (not packaged in bookworm) — no signature detection.
+  Limit written down as a residual risk (§11, README §8): the container HAS real outbound
+  access, so "no network at runtime" is a code constraint (argv), not isolation.
 Done: 6.6a (17/10, request L. Plancke; ET-04, ET-08, chain of evidence) — the two clones had
   forked: the parent kept 150 extra calls (199 events, last 2026-10-16T16:14Z, 42 of them
   written that day by an ephemeral container started from the parent) while this repo's
@@ -578,6 +605,7 @@ and validate every tool response against it in tests.
 | EF-07 lab SIEM query | C | only if time after M5 | EF-15 stakeholder board | C | 6.2 (done 05/10, on request) |
 | EF-08 collection checklist | M | 5.1 | ET-01…ET-09 | — | see §4, 4.x, 5.x, 7.x |
 | EXT-01 vol2 + all vol3 plugins (Décision J3) | M (user) | 4.2 | EXT-02 17 EZ tools + disk image (Décision J3) | M (user) | 4.3a/b/c |
+| EXT-03 pcap network forensics (user, 16-17/10) | M (user) | 6.7 | EXT-03b ids_scan / Suricata | — | deferred after the defence |
 | GF-VAL out-of-band validation of findings + `report_export` (CDC §5 human validation, over-confidence, traceability) | M (user, 02/10) | after 4.4 | | | |
 
 **Gantt impact of the Décision J3 (proposal, to be approved):** 4.3 is split —
@@ -692,6 +720,21 @@ prompts so the local-model client can use it.
   tools; `vol2_run(key)`; `vol2_yarascan`; `mem_extract_vad` (sensitive, the only place where
   the server sets vol2 `--dump-dir`, on its own result folder); rule
   `browser_spawns_document_reader`; XP parent layout. `tests/test_memory_xp.py`.
+- **6.6 One deployment folder + vol2/vol3 coverage (on request, 16–17/10):** 6.6a (done 17/10)
+  removed the duplicate project folder and kept ONE live audit chain (see STATUS);
+  6.6b (open) widens the typed options of `vol3_run`/`vol2_run` so every announced plugin is
+  really runnable, and preloads the symbol packs — needs a Dockerfile change (user's choice
+  between the three packs, Windows only, or none).
+- **6.7 Network forensics (EXT-03, scoped and approved 16–17/10, done 17/10):** six tools on
+  capture FILES — `pcap_info` (capinfos), `pcap_conversations` (aggregated by the server),
+  `pcap_dns_query`, `pcap_http_objects` (inventory only), `pcap_tls_info` (SNI, JA3),
+  `net_extract_pcap` (filtered copy, confirmed, hashed, registered, reusable as
+  `@<result_id>/...`). `engines/tshark.py` builds every display filter from typed values;
+  `-X -z -o -i -k --export-objects` are never passed, `-w` only towards the result folder.
+  Dockerfile: `wireshark-common`/`tshark` 4.0.17-0+deb12u3 pinned. `tests/test_net.py` +
+  `tests/pcap_fixture.py` (a real pcap built byte by byte, read by the real tshark).
+  **Deferred after the defence (user's decision):** `ids_scan` / Suricata (and Zeek, not in
+  bookworm) — signature detection is NOT part of this server.
 
 ### P7 — Évaluation comparative (J14–J15, 15–16/10) · L6 rapport d'évaluation
 Human runs the classic then the assisted investigation (CDC §6 protocol). Agent writes
@@ -894,6 +937,30 @@ statements and rejects one with a wrong IP.
 - Encoded blobs defeat pseudonymisation: the base64 of an encoded PowerShell command still
   carries the real IP/URL in cloud mode (the server-decoded text is pseudonymised, the raw
   argument is not).
+- "No network access at runtime" is a CODE constraint, not isolation (6.7, measured 17/10): the
+  container reaches https://deb.debian.org in 0.11 s, DNS works. What prevents a lookup is the
+  argv the server builds (`tshark -n` always: no DNS, no OUI, no update check) and the fact that
+  the server opens no socket of its own. Mitigation: the constraint is tested on the argv, not
+  assumed from the network; an analyst must not read "offline" into it. Residual: anything that
+  runs in that container with its own argv (a shell, a future tool) can talk to the Internet.
+- A display filter is a language: `pcap_*` with a free-form filter would be an injection path
+  (`ip="203.0.113.10 || ip.addr == 10.0.0.1"` would silently widen the answer, and a filter can
+  reference files). Mitigation (6.7): the filter is built server-side from typed values only —
+  `ipaddress.ip_address`, ports 1-65535, a closed protocol list, `datetime.fromisoformat` — and
+  text searches (domain, URI, SNI) are applied on the parsed rows, never in the argv.
+- A flag deny-list is per tool, not per letter (6.7): the first network engine shared one
+  FORBIDDEN set between tshark and capinfos and refused its own `pcap_info` call, because
+  capinfos `-o` means "chronological status" while tshark `-o` overrides any preference. Same
+  family as the `-D`/`--dump-dir` lesson: deny-lists need the tool's own help, allowlists stay
+  the rule (capinfos' argv is fully fixed and holds no caller value).
+- ISO-8601 text does not compare in time order when the fraction is optional (found by the 6.7
+  tests): `min("…01Z", "…01.200000Z")` returns the later instant because "." < "Z". The first
+  packet time of a conversation was wrong by 200 ms — small here, but it is the kind of value a
+  report cites. Mitigation: keep time bounds on the epoch, format once at the end.
+- Captures bound what can be said: "0 packet matched" means nothing in THIS capture matches
+  (the capture may start too late, miss the interface, or the traffic may be tunnelled), and TLS
+  only yields SNI/JA3 — an absent SNI (ECH) is not an absent connection. Every pcap tool says
+  so in its notes; absence stays an observation, never a proof.
 - Result ids are not unique per tool_call (4.x/5.1): query_results journals the SAME result_id as
   the call that produced it, without its input path. The first checklist_status version mapped
   result -> case from the last tool_call and lost the case of every queried result (F-0001 not

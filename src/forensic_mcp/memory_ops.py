@@ -116,6 +116,8 @@ class MemoryOps:
                 return await self.extract_file_sensitive(params)
             if tool == "mem_extract_vad":
                 return "memory extraction (one VAD of one process)"
+            if tool == "net_extract_pcap":
+                return "network extraction (filtered copy of a capture)"
             if tool == "disk_extract":
                 from .engines.sleuthkit import SENSITIVE_TARGETS
                 return ("credential hives (SAM/SECURITY)"
