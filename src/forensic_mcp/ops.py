@@ -384,6 +384,22 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
                              f"(replayable: {sorted(REPLAYABLE)})")
         if orig.get("outcome") != "ok":
             raise ValueError(f"audit_id {params['audit_id']} did not succeed; nothing to compare")
+        if orig.get('result_id'):
+            results.verify_result(self.cfg, orig['result_id'])
+            meta = results.read_meta(results.result_dir(self.cfg.output_root, orig['result_id']))
+            if meta.get('input_path'):
+                src = Path(meta['input_path'])
+                self._policy(src)
+                if src.is_file():
+                    verified = evidence.verify_full(self.cfg, src, self.actor)
+                    if not verified['matches_registration']:
+                        raise safety.SafetyError('replay evidence changed since registration')
+                elif src.is_dir():
+                    from .import_ops import content_digest
+                    if content_digest(src) != meta.get('input_sha256'):
+                        raise safety.SafetyError('replay evidence directory changed')
+                else:
+                    raise safety.SafetyError('replay evidence missing')
         from .ez_ops import FORCE_REPLAY
         token = FORCE_REPLAY.set(True)
         try:
