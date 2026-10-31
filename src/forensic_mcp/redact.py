@@ -86,11 +86,24 @@ def source_image(cfg: Config, path: Path | str) -> Path | None:
     p, out = Path(path).resolve(), Path(cfg.output_root).resolve()
     if not p.is_relative_to(out):
         return None
-    meta = out / p.relative_to(out).parts[0] / "meta.json"
-    if not meta.is_file():
-        return None
-    m = json.loads(meta.read_text(encoding="utf-8"))
-    return Path(m["input_path"]) if m.get("tool") == "disk_extract" and m.get("input_path") else None
+    seen = set()
+    for _ in range(32):
+        if not p.is_relative_to(out):
+            if not p.is_relative_to(Path(cfg.evidence_root).resolve()):
+                raise SafetyError("derived source outside evidence root")
+            return p
+        rid = p.relative_to(out).parts[0]
+        if rid in seen:
+            raise SafetyError("cyclic evidence provenance")
+        seen.add(rid)
+        meta = out / rid / "meta.json"
+        if not meta.is_file():
+            raise SafetyError("missing evidence provenance")
+        m = json.loads(meta.read_text(encoding="utf-8"))
+        if not m.get("input_path"):
+            raise SafetyError("missing parent evidence")
+        p = Path(m["input_path"]).resolve()
+    raise SafetyError("evidence provenance exceeds 32 levels")
 
 
 def pseudonymizer_for(cfg: Config, case: Case) -> "Pseudonymizer | None":
