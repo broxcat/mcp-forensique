@@ -228,7 +228,9 @@ async def test_client_case_refused_in_cloud_mode(cfg) -> None:
     path = _case(cfg, "client")
     cfg.llm_mode = "cloud"
     r = await _call(cfg, "vol3_run", {"path": path, "plugin": "windows.cmdline"})
-    assert r.is_error and "classified 'client'" in r.content[0].text
+    assert r.is_error and 'inspect the server journal locally' in r.content[0].text
+    assert "classified 'client'" in _events(cfg, 'tool_call')[-1]['error']
+    assert path not in r.content[0].text
     assert _events(cfg, "tool_call")[-1]["outcome"] == "refused"
     assert not _events(cfg, "evidence_registered")  # refused before hashing
     listing = (await _call(cfg, "list_evidence", {})).structured_content
