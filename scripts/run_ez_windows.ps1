@@ -218,4 +218,4 @@ $manifest = [ordered]@{
 }
 [IO.File]::WriteAllText((Join-Path $exportDir 'manifest.json'), ($manifest | ConvertTo-Json -Depth 6),
                         (New-Object Text.UTF8Encoding $false))
-Write-Host "Done: exit $($p.ExitCode), $($outputs.Count) output file(s). Import it with ez_import(tool='$Tool', path='$(Get-RelativePosix $exportDir $root)')."
+Write-Host "Done: exit $($p.ExitCode), $($outputs.Count) output file(s) in $exportDir. Verify and integrate this export as new evidence before calling ez_import with its evidence-relative path."
