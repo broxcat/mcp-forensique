@@ -126,9 +126,9 @@ class Policies:
     def __init__(self, policies):
         self.policies = [p for p in policies if p is not None]
 
-    def redact(self, obj):
+    def redact(self, obj, key=''):
         for p in self.policies:
-            obj = p.redact(obj)
+            obj = p.redact(obj, key)
         return obj
 
     def restore(self, obj):
