@@ -78,3 +78,11 @@ EVTX et MFT sont rejouables avec les paramètres journalisés. Un contexte propr
 à l’appel désactive les deux chemins de cache EZ, sans affecter les autres appels.
 Les événements métier restent reconstruits par réduction déterministe du journal,
 sans réinsérer suggestions ou décisions humaines.
+
+## R10 — Correspondances IOC (CDC §6 O2)
+
+Les adresses sont comparées comme adresses IP ; les domaines, URL, empreintes,
+processus et chemins utilisent des limites de token adaptées au type.
+Le score distingue IOC exploratoires, validés et rejetés par l’analyste.
+Un rejet ne contribue plus au rappel exploratoire. Aucune vérité terrain réelle
+n’est ajoutée : le fichier de lab reste à remplir par l’équipe.
