@@ -143,6 +143,29 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
     def _policy(self, path: Path | None) -> Pseudonymizer | None:
         return pseudonymizer_for(self.cfg, case_for(self.cfg, path))
 
+    def _result_policy(self, rid: str, seen: set | None = None) -> Any:
+        seen = set() if seen is None else seen
+        if rid in seen or len(seen) >= 32:
+            raise safety.SafetyError("invalid result provenance")
+        seen.add(rid)
+        m = results.read_meta(results.result_dir(self.cfg.output_root, rid))
+        if m.get("input_path"):
+            return self._policy(Path(m["input_path"]))
+        if "policy_sources" not in m and self.cfg.llm_mode == "cloud":
+            raise safety.SafetyError("result has no classification provenance; regenerate locally")
+        from .redact import Policies
+        return Policies([self._result_policy(s, set(seen)) for s in m.get("policy_sources", [])])
+
+    def _findings_policy(self, findings: list[dict]) -> Any:
+        from .redact import Policies
+        policies = []
+        for f in findings:
+            citations = f.get("citation_list", [])
+            if not citations and self.cfg.llm_mode == "cloud":
+                raise safety.SafetyError("finding has no classification provenance")
+            policies.extend(self._result_policy(c["result_id"]) for c in citations)
+        return Policies(policies)
+
     def _restore_path(self, p: str) -> str:
         """Tokens in a path (HOST_1/...) are looked up in every case mapping."""
         if not TOKEN.search(p):
@@ -261,7 +284,7 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
         d = results.result_dir(self.cfg.output_root, params["result_id"])
         meta = results.read_meta(d)
         src = Path(meta["input_path"]) if meta.get("input_path") else None
-        ps = self._policy(src)
+        ps = self._result_policy(d.name)
         real = ps.restore(params) if ps else dict(params)
         filters = {k: real.get(k) for k in ("contains", "column", "equals", "regex", "columns",
                                               "sort_by", "sort_desc", "limit", "offset")
@@ -295,7 +318,7 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
                 continue
             src = Path(m["input_path"]) if m.get("input_path") else None
             try:
-                ps = self._policy(src)
+                ps = self._result_policy(d.name)
             except safety.SafetyError:
                 withheld += 1
                 continue

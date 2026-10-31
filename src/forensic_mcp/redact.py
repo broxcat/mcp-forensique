@@ -120,6 +120,27 @@ def _norm(col: str) -> str:
     return re.sub(r"[^a-z]", "", col.lower())
 
 
+class Policies:
+    """Apply every contributing case policy to an aggregate response."""
+
+    def __init__(self, policies):
+        self.policies = [p for p in policies if p is not None]
+
+    def redact(self, obj):
+        for p in self.policies:
+            obj = p.redact(obj)
+        return obj
+
+    def restore(self, obj):
+        for p in self.policies:
+            obj = p.restore(obj)
+        return obj
+
+    def save(self):
+        for p in self.policies:
+            p.save()
+
+
 class Pseudonymizer:
     """Stable tokens for hosts, users and IPs of one case."""
 

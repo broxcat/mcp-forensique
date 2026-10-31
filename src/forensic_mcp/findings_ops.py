@@ -281,12 +281,15 @@ class FindingsOps:
 
     def findings(self) -> list[dict[str, Any]]:
         """All findings with their current status (see load_findings)."""
-        return load_findings(self.cfg.audit_file)
+        return load_findings(self.cfg.audit_file, with_citations=True)
 
     async def op_list_findings(self, params: dict[str, Any], conf: Any = None) -> Any:
         items = [f for f in self.findings()
                  if params.get("status") in (None, f["status"])
                  and params.get("kind") in (None, f["kind"])]
         pending = sum(1 for f in items if f["status"] == "à valider")
+        ps = self._findings_policy(items)
+        items = [{k: v for k, v in f.items() if k not in ('citation_list', 'observation')}
+                 for f in items]
         return self._listing("list_findings", params, items,
-                             f"{len(items)} findings, {pending} à valider")
+                             f"{len(items)} findings, {pending} à valider", pseudo=ps)

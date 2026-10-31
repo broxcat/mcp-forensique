@@ -15,3 +15,10 @@ de 32 niveaux sont refusées, sans retour silencieux à internal.
 Les références `disk_extract_file` passent par la même racine `extracted/`
 que les autres extractions. Les traversées restent interdites. Le test chaîne
 l’extraction à verify_evidence et au parseur MFT (binaire de test synthétique).
+
+## R01 — Lectures de synthèse (CDC §5, EF-10, ET-04)
+
+Les constats, rapports et consultations ultérieures résolvent toutes les sources
+citées. En cloud, client est refusé et les politiques internes sont composées.
+Une ancienne synthèse sans provenance est refusée : la régénérer localement.
+Les fichiers bruts restent sensibles et doivent être protégés côté serveur.

@@ -54,6 +54,7 @@ class ReportOps:
         fs = [f for f in load_findings(self.cfg.audit_file, with_citations=True)
               if f["status"] != STATUS_LABEL["rejected_by_server"]]
         blocking = [f for f in fs if f["status"] in BLOCKING]
+        ps = self._findings_policy(fs)
         if final and blocking:
             raise safety.SafetyError(
                 "export final refusé : " + ", ".join(f"{f['finding_id']} ({f['status']})"
@@ -93,6 +94,7 @@ class ReportOps:
         (d / "rows.jsonl").write_text("".join(json.dumps(i, ensure_ascii=False) + "\n"
                                               for i in items), encoding="utf-8")
         results.write_meta(d, tool="report_export", plugin="report", argv=[], input_path=None,
+                           policy_sources=sorted({c['result_id'] for f in fs for c in f['citation_list']}),
                            final=final, head_hash=head["head_hash"], row_count=len(items),
                            report_sha256=results.sha256_file(d / "report.md"), exit_code=0)
         out = self._listing("report_export", params, items,
@@ -100,6 +102,7 @@ class ReportOps:
                             f"{len(blocking)} non validés ; journal {head['lines']} lignes, "
                             f"hash de tête {head['head_hash'][:16]}…")
         out.result_id = out.payload["result_id"] = rid
+        out.pseudo = ps
         out.payload["raw_output"] = {"container": f"/output/{rid}/",
                                      "host": f"<OUTPUT_DIR>/{rid}/"}
         out.payload["notes"] = [f"report: /output/{rid}/report.md",
