@@ -198,6 +198,7 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
         policies = [self._result_policy(s, set(seen)) for s in m.get("policy_sources", [])]
         if m.get('input_path_case'):
             policies.append(self._policy(Path(m['input_path_case'])))
+        policies.extend(self._policy(Path(p)) for p in m.get('policy_case_paths', []))
         return Policies(policies)
 
     def _findings_policy(self, findings: list[dict]) -> Any:

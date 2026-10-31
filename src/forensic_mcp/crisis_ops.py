@@ -25,7 +25,7 @@ import yaml
 
 from . import audit, results, safety
 from .findings_ops import BLOCKING, STATUS_LABEL, load_findings
-from .redact import case_for, pseudonymizer_for
+from .redact import Policies, case_for, pseudonymizer_for
 from .timeline import iso, to_utc
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -60,16 +60,40 @@ def _text(v: Any, name: str, lo: int, hi: int) -> str:
 class CrisisOps:
     """Mixed into ops.Engine (uses cfg, actor, _listing)."""
 
-    def _crisis_policy(self, case: str) -> tuple[str, Any]:
-        case = str(case or "").strip().strip("/")
+    def _case_scope(self, case: str | None) -> str:
+        d = safety.jail_path(str(case or '').strip() or '.', self.cfg.evidence_root)
+        rel = d.relative_to(Path(self.cfg.evidence_root).resolve()).as_posix()
+        return '' if rel == '.' else rel
+
+    def _crisis_policy(self, case: str, aggregate: bool = False) -> tuple[str, Any]:
+        case = self._case_scope(case)
         d = safety.jail_path(case or ".", self.cfg.evidence_root)
         if case and not d.is_dir():
             raise ValueError(f"case must be a folder under the evidence root: {case!r}")
-        return case, pseudonymizer_for(self.cfg, case_for(self.cfg, d / "case.toml"))
+        ps = pseudonymizer_for(self.cfg, case_for(self.cfg, d / "case.toml"))
+        if not aggregate:
+            return case, ps
+        scopes = self._crisis_contributors(case)
+        policies = []
+        for scope in sorted(scopes):
+            folder = safety.jail_path(scope or '.', self.cfg.evidence_root)
+            policy = pseudonymizer_for(self.cfg, case_for(self.cfg, folder/'case.toml'))
+            self._learn_people(policy, scope)
+            policies.append(policy)
+        return case, Policies([ps, *policies])
+
+    def _crisis_contributors(self, case: str) -> set[str]:
+        scopes = {case}
+        for e in audit.iter_events(self.cfg.audit_file):
+            if e['type'] in ('crisis_event', 'stakeholder_update', 'comms_logged'):
+                scope = self._case_scope(e.get('case'))
+                if not case or scope == case:
+                    scopes.add(scope)
+        return scopes
 
     def crisis_events(self, case: str | None = None) -> list[dict[str, Any]]:
         evs = [e for e in audit.iter_events(self.cfg.audit_file) if e["type"] == "crisis_event"
-               and (not case or e.get("case") == case)]
+               and (not case or self._case_scope(e.get("case")) == case)]
         return sorted(evs, key=lambda e: (e["time_utc"], e["audit_id"]))
 
     def _source_ref(self, source: str) -> dict[str, Any]:
@@ -132,13 +156,13 @@ class CrisisOps:
         return out
 
     async def op_crisis_timeline(self, params: dict[str, Any], conf: Any = None) -> Any:
-        case, ps = self._crisis_policy(params.get("case"))
+        case, ps = self._crisis_policy(params.get("case"), aggregate=True)
         kind = params.get("kind")
         if kind is not None and kind not in TIMELINE_KINDS:
             raise ValueError(f"kind must be one of {TIMELINE_KINDS}")
         items = [{"crisis_id": e.get("crisis_id"), "time_utc": e["time_utc"], "kind": e["kind"],
                   "description": e["description"], "owner": e["owner"], "source": e["source"],
-                  "case": e.get("case"), "recorded_utc": e["ts_utc"], "audit_id": e["audit_id"]}
+                  "case": self._case_scope(e.get("case")), "recorded_utc": e["ts_utc"], "audit_id": e["audit_id"]}
                  for e in self.crisis_events(case or None)]
         items += self.stakeholder_timeline(case or None)
         items = sorted((i for i in items if kind in (None, i["kind"])),
@@ -217,7 +241,7 @@ class CrisisOps:
             raise ValueError(f"audience must be one of {AUDIENCES}")
         if not params.get('case'):
             raise safety.SafetyError("sitrep requires an explicit case folder")
-        case, ps = self._crisis_policy(params.get("case"))
+        case, ps = self._crisis_policy(params.get("case"), aggregate=True)
         if case == '.':
             case = ''
         title = str(params.get("title") or "").strip()[:120] or (
@@ -264,6 +288,8 @@ class CrisisOps:
                                               for i in items), encoding="utf-8")
         elapsed = round(time.monotonic() - t0, 3)
         results.write_meta(d, tool="sitrep_draft", plugin="sitrep", argv=[], input_path=None,
+                           policy_case_paths=[str(safety.jail_path(c or '.', self.cfg.evidence_root)/'case.toml')
+                                              for c in sorted(self._crisis_contributors(case))],
                            policy_sources=sorted({c['result_id'] for f in findings for c in f['citation_list']}),
                            input_path_case=str(root / 'case.toml'),
                            audience=audience, head_hash=head["head_hash"], row_count=len(items),

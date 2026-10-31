@@ -103,17 +103,21 @@ class StakeholderOps:
 
     def stakeholder_board(self, case: str | None = None) -> dict[str, dict[str, Any]]:
         """Current state of every entry, folded from the journal (case None or "" = all)."""
-        return board_from_events(audit.iter_events(self.cfg.audit_file), case)
+        board = board_from_events(audit.iter_events(self.cfg.audit_file))
+        for st in board.values():
+            st['case'] = self._case_scope(st['case'])
+        return {sid: st for sid, st in board.items() if not case or st['case'] == case}
 
     def _learn_people(self, ps: Pseudonymizer | None, case: str) -> None:
         """Cloud mode: every name / contact of the case's board becomes a token before the
         response is redacted (names in any field, e-mails / phones in the free text)."""
-        if ps is None:
+        from .redact import Policies
+        if ps is None or isinstance(ps, Policies):
             return
-        entries = list(self.stakeholder_board(case).values())
+        entries = [s for s in self.stakeholder_board(case).values() if s['case'] == case]
         notes = [str(s.get(k) or "") for s in entries for k in ("note", "source", "owner")]
         comms = [e.get("summary", "") for e in audit.iter_events(self.cfg.audit_file)
-                 if e["type"] == "comms_logged" and (not case or e.get("case", "") == case)]
+                 if e["type"] == "comms_logged" and self._case_scope(e.get('case')) == case]
         ps.people([s.get("name") or "" for s in entries], [*notes, *comms])
 
     @staticmethod
@@ -189,7 +193,7 @@ class StakeholderOps:
         return out
 
     async def op_stakeholder_list(self, params: dict[str, Any], conf: Any = None) -> Any:
-        case, ps = self._crisis_policy(params.get("case"))
+        case, ps = self._crisis_policy(params.get("case"), aggregate=True)
         status, role = params.get("status"), params.get("role")
         if status is not None and status not in STATUSES:
             raise ValueError(f"status must be one of {STATUSES}")
@@ -218,7 +222,7 @@ class StakeholderOps:
         return out
 
     async def op_stakeholder_suggest(self, params: dict[str, Any], conf: Any = None) -> Any:
-        case, ps = self._crisis_policy(params.get("case"))
+        case, ps = self._crisis_policy(params.get("case"), aggregate=True)
         data, itype = rules(), params.get("incident_type")
         if itype not in INCIDENT_TYPES or itype not in data["incident_types"]:
             raise ValueError(f"incident_type must be one of {INCIDENT_TYPES}")
@@ -324,7 +328,7 @@ class StakeholderOps:
                         f"{STATUS_FR[e['status']]}")
             else:
                 continue
-            if case and e.get("case", "") != case:
+            if case and self._case_scope(e.get('case')) != case:
                 continue
             out.append({"crisis_id": sid, "time_utc": when, "kind": "communication",
                         "description": text, "owner": st.get("owner") or "—",
