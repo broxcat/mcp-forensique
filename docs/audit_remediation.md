@@ -60,7 +60,9 @@ avec fichiers temporaires nettoyés et arrêt du groupe au timeout.
 
 ## R07 — Réponses bornées (EF-04, ET-02)
 
-La mesure inclut l’indentation, les marqueurs et l’échappement des caractères `<`.
+La mesure inclut l’enveloppe CallToolResult, ses deux représentations (texte et
+contenu structuré), les marqueurs et l’échappement des caractères `<`. Une réserve
+de 512 octets couvre l’identifiant final d’audit et les métadonnées du SDK.
 Une réponse dont les champs hors lignes dépassent le budget est refusée avec une
 erreur explicite. Une ligne qui ne tient pas ne produit jamais un curseur immobile.
 Les données complètes restent dans les fichiers du résultat.
