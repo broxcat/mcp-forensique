@@ -227,6 +227,8 @@ class CrisisOps:
         root = safety.jail_path(case, self.cfg.evidence_root)
         findings = []
         for f in load_findings(self.cfg.audit_file, with_citations=True):
+            if f['status'] == STATUS_LABEL['rejected_by_server']:
+                continue
             paths = []
             for c in f['citation_list']:
                 m = results.read_meta(results.result_dir(self.cfg.output_root, c['result_id']))
