@@ -116,8 +116,10 @@ class CrisisOps:
         n = sum(1 for e in audit.iter_events(self.cfg.audit_file) if e["type"] == "crisis_event")
         cid = f"C-{n + 1:04d}"
         ev = audit.append(self.cfg.audit_file, "crisis_event", self.actor, crisis_id=cid,
+                          _allocate=('crisis_id','C'),
                           time_utc=iso(when), kind=kind, **fields, source_ref=refs,
                           **({"case": case} if case else {}))
+        cid = ev['crisis_id']
         row = {"crisis_id": cid, "time_utc": iso(when), "kind": kind, **fields,
                "source_checked": ", ".join(f"{k}: {v}" for k, v in refs.items()) or "texte libre",
                "audit_id": ev["audit_id"]}

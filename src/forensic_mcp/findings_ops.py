@@ -262,11 +262,13 @@ class FindingsOps:
         if self._finding_ps is not None:  # the journal keeps real values (L2 §9.6)
             text = self._finding_ps.restore(text)
         ev = audit.append(self.cfg.audit_file, "suggestion", self.actor, finding_id=fid,
+                          _allocate=('finding_id', 'F'),
                           kind=kind, text=text, citations=checked, confidence=confidence,
                           attack=[str(t) for t in attack if ATTACK_RE.match(str(t))],
                           cross_check={"status": "failed" if problems else "passed",
                                        "mismatches": problems}, status=status,
                           **({"observation": observed} if kind == "observation" else {}))
+        fid = ev['finding_id']
         summary = (f"{fid} REJECTED by the cross-check: {'; '.join(problems)}" if problems else
                    f"{fid} recorded ({kind}, confidence {confidence}): à valider by an analyst")
         out = self._listing("record_finding", params, rows, summary)

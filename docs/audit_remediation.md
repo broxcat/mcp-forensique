@@ -51,3 +51,9 @@ La mesure inclut l’indentation, les marqueurs et l’échappement des caractè
 Une réponse dont les champs hors lignes dépassent le budget est refusée avec une
 erreur explicite. Une ligne qui ne tient pas ne produit jamais un curseur immobile.
 Les données complètes restent dans les fichiers du résultat.
+
+## R09 — Allocation concurrente (ET-04, EF-12, CDC §5)
+
+L’allocation F/C/S et l’écriture partagent le même verrou Linux du journal.
+Les vues utilisent l’identifiant effectivement alloué. Le test lance quatre
+processus indépendants partageant le fichier, sans substitut de flock.

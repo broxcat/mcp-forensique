@@ -65,6 +65,13 @@ def append(journal: str | Path, type_: str, actor: dict[str, Any], /,
                 rec = json.loads(last)
                 prev, audit_id = rec["hash"], json.loads(rec["body"])["audit_id"] + 1
             ts = utc_now()
+            allocated = fields.pop('_allocate', None)
+            if allocated:
+                key, prefix = allocated
+                fh.seek(0)
+                ids = [json.loads(json.loads(line)['body']).get(key, '') for line in fh if line.strip()]
+                maximum = max([int(v.split('-')[1]) for v in ids if v.startswith(prefix + '-')], default=0)
+                fields[key] = f'{prefix}-{maximum + 1:04d}'
             body = canonical({**fields, "audit_id": audit_id, "ts_utc": ts, "type": type_,
                               "actor": actor})
             h = _digest(prev, body)
@@ -75,7 +82,7 @@ def append(journal: str | Path, type_: str, actor: dict[str, Any], /,
             os.fsync(fh.fileno())
         finally:
             fcntl.flock(fh, fcntl.LOCK_UN)
-    return {"audit_id": audit_id, "hash": h, "ts_utc": ts}
+    return {"audit_id": audit_id, "hash": h, "ts_utc": ts, **({allocated[0]: fields[allocated[0]]} if allocated else {})}
 
 
 def iter_events(path: str | Path) -> Iterator[dict[str, Any]]:

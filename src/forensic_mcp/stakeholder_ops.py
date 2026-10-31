@@ -169,9 +169,11 @@ class StakeholderOps:
                     if e["type"] == "stakeholder_update" and e.get("action") == "create")
             sid = f"S-{n + 1:04d}"
         ev = audit.append(self.cfg.audit_file, "stakeholder_update", self.actor,
+                          **({'_allocate':('stakeholder_id','S')} if not prev else {}),
                           stakeholder_id=sid, action="update" if prev else "create", role=role,
                           status=new_status, previous_status=prev["status"] if prev else None,
                           **fields, source_ref=refs, **({"case": case} if case else {}))
+        sid = ev.get('stakeholder_id', sid)
         st = self.stakeholder_board()[sid]
         self._learn_people(ps, case)
         row = {**self._board_row(st, datetime.now(timezone.utc)),
