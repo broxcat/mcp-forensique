@@ -9,3 +9,9 @@ l’image du projet. Les preuves des tests sont synthétiques, jamais des résul
 La résolution de classification remonte tous les parents par `meta.json`, pour
 disque, mémoire et réseau. Les chaînes absentes, cycliques, hors racine ou de plus
 de 32 niveaux sont refusées, sans retour silencieux à internal.
+
+## R04 — Réutilisation par inode (EF-04, EF-05)
+
+Les références `disk_extract_file` passent par la même racine `extracted/`
+que les autres extractions. Les traversées restent interdites. Le test chaîne
+l’extraction à verify_evidence et au parseur MFT (binaire de test synthétique).

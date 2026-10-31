@@ -172,6 +172,10 @@ async def test_disk_extract_file_by_inode_including_deleted(case) -> None:
     assert f.read_text() == "content of 1205-128-1" and stat.S_IMODE(f.stat().st_mode) == 0o444
     reg = [e for e in _events(case, "evidence_registered") if e["path"] == row["path"]][0]
     assert reg["inode"] == "1205-128-1" and reg["source_image"] == IMG
+    verified = await _call(case, "verify_evidence", {"path": row["path"]})
+    assert verified["rows"][0]["matches_registration"] is True
+    parsed = await _call(case, "mft_search", {"path": row["path"]})
+    assert parsed["row_count"] >= 1
     call = [e for e in _events(case, "tool_call") if e["tool"] == "disk_extract_file"]
     assert [e["outcome"] for e in call] == ["refused", "ok"]
     for bad in ([], [64], [-1], list(range(21))):  # empty, a folder, negative, too many
