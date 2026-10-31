@@ -61,6 +61,20 @@
       },
       "allOf": [
         {
+          "if": {"properties": {"type": {"const": "report_review"}}},
+          "then": {
+            "required": ["result_id", "report_sha256", "findings_sha256", "senior", "comment"],
+            "properties": {
+              "actor": {"properties": {"kind": {"const": "analyst"}}},
+              "result_id": {"type": "string"},
+              "report_sha256": {"$ref": "#/$defs/sha256"},
+              "findings_sha256": {"$ref": "#/$defs/sha256"},
+              "senior": {"const": true},
+              "comment": {"type": "string", "minLength": 3}
+            }
+          }
+        },
+        {
           "if": {"properties": {"type": {"enum": ["evidence_registered", "evidence_verified"]}}},
           "then": {
             "required": ["path", "size", "sha256", "stage"],
