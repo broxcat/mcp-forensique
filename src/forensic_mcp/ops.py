@@ -173,6 +173,8 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
 
     def _findings_policy(self, findings: list[dict]) -> Any:
         from .redact import Policies
+        if self.cfg.llm_mode == 'local':
+            return Policies([])
         policies = []
         for f in findings:
             citations = f.get("citation_list", [])
