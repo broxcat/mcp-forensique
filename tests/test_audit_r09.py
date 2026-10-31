@@ -21,3 +21,11 @@ for key, prefix in [('finding_id','F'),('crisis_id','C'),('stakeholder_id','S')]
         ids = [e[key] for e in events if key in e]
         assert len(ids) == len(set(ids)) == 40
     assert audit.verify_report(log, check_schema=False)['ok']
+
+def test_existing_duplicate_business_ids_are_refused(tmp_path):
+    log = tmp_path/'audit.jsonl'
+    for _ in range(2):
+        audit.append(log,'crisis_event',{'kind':'server'},crisis_id='C-0001',
+                     time_utc='2026-10-01T00:00:00Z',kind='event',description='test',owner='test',source='test')
+    report = audit.verify_report(log)
+    assert not report['ok'] and 'duplicate' in report['reason']

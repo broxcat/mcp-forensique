@@ -79,6 +79,8 @@ def findings_from_events(events: Any, with_citations: bool = False) -> list[dict
     out: dict[str, dict[str, Any]] = {}
     for e in events:
         if e["type"] == "suggestion":
+            if e['finding_id'] in out:
+                raise ValueError('duplicate finding identifier in journal')
             f = {"finding_id": e["finding_id"], "kind": e["kind"],
                  "status": STATUS_LABEL[e["status"]], "confidence": e["confidence"],
                  "text": e["text"],

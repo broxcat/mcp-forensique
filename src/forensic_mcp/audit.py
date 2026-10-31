@@ -108,6 +108,7 @@ def verify_report(path: str | Path, check_schema: bool = True) -> dict[str, Any]
     """Recompute the chain, check contiguous audit_ids and (optionally) each event's schema."""
     path = Path(path)
     prev, n = GENESIS, 0
+    business_ids = set()
     if path.exists():
         with open(path, encoding="utf-8") as fh:
             for n, line in enumerate(fh, 1):
@@ -115,15 +116,23 @@ def verify_report(path: str | Path, check_schema: bool = True) -> dict[str, Any]
                 try:
                     rec = json.loads(line)
                     body = json.loads(rec["body"])
+                    key = {'suggestion':'finding_id','crisis_event':'crisis_id'}.get(body.get('type'))
+                    if body.get('type') == 'stakeholder_update' and body.get('action') == 'create':
+                        key = 'stakeholder_id'
+                    identity = (key, body.get(key)) if key and body.get(key) else None
                     if rec["prev_hash"] != prev:
                         reason = "prev_hash does not match the previous line"
                     elif rec["hash"] != _digest(prev, rec["body"]):
                         reason = "hash mismatch (line modified)"
                     elif body.get("audit_id") != n:
                         reason = f"audit_id {body.get('audit_id')} != line {n}"
+                    elif identity and identity in business_ids:
+                        reason = 'duplicate business identifier'
                     elif check_schema:
                         errs = schemas.errors(schemas.event_validator(), body)
                         reason = f"schema: {errs[0]}" if errs else ""
+                    if identity:
+                        business_ids.add(identity)
                 except (ValueError, KeyError, TypeError) as exc:
                     reason = f"unreadable line: {exc}"
                 if reason:
