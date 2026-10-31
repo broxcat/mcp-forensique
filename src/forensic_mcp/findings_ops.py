@@ -116,7 +116,7 @@ class FindingsOps:
             return cit, f"unknown result_id {rid!r}"
         meta = results.read_meta(d)
         results.verify_result(self.cfg, str(rid))
-        ps = self._policy(Path(meta["input_path"]) if meta.get("input_path") else None)
+        ps = self._result_policy(str(rid))
         if ps:  # tokens (HOST_1, IP_EXT_1…) cited in cloud mode -> real values
             value = ps.restore(value)
             cit["value"] = value
@@ -157,7 +157,7 @@ class FindingsOps:
             return cit, f"unknown result_id {rid!r}", {}
         meta = results.read_meta(d)
         results.verify_result(self.cfg, str(rid))
-        ps = self._policy(Path(meta["input_path"]) if meta.get("input_path") else None)
+        ps = self._result_policy(str(rid))
         if ps and field != OBS_CALL:
             value = ps.restore(value)
             cit["value"] = value
@@ -274,6 +274,8 @@ class FindingsOps:
         summary = (f"{fid} REJECTED by the cross-check: {'; '.join(problems)}" if problems else
                    f"{fid} recorded ({kind}, confidence {confidence}): à valider by an analyst")
         out = self._listing("record_finding", params, rows, summary)
+        if self.cfg.llm_mode == 'cloud':
+            out.pseudo = self._findings_policy([{'citation_list': checked}])
         out.payload["notes"] = [f"suggestion journaled as audit_id {ev['audit_id']}"] + problems
         if kind == "observation" and not problems:
             out.payload["notes"] += [

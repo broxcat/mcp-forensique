@@ -254,6 +254,7 @@ class EzOps:
             for e in events:
                 fh.write(json.dumps(e, ensure_ascii=False) + "\n")
         results.write_meta(d, tool="timeline", plugin="timeline", argv=[], input_path=None,
+                           policy_sources=sources, input_path_case=str(case_dir / 'case.toml'),
                            sources=sources, params=params, row_count=len(events), exit_code=0)
         q = self._page(d, limit=params.get("limit") or 50, offset=params.get("offset") or 0)
         notes = [f"{len(sources)} source results merged"] + (

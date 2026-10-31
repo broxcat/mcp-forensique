@@ -22,6 +22,8 @@ Les constats, rapports et consultations ultérieures résolvent toutes les sourc
 citées. En cloud, client est refusé et les politiques internes sont composées.
 Une ancienne synthèse sans provenance est refusée : la régénérer localement.
 Les fichiers bruts restent sensibles et doivent être protégés côté serveur.
+Les citations de synthèses résolvent aussi leur provenance composite. Les réponses
+de création de constats et les timelines conservent les politiques de leurs sources.
 
 ## R02 — Isolation des sitreps (EF-12, EF-13, CDC §5)
 
