@@ -34,7 +34,7 @@ async def _session(cfg) -> list:
     validation.decide(cfg, "F-0001", "validated", "Analyste A", "vérifié dans pslist")
     validation.decide(cfg, "F-0003", "validated", "Analyste A", "vérifié dans netscan")
     async with Client(server.build_server(cfg)) as c:
-        r = await c.call_tool("sitrep_draft", {"audience": "direction"})
+        r = await c.call_tool("sitrep_draft", {"case": ".", "audience": "direction"})
         assert not r.is_error
     return list(audit.iter_events(cfg.audit_file))
 

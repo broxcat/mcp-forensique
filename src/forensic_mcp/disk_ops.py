@@ -10,7 +10,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-from . import contract, evidence, results
+from . import audit, contract, evidence, results, runner
+from .redact import case_for
 from .engines import sleuthkit, volatility3
 
 MAX_EXTRACT_FILES = 5000
@@ -79,7 +80,7 @@ class DiskOps:
         rid = data.get(key)
         if rid and (Path(self.cfg.output_root) / rid / "rows.jsonl").exists():
             d = Path(self.cfg.output_root) / rid
-            return rid, d, results.read_meta(d).get("argv", []), 0
+            return rid, d, results.verified_meta(self.cfg, rid).get("argv", []), 0
         rid, d = results.new_result(self.cfg.output_root, "disk_list")
         argv = [*sleuthkit.cmd(self.cfg, "fls"), "-r", "-p", "-o", str(sector), str(path)]
         rr = await sleuthkit.run_to_file(self.cfg, argv, d / "fls.txt", d / "stderr.txt",
@@ -95,6 +96,22 @@ class DiskOps:
         results.write_meta(d, tool="disk_list", plugin="fls", argv=argv, input_path=str(path),
                            input_sha256=ev["sha256"], partition_offset=sector,
                            exit_code=rr.exit_code, row_count=n)
+        # Extractions can produce this private listing without an outer disk_list
+        # call. Its producer must be sealed too, before later graph traversal.
+        if rr.exit_code == 0 and not rr.output_exceeded and not rr.timed_out:
+            case = case_for(self.cfg, path)
+            meta = results.read_meta(d)
+            results.write_meta(d, **meta, provenance=[{'evidence_id':self._rel(path),
+                'sha256':ev['sha256'],'case_id':case.case_id,'classification':case.classification,
+                'hosts':case.hosts,'users':case.users}])
+            if (runner.bound_result(d,d,self.cfg.max_output_mb*1024*1024)
+                    or runner.bound_result(Path(self.cfg.output_root),d,self.cfg.max_session_output_mb*1024*1024)):
+                return rid, d, argv, -1
+            audit.append(self.cfg.audit_file,'tool_call',self.actor,tool='disk_list',
+                         params={'path':self._rel(path),'partition_offset':sector},argv=argv,
+                         engine='The Sleuth Kit',evidence_sha256=ev['sha256'],result_id=rid,
+                         exit_code=0,duration_s=rr.duration,output_sha256=results.rows_sha256(d),
+                         result_manifest=results.manifest(d),outcome='ok',row_count=n)
         if rr.exit_code == 0 and n:
             data[key] = rid
             cache.parent.mkdir(parents=True, exist_ok=True)
@@ -205,6 +222,8 @@ class DiskOps:
         key = f"{rec['sha256']}|{self._sector(real.get('partition_offset') or 0)}"
         rid = json.loads(cache.read_text(encoding="utf-8")).get(key)
         d = Path(self.cfg.output_root) / rid if rid else None
+        if d and (d/'rows.jsonl').exists():
+            results.verify_result(self.cfg, rid)
         return (rid, d) if d and (d / "rows.jsonl").exists() else None
 
     @staticmethod

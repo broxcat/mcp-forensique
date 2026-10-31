@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ from .timeline import to_utc
 
 # Bumped when the parse output changes (4.3b: CSV -> JSON) so older cached parses are not reused.
 PARSE_FORMAT = "rows-v2-json"
+FORCE_REPLAY = ContextVar('force_replay', default=False)
 PRESETS_FILE = Path(__file__).resolve().parents[2] / "rules" / "evtx_presets.yaml"
 EVTX_COLUMNS = ["TimeCreated", "EventId", "Channel", "Computer", "UserName", "RemoteHost",
                 "MapDescription", "PayloadData1", "PayloadData2", "PayloadData3",
@@ -74,10 +76,10 @@ class EzOps:
         cache = Path(self.cfg.output_root) / ".toolcache" / "ez_parse.json"
         data = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
         key = json.dumps([PARSE_FORMAT, tool, ev["sha256"], argv])
-        rid = data.get(key)
+        rid = None if FORCE_REPLAY.get() else data.get(key)
         d = Path(self.cfg.output_root) / rid if rid else None
-        if d is not None and d.is_dir() and results.read_meta(d).get("exit_code") == 0:
-            m = results.read_meta(d)
+        if d is not None and d.is_dir():
+            m = results.verified_meta(self.cfg, d.name)
             return {"result_id": rid, "dir": d, "plugin": tool, "argv": m["argv"], "exit_code": 0,
                     "timed_out": False, "output_exceeded": False, "row_count": m["row_count"],
                     "stderr_tail": "", "cached": True}
@@ -94,6 +96,14 @@ class EzOps:
         """repeat=True: server-side filters, so the next page re-runs this tool (cached parse)
         with the same parameters; otherwise query_results on the result."""
         from .ops import Outcome  # circular at import time
+
+        meta = results.read_meta(r['dir'])
+        if meta.get('imported') and meta.get('input_path'):
+            from .redact import Policies
+            # A fresh import is still being produced; cache reads were verified above.
+            ps = Policies([ps, self._policy(Path(meta['input_path'])),
+                           *[self._policy(safety.jail_path(s['path'], self.cfg.evidence_root))
+                             for s in meta.get('source_inputs', [])]])
 
         extra: dict[str, Any] = {"exit_code": r["exit_code"]}
         if r["exit_code"] != 0:
@@ -192,13 +202,15 @@ class EzOps:
                                 repeat=True)
 
     async def _cached_full(self, tool: str, ev: dict) -> dict[str, Any] | None:
+        if FORCE_REPLAY.get():
+            return None
         cache = Path(self.cfg.output_root) / ".toolcache" / "ez_parse.json"
         data = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
         rid = data.get(json.dumps([PARSE_FORMAT, tool, ev["sha256"], []]))
         d = Path(self.cfg.output_root) / rid if rid else None
         if d is None or not d.is_dir():
             return None
-        m = results.read_meta(d)
+        m = results.verified_meta(self.cfg, d.name)
         return {"result_id": rid, "dir": d, "plugin": tool, "argv": m["argv"], "exit_code": 0,
                 "timed_out": False, "output_exceeded": False, "row_count": m["row_count"],
                 "stderr_tail": "", "cached": True}
@@ -239,12 +251,13 @@ class EzOps:
         ps = self._policy(case_dir / "_")
         events, sources, cut = timeline.build(self.cfg.output_root, case_dir,
                                               str(params["around"]),
-                                              int(params.get("window_minutes") or 30))
+                                              int(params.get("window_minutes") or 30), cfg=self.cfg)
         rid, d = results.new_result(self.cfg.output_root, "timeline")
         with open(d / "rows.jsonl", "w", encoding="utf-8") as fh:
             for e in events:
                 fh.write(json.dumps(e, ensure_ascii=False) + "\n")
         results.write_meta(d, tool="timeline", plugin="timeline", argv=[], input_path=None,
+                           policy_sources=sources, input_path_case=str(case_dir / 'case.toml'),
                            sources=sources, params=params, row_count=len(events), exit_code=0)
         q = self._page(d, limit=params.get("limit") or 50, offset=params.get("offset") or 0)
         notes = [f"{len(sources)} source results merged"] + (

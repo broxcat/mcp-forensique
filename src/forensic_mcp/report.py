@@ -10,10 +10,11 @@ value, tool, command line, version, evidence SHA-256, audit ids.
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from typing import Any
 
-from . import audit, evidence, results, safety
+from . import audit, contract, evidence, results, safety
 from .findings_ops import BLOCKING, STATUS_LABEL, load_findings
 
 
@@ -31,19 +32,73 @@ class ReportOps:
                 calls.setdefault(e["result_id"], e)
         return calls
 
-    def _evidence_after(self, paths: set[str], final: bool) -> tuple[list[dict], list[str]]:
+    def _report_sources(self, rid: str, sources: set, expected: dict, directories: dict,
+                        seen: set | None = None, depth: int = 0) -> None:
+        """Resolve sealed result graphs to jailed evidence and auxiliary inputs."""
+        seen = set() if seen is None else seen
+        if rid in seen:
+            return
+        if depth >= 32:
+            raise safety.SafetyError('report provenance exceeds 32 results')
+        seen.add(rid)
+        meta = results.verified_meta(self.cfg, rid)
+
+        def add(path, digest, relative=False):
+            if not digest:
+                raise safety.SafetyError('source has no sealed evidence digest')
+            target = Path(path)
+            key = evidence.relpath(self.cfg, target)
+            target = safety.jail_input(key, self.cfg.evidence_root, self.cfg.output_root)
+            if not target.exists():
+                raise safety.SafetyError('original evidence missing')
+            sources.add(key)
+            if target.is_dir():
+                directories[key] = (target, digest, relative)
+            else:
+                if key in expected and expected[key] != digest:
+                    raise safety.SafetyError('inconsistent sealed evidence digests')
+                expected[key] = digest
+            root = Path(self.cfg.output_root).resolve()
+            if target.is_relative_to(root):
+                self._report_sources(target.relative_to(root).parts[0], sources, expected, directories, seen, depth+1)
+
+        if meta.get('input_path'):
+            add(meta['input_path'], meta.get('input_sha256'), bool(meta.get('imported')))
+        for source in meta.get('source_inputs', []):
+            path = safety.jail_input(source['path'], self.cfg.evidence_root, self.cfg.output_root)
+            add(path, source.get('sha256'), True)
+        if meta.get('export_path'):
+            folder = safety.jail_path(meta['export_path'], self.cfg.evidence_root)
+            sources.add(evidence.relpath(self.cfg, folder))
+            add(folder/'manifest.json', meta.get('manifest_sha256'))
+        parents = meta.get('policy_sources', [])
+        for parent in parents:
+            self._report_sources(parent, sources, expected, directories, seen, depth+1)
+        if not meta.get('input_path') and not parents:
+            raise safety.SafetyError('cited result has no original evidence provenance')
+
+    def _evidence_after(self, paths: set[str], final: bool, expected: dict | None = None) -> tuple[list[dict], list[str]]:
         rows, changed = [], []
+        visited = set()
         reg = evidence.load_registry(self.cfg)
         for p in sorted(paths):
             entries = [(k, v) for k, v in reg.items() if k == p or k.startswith(p.rstrip("/") + "/")]
+            if final and not entries:
+                raise safety.SafetyError('cited evidence missing from registry')
             for key, rec in entries:
+                if key in visited:
+                    continue
+                visited.add(key)
                 row = {"path": key, "sha256_registration": rec["sha256"], "sha256_export": None,
                        "matches": None}
                 if final:
                     target = safety.jail_input(key, self.cfg.evidence_root, self.cfg.output_root)
                     r = evidence.verify_full(self.cfg, target, self.actor, stage="after")
                     row.update(sha256_export=r["sha256_now"], matches=r["matches_registration"])
-                    if not r["matches_registration"]:
+                    row['verification_audit_id'] = r['audit_id']
+                    if expected and key in expected and r['sha256_now'] != expected[key]:
+                        row['matches'] = False
+                    if not row['matches']:
                         changed.append(key)
                 rows.append(row)
         return rows, changed
@@ -54,6 +109,8 @@ class ReportOps:
         fs = [f for f in load_findings(self.cfg.audit_file, with_citations=True)
               if f["status"] != STATUS_LABEL["rejected_by_server"]]
         blocking = [f for f in fs if f["status"] in BLOCKING]
+        ps = self._findings_policy(fs)
+        snapshot = hashlib.sha256(audit.canonical(load_findings(self.cfg.audit_file, with_citations=True)).encode()).hexdigest()
         if final and blocking:
             raise safety.SafetyError(
                 "export final refusé : " + ", ".join(f"{f['finding_id']} ({f['status']})"
@@ -65,26 +122,51 @@ class ReportOps:
             raise safety.SafetyError(f"export final refusé : journal altéré ({chain['reason']})")
         calls = self._provenance()
         shown = [f for f in fs if f["status"] == STATUS_LABEL["validated"]] if final else fs
-        sources = set()
+        sources, expected, directories = set(), {}, {}
         for f in shown:
             for c in f["citation_list"]:
+                if final:
+                    results.verify_result(self.cfg, c['result_id'])
                 call = calls.get(c["result_id"], {})
-                meta = results.read_meta(Path(self.cfg.output_root) / c["result_id"])
-                src = meta.get("input_path")
-                if src:
-                    try:
-                        sources.add(evidence.relpath(self.cfg, Path(src)))
-                    except ValueError:
-                        pass
+                meta = results.verified_meta(self.cfg, c['result_id'])
+                self._report_sources(c['result_id'], sources, expected, directories)
                 c["provenance"] = {"tool": call.get("tool"), "engine": call.get("engine"),
                                    "argv": " ".join(str(a) for a in call.get("argv") or []),
                                    "evidence_sha256": call.get("evidence_sha256"),
                                    "tool_call_audit_id": call.get("audit_id")}
-        ev_rows, changed = self._evidence_after(sources, final)
+        ev_rows, changed = self._evidence_after(sources, final, expected)
         if changed:
             raise safety.SafetyError(f"export final refusé : preuve modifiée depuis "
                                      f"l'enregistrement : {', '.join(changed)}")
+        if final:
+            hashes = {r['path']:r['sha256_export'] for r in ev_rows}
+            for key, (folder, digest, relative) in directories.items():
+                lines = []
+                for p in sorted(folder.rglob('*')):
+                    rel = p.relative_to(folder)
+                    if not p.is_file() or p.name == 'case.toml' or any(x.startswith('.') for x in rel.parts):
+                        continue
+                    path = evidence.relpath(self.cfg, p)
+                    if path not in hashes:
+                        raise safety.SafetyError('original evidence directory contains an unregistered source')
+                    lines.append(f"{rel.as_posix() if relative else path}\0{hashes[path]}\n")
+                if hashlib.sha256(''.join(sorted(lines)).encode()).hexdigest() != digest:
+                    raise safety.SafetyError('original evidence directory manifest changed')
         head = audit.verify_report(self.cfg.audit_file)  # after the "after" hashes
+        if final:
+            for review in reversed(list(audit.iter_events(self.cfg.audit_file))):
+                if review['type'] != 'report_review' or review.get('findings_sha256') != snapshot:
+                    continue
+                approved = results.result_dir(self.cfg.output_root, review['result_id'])
+                m = results.verified_meta(self.cfg, approved.name)
+                if (m.get('title') == title and review.get('senior') is True
+                        and results.sha256_file(approved / 'report.md') == review['report_sha256']):
+                    out = self._listing('report_export', params, [], 'Rapport FINAL relu par un senior', pseudo=ps)
+                    out.result_id = out.payload['result_id'] = approved.name
+                    out.payload['raw_output'] = contract.raw_output(approved.name)
+                    out.audit_extra = {'final':True,'head_hash':m['head_hash'],'report_sha256':review['report_sha256'],'review_audit_id':review['audit_id'],
+                                       'evidence_verification_audit_ids':[r['verification_audit_id'] for r in ev_rows]}
+                    return out
         rid, d = results.new_result(self.cfg.output_root, "report")
         text = self._markdown(title, final, head, shown, fs, ev_rows)
         (d / "report.md").write_text(text, encoding="utf-8")
@@ -93,13 +175,25 @@ class ReportOps:
         (d / "rows.jsonl").write_text("".join(json.dumps(i, ensure_ascii=False) + "\n"
                                               for i in items), encoding="utf-8")
         results.write_meta(d, tool="report_export", plugin="report", argv=[], input_path=None,
+                           policy_sources=sorted({c['result_id'] for f in fs for c in f['citation_list']}),
+                           title=title, findings_sha256=snapshot,
                            final=final, head_hash=head["head_hash"], row_count=len(items),
                            report_sha256=results.sha256_file(d / "report.md"), exit_code=0)
+        if final:
+            # Candidates are not exports, but their metadata must already be sealed
+            # before the out-of-band reviewer or a later export reads it.
+            audit.append(self.cfg.audit_file, 'tool_call', {'kind':'server'},
+                         tool='report_candidate', params={'title':title}, argv=[], engine='forensic-mcp',
+                         evidence_sha256=None, result_id=rid, exit_code=0, duration_s=0,
+                         output_sha256=results.rows_sha256(d), result_manifest=results.manifest(d),
+                         outcome='ok', final=False)
+            raise safety.SafetyError(f'export final requires senior review of candidate {rid}: use review-report locally')
         out = self._listing("report_export", params, items,
                             f"{'Rapport FINAL' if final else 'Brouillon'} : {len(items)} constats, "
                             f"{len(blocking)} non validés ; journal {head['lines']} lignes, "
                             f"hash de tête {head['head_hash'][:16]}…")
         out.result_id = out.payload["result_id"] = rid
+        out.pseudo = ps
         out.payload["raw_output"] = {"container": f"/output/{rid}/",
                                      "host": f"<OUTPUT_DIR>/{rid}/"}
         out.payload["notes"] = [f"report: /output/{rid}/report.md",
@@ -122,12 +216,12 @@ class ReportOps:
                  f"- Hash de tête du journal : `{head['head_hash']}` (à conserver hors du poste ; "
                  "l'appel d'export est journalisé ensuite)", "",
                  "## Preuves", "",
-                 "| Preuve | SHA-256 à l'enregistrement | SHA-256 à l'export | Conforme |",
-                 "|---|---|---|---|"]
+                 "| Preuve | SHA-256 à l'enregistrement | SHA-256 à l'export | Conforme | audit_id après |",
+                 "|---|---|---|---|---|"]
         for r in ev_rows:
             ok = "—" if r["matches"] is None else ("oui" if r["matches"] else "NON")
             lines.append(f"| {_md(r['path'])} | `{r['sha256_registration']}` | "
-                         f"`{r['sha256_export'] or 'non recalculé (brouillon)'}` | {ok} |")
+                         f"`{r['sha256_export'] or 'non recalculé (brouillon)'}` | {ok} | {r.get('verification_audit_id', '—')} |")
         lines += ["", "## Constats", ""]
         for f in shown:
             status = ("**NON VALIDÉ** (" + f["status"] + ")") if f["status"] in BLOCKING else (

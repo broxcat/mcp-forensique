@@ -38,11 +38,7 @@ def vol2_cmd(cfg: Config) -> list[str]:
 
 
 async def _capture(argv: list[str], timeout: float = 300) -> str:
-    proc = await asyncio.create_subprocess_exec(
-        *argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-        stdin=asyncio.subprocess.DEVNULL, cwd="/tmp")
-    out, _ = await asyncio.wait_for(proc.communicate(), timeout)
-    return out.decode(errors="replace")
+    return await runner.capture(argv, timeout)
 
 
 def parse_info(text: str) -> dict[str, dict[str, str]]:
@@ -119,7 +115,7 @@ async def run(cfg: Config, path: Path, plugin: str, profile: str | None, options
     rr = None
     if not dump:
         rr = await runner.run_process(argv, d / "stdout.txt", d / "stderr.txt",
-                                      cfg.timeout_seconds, max_output_bytes=limit)
+                                      cfg.timeout_seconds, output_dir=d, session_root=cfg.output_root, session_max_bytes=cfg.max_session_output_mb * 1024 * 1024, max_output_bytes=limit)
         try:
             rows = _rows_from_json(json.loads((d / "out.json").read_text(errors="replace")))
         except (OSError, ValueError, AttributeError):
@@ -127,7 +123,7 @@ async def run(cfg: Config, path: Path, plugin: str, profile: str | None, options
     if rows is None and not (rr and (rr.timed_out or rr.output_exceeded)):  # no JSON output
         argv = [*base, "--output=text", f"--output-file={d / 'out.txt'}"]
         rr = await runner.run_process(argv, d / "stdout.txt", d / "stderr.txt",
-                                      cfg.timeout_seconds, max_output_bytes=limit)
+                                      cfg.timeout_seconds, output_dir=d, session_root=cfg.output_root, session_max_bytes=cfg.max_session_output_mb * 1024 * 1024, max_output_bytes=limit)
         out = d / "out.txt"
         text = out.read_text(errors="replace") if out.exists() else ""
         rows = [{"line": ln} for ln in text.splitlines() if ln.strip()]

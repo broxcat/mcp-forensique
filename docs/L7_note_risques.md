@@ -1,3 +1,8 @@
+> État du 31/10/2026 : les tableaux et nombres ci-dessous sont historiques.
+> Voir [audit_remediation.md](audit_remediation.md) et [traceability.md](traceability.md)
+> pour les corrections et limites actuelles. Les mentions historiques de conformité
+> ne valent pas attestation actuelle. Les mesures de lab restent à réaliser.
+
 # L7 — Note de risques : l'IA dans la chaîne DFIR (BROUILLON)
 
 *Brouillon du 03/10/2026 (phase P8 avancée en P7), rédigé par l'agent de développement à partir
@@ -341,8 +346,7 @@ l'analyste comprend « il n'y a rien ».
 - Pas de rétro-ingénierie de code malveillant (hors périmètre du cahier des charges) : aucun
   outil de désobfuscation ni d'analyse de shellcode. `vol2_yarascan` et `mem_extract_vad`
   s'arrêtent à « cette chaîne est à cette adresse » et « voici l'empreinte de cette région ».
-- Aucun accès réseau sortant : pas d'outil VirusTotal ni équivalent, les preuves et leurs
-  empreintes ne quittent pas l'environnement cloisonné.
+- Accès réseau sortant possible (symboles Volatility notamment) ; aucun outil VirusTotal exposé. La configuration actuelle ne garantit pas le confinement réseau des preuves ou de leurs empreintes.
 - Message explicite sur une image XP (« utiliser `vol2_run` ») au lieu de l'erreur de symboles ;
   règle de parenté adaptée quand l'image n'a pas de `wininit.exe` ; `tool_status` indique le
   nombre d'outils et le commit du code en service.

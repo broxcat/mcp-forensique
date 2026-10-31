@@ -26,3 +26,4 @@ default_classification = "internal"
 sleuthkit_dir = "/usr/bin"
 max_extract_file_mb = 8192
 llm_mode = "local"
+max_session_output_mb = 10240

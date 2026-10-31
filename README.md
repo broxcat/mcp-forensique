@@ -1,7 +1,7 @@
 # forensic-mcp — serveur MCP forensique (Majeure Blue Team)
 
 Serveur [MCP](https://modelcontextprotocol.io) qui met les outils DFIR à disposition d'un
-assistant IA **sans perte de fiabilité ni de traçabilité** : Volatility 3 et 2 (mémoire), outils
+assistant IA avec contrôles de fiabilité et de traçabilité : Volatility 3 et 2 (mémoire), outils
 Eric Zimmerman (EVTX, $MFT, registre, artefacts Windows), The Sleuth Kit (images disque), un
 assistant de crise et un tableau de coordination des parties prenantes. Le serveur calcule les
 faits (nombre de lignes, anomalies et identifiants ATT&CK, commandes décodées, IOC,
@@ -12,6 +12,17 @@ exigence : [`docs/compliance.md`](docs/compliance.md) ; risques :
 [`docs/L7_note_risques.md`](docs/L7_note_risques.md).
 
 ## 1. Architecture en bref
+
+État du 31/10/2026 : voir [les corrections de l’audit](docs/audit_remediation.md)
+et [les limites de mesure de traçabilité](docs/traceability.md). Les chiffres des
+anciens comptes rendus sont historiques. La conformité globale n’est pas acquise.
+
+Les processus démarrent avec une politique **cloud** restrictive, quel que soit
+le TOML. Pour un modèle effectivement local, ajouter `--llm-mode local` à la
+commande du processus dédié. Le modèle d’espace Claude impose cloud.
+L’export final exige une revue hors MCP : `python -m forensic_mcp review-report`.
+Les exports Windows exigent `-StagingRoot C:\forensic-staging`, hors EvidenceRoot ;
+les intégrer comme nouvelles preuves après vérification, avant montage en lecture seule.
 
 - Poste analyste **Windows** + **un conteneur Linux** (Docker Desktop) qui exécute le serveur et
   les outils : Debian, Python 3.12, `mcp==2.2.0`, Volatility 3 (2.28.2) et 2 (2.6), .NET 9 et
@@ -61,7 +72,7 @@ users = ["alice"]
 ```
 
 Configuration du serveur : [`forensic-mcp.docker.toml`](forensic-mcp.docker.toml) (bornes de
-réponse, délai maximal, classification par défaut `internal`, `llm_mode = "local"` par défaut).
+réponse, délai maximal, classification par défaut `internal`, TOML historique local ; processus CLI cloud par défaut).
 Après une modification du code ou de la configuration : `docker compose restart forensic` (pas de
 rechargement automatique).
 
@@ -115,7 +126,7 @@ claude mcp add forensic -- docker exec -i forensic-mcp python -m forensic_mcp --
 tout le reste exige le jeton (`/mcp` sans jeton : 401). *Non vérifié* : l'enregistrement du
 serveur dans Open WebUI et les confirmations d'actions sensibles depuis ce client.
 
-**Modes LLM** (`llm_mode` dans `forensic-mcp.docker.toml`) :
+**Modes LLM** (`--llm-mode cloud|local` par processus ; cloud par défaut) :
 
 | Mode | Usage | Effet |
 |---|---|---|
@@ -312,11 +323,11 @@ PECmd (prefetch), SrumECmd (SRUM), SumECmd (UAL), SQLECmd (historique de navigat
    `-DryRun` affiche la commande sans rien exécuter) :
 
 ```powershell
-.\scripts\run_ez_windows.ps1 -Tool PECmd -CaseHost WS-042 `
+.\scripts\run_ez_windows.ps1 -Tool PECmd -CaseHost WS-042 -StagingRoot C:\forensic-staging `
     -InputPath WS-042\kape\C\Windows\prefetch -EzDir C:\Tools\ZimmermanTools\net9
 ```
 
-   Il écrit `evidence/<HÔTE>/ez_out/<Outil>_<UTC>/` : sorties et `manifest.json` (version,
+   Il écrit `<StagingRoot>/<HÔTE>/ez_out/<Outil>_<UTC>/` : sorties et `manifest.json` (version,
    empreinte et signature de l'exécutable, empreinte de l'entrée et des sorties).
 2. **Import** : `ez_import(tool, path)` vérifie le manifeste, les empreintes des sorties et
    celle de l'entrée encore présente sous `/evidence`, puis journalise `imported_from_windows`.

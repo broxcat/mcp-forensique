@@ -109,7 +109,7 @@ class ChecklistOps:
             return path.strip("/")
         rid = path[1:].split("/", 1)[0]
         if rid not in cache:
-            src = results.read_meta(Path(self.cfg.output_root) / rid).get("input_path")
+            src = results.verified_meta(self.cfg, rid).get("input_path")
             root = Path(self.cfg.evidence_root).resolve()
             cache[rid] = (str(Path(src).resolve().relative_to(root))
                           if src and Path(src).resolve().is_relative_to(root) else None)

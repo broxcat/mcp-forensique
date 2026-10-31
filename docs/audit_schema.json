@@ -52,7 +52,7 @@
         "audit_id": {"description": "1-based sequence number, equals the line number.", "type": "integer", "minimum": 1},
         "ts_utc": {"$ref": "#/$defs/utc"},
         "type": {
-          "enum": ["evidence_registered", "evidence_verified", "tool_call", "suggestion",
+          "enum": ["report_review", "evidence_registered", "evidence_verified", "tool_call", "suggestion",
                    "validation", "action_request", "action_confirmed", "crisis_event",
                    "imported_from_windows", "stakeholder_update", "comms_logged"]
         },
@@ -60,6 +60,20 @@
         "case": {"description": "Case / host identifier, e.g. WS-042.", "type": "string"}
       },
       "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "report_review"}}},
+          "then": {
+            "required": ["result_id", "report_sha256", "findings_sha256", "senior", "comment"],
+            "properties": {
+              "actor": {"properties": {"kind": {"const": "analyst"}}},
+              "result_id": {"type": "string"},
+              "report_sha256": {"$ref": "#/$defs/sha256"},
+              "findings_sha256": {"$ref": "#/$defs/sha256"},
+              "senior": {"const": true},
+              "comment": {"type": "string", "minLength": 3}
+            }
+          }
+        },
         {
           "if": {"properties": {"type": {"enum": ["evidence_registered", "evidence_verified"]}}},
           "then": {
@@ -95,6 +109,7 @@
               "timed_out": {"type": "boolean"},
               "duration_s": {"type": "number", "minimum": 0},
               "output_sha256": {"description": "sha256 of rows.jsonl, compared by replay().", "oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+              "result_manifest": {"description": "Sealed relative file paths and hashes of the producing result.", "type": "object", "additionalProperties": {"$ref": "#/$defs/sha256"}},
               "replay_of": {"description": "audit_id of the original call when this is a replay.", "type": "integer", "minimum": 1},
               "replay_match": {"type": "boolean"},
               "row_count": {"description": "Rows matched by this call (since 5.3; used to verify an observation = absence).", "type": "integer", "minimum": 0},

@@ -58,10 +58,7 @@ async def _help(cfg: Config) -> dict[str, Any]:
     cmd = vol_cmd(cfg)
     key = tuple(cmd)
     if key not in _cache:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd, "-h", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
-        _cache[key] = parse_help(out.decode(errors="replace"))
+        _cache[key] = parse_help(await runner.capture([*cmd, '-h']))
     return _cache[key]
 
 
@@ -93,11 +90,7 @@ def parse_plugin_options(text: str) -> dict[str, bool]:
 async def plugin_options(cfg: Config, full: str) -> dict[str, bool]:
     """Options of one plugin, read from its own help (cached per plugin)."""
     if full not in _opt_cache:
-        proc = await asyncio.create_subprocess_exec(
-            *vol_cmd(cfg), "-q", full, "-h", stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT)
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
-        _opt_cache[full] = parse_plugin_options(out.decode(errors="replace"))
+        _opt_cache[full] = parse_plugin_options(await runner.capture([*vol_cmd(cfg), '-q', full, '-h']))
     return _opt_cache[full]
 
 
@@ -190,7 +183,7 @@ async def run(cfg: Config, path: Path, full: str, options: list[str],
     argv = [*vol_cmd(cfg), "-q", "-r", "json", "-f", str(path), "-o", str(files), full, *options]
     start = time.time()
     rr = await runner.run_process(argv, d / "stdout.txt", d / "stderr.txt", cfg.timeout_seconds,
-                                  max_output_bytes=cfg.max_output_mb * 1024 * 1024)
+                                  output_dir=d, session_root=cfg.output_root, session_max_bytes=cfg.max_session_output_mb * 1024 * 1024, max_output_bytes=cfg.max_output_mb * 1024 * 1024)
     row_count = _write_rows(d)
     ver = await version(cfg)
     results.write_meta(

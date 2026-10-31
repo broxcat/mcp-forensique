@@ -339,7 +339,7 @@ class MemoryOps:
         known = _read_json(cache).get(ev["sha256"])
         if known and (Path(self.cfg.output_root) / known["result_id"]).is_dir():
             d = results.result_dir(self.cfg.output_root, known["result_id"])
-            meta = results.read_meta(d)
+            meta = results.verified_meta(self.cfg, d.name)
             r = {"result_id": d.name, "dir": d, "plugin": "imageinfo", "argv": meta["argv"],
                  "version": "2.6", "exit_code": meta["exit_code"], "timed_out": False,
                  "output_exceeded": False, "row_count": meta["row_count"], "stderr_tail": ""}

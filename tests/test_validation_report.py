@@ -155,6 +155,9 @@ async def test_report_draft_final_refusal_then_final(cfg) -> None:
     still = await _call(cfg, "report_export", {"final": True}, ok=False)
     assert "F-0002 (à revoir)" in still and "F-0001" not in still
     validation.decide(cfg, "F-0002", "rejected", "L. Plancke", "doublon")
+    candidate = await _call(cfg, 'report_export', {'final':True}, ok=False)
+    rid = re.search(r'candidate (\d{8}-\d{6}-report-[0-9a-f]{6})', candidate).group(1)
+    validation.review_report(cfg, rid, 'Synthetic senior', 'synthetic test only', senior=True)
     final = await _call(cfg, "report_export", {"final": True})
     md = (Path(cfg.output_root) / final["result_id"] / "report.md").read_text(encoding="utf-8")
     assert "(FINAL)" in md and "NON VALIDÉ" not in md

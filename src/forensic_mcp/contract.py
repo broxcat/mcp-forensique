@@ -71,12 +71,14 @@ def numbered(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def size_kb(payload: dict[str, Any]) -> float:
     """Serialized size of a payload in KiB."""
-    return len(json.dumps(payload, ensure_ascii=False).encode()) / 1024
+    return len(render(payload).model_dump_json(by_alias=True).encode()) / 1024
 
 
 def fit(payload: dict[str, Any], max_kb: int) -> dict[str, Any]:
     """Drop rows from the end of the page until the response fits in max_kb (next_offset
     then points at the first dropped row, so nothing is lost for paging)."""
+    # Reserve space for the final audit id and SDK server-info metadata.
+    max_kb -= 0.5
     rows = payload["rows"]
     if size_kb(payload) <= max_kb:
         return payload
@@ -93,6 +95,8 @@ def fit(payload: dict[str, Any], max_kb: int) -> dict[str, Any]:
         call["args"]["offset"] = end
     else:
         page["next_call"] = _next_call(None, payload.get("result_id"), end, page["limit"])
+    if size_kb(payload) > max_kb or (not rows and end < payload['row_count']):
+        raise ValueError("response exceeds budget: narrow the query or increase max_response_kb; no page can progress")
     return payload
 
 

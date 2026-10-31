@@ -54,4 +54,5 @@ def test_analysis_workspace_template_has_no_shell() -> None:
     assert any(d.startswith("Read(") and ".secrets" in d for d in deny)
     assert allow == ["mcp__forensic__*"]
     mcp = json.loads((base / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["forensic"]
-    assert mcp["command"] == "docker" and mcp["args"][-1] == "--stdio"
+    assert mcp["command"] == "docker" and '--stdio' in mcp['args']
+    assert mcp['args'][-2:] == ['--llm-mode', 'cloud']

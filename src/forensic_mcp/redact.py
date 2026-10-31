@@ -23,6 +23,8 @@ from .config import CLASSIFICATIONS, Config
 from .safety import SafetyError
 
 IPV4 = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})(?![\d.])")
+IPV6 = re.compile(r'(?<![\w:])([0-9a-fA-F]*:[0-9a-fA-F:.]+)(?![\w:])')
+ENCODED = re.compile(r'(?i)(-(?:enc|encodedcommand|e)\s+)[A-Za-z0-9+/=]{16,}')
 TOKEN = re.compile(r"\b(?:HOST|USER|IP_EXT|IP_INT|PERSON|CONTACT)_\d+\b")
 # Contact details typed into the stakeholder board (EF-15): e-mail addresses and phone numbers.
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
@@ -55,6 +57,21 @@ class Case:
 
 
 def case_for(cfg: Config, path: Path | None) -> Case:
+    current = _current_case(cfg, path)
+    if path:
+        p, out = Path(path).resolve(), Path(cfg.output_root).resolve()
+        if p.is_relative_to(out) and p != out:
+            meta = out / p.relative_to(out).parts[0] / 'meta.json'
+            m = json.loads(meta.read_text(encoding='utf-8')) if meta.is_file() else {}
+            for parent in m.get('provenance', []):
+                if CLASSIFICATIONS.index(parent['classification']) >= CLASSIFICATIONS.index(current.classification):
+                    current = Case(parent['case_id'], parent['classification'],
+                                   list(set(current.hosts + parent.get('hosts', []))),
+                                   list(set(current.users + parent.get('users', []))))
+    return current
+
+
+def _current_case(cfg: Config, path: Path | None) -> Case:
     """Nearest case.toml between the evidence file and the evidence root; default otherwise."""
     root = Path(cfg.evidence_root).resolve()
     src = source_image(cfg, path) if path else None
@@ -86,11 +103,24 @@ def source_image(cfg: Config, path: Path | str) -> Path | None:
     p, out = Path(path).resolve(), Path(cfg.output_root).resolve()
     if not p.is_relative_to(out):
         return None
-    meta = out / p.relative_to(out).parts[0] / "meta.json"
-    if not meta.is_file():
-        return None
-    m = json.loads(meta.read_text(encoding="utf-8"))
-    return Path(m["input_path"]) if m.get("tool") == "disk_extract" and m.get("input_path") else None
+    seen = set()
+    for _ in range(32):
+        if not p.is_relative_to(out):
+            if not p.is_relative_to(Path(cfg.evidence_root).resolve()):
+                raise SafetyError("derived source outside evidence root")
+            return p
+        rid = p.relative_to(out).parts[0]
+        if rid in seen:
+            raise SafetyError("cyclic evidence provenance")
+        seen.add(rid)
+        meta = out / rid / "meta.json"
+        if not meta.is_file():
+            raise SafetyError("missing evidence provenance")
+        m = json.loads(meta.read_text(encoding="utf-8"))
+        if not m.get("input_path"):
+            raise SafetyError("missing parent evidence")
+        p = Path(m["input_path"]).resolve()
+    raise SafetyError("evidence provenance exceeds 32 levels")
 
 
 def pseudonymizer_for(cfg: Config, case: Case) -> "Pseudonymizer | None":
@@ -105,6 +135,27 @@ def pseudonymizer_for(cfg: Config, case: Case) -> "Pseudonymizer | None":
 
 def _norm(col: str) -> str:
     return re.sub(r"[^a-z]", "", col.lower())
+
+
+class Policies:
+    """Apply every contributing case policy to an aggregate response."""
+
+    def __init__(self, policies):
+        self.policies = [p for p in policies if p is not None]
+
+    def redact(self, obj, key=''):
+        for p in self.policies:
+            obj = p.redact(obj, key)
+        return obj
+
+    def restore(self, obj):
+        for p in self.policies:
+            obj = p.restore(obj)
+        return obj
+
+    def save(self):
+        for p in self.policies:
+            p.save()
 
 
 class Pseudonymizer:
@@ -158,6 +209,8 @@ class Pseudonymizer:
 
     def text(self, s: str) -> str:
         """Pseudonymise one string: IPv4 addresses, then every known host/user name."""
+        s = ENCODED.sub(r'\1[ENCODED_REDACTED]', s)
+        s = IPV6.sub(self._ip, s)
         s = IPV4.sub(self._ip, s)
         names = sorted((k for k, t in self.fwd.items() if not t.startswith("IP_")), key=len,
                        reverse=True)

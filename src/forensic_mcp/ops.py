@@ -14,7 +14,7 @@ from typing import Any
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult
 
-from . import audit, contract, evidence, results, safety, schemas
+from . import audit, contract, evidence, results, safety, schemas, runner
 from .config import Config, load_tools
 from .engines import tshark, volatility3
 from .artefact_ops import ArtefactOps
@@ -31,7 +31,7 @@ from .stakeholder_ops import StakeholderOps
 from .redact import TOKEN, Pseudonymizer, case_for, pseudonymizer_for
 
 REPLAYABLE = set(TYPED_VOL3) | {"vol3_run", "vol2_run", "vol2_imageinfo", "vol2_yarascan",
-                                 "ez_run", "pcap_info", "pcap_conversations", "pcap_dns_query",
+                                 "ez_run", "evtx_query", "mft_search", "pcap_info", "pcap_conversations", "pcap_dns_query",
                                  "pcap_http_objects", "pcap_tls_info"}
 MAX_LISTED = 500
 
@@ -105,6 +105,24 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
                                "result_id": None, "exit_code": None, "output_sha256": None}
         try:
             out: Outcome = await getattr(self, f"op_{tool}")(params, conf)
+            if out.result_id and not any(e.get('result_id') == out.result_id for e in audit.iter_events(self.cfg.audit_file)):
+                folder = results.result_dir(self.cfg.output_root,out.result_id)
+                meta = results.read_meta(folder)
+                if meta.get('input_path'):
+                    src = Path(meta['input_path'])
+                    inputs = [p for p in src.rglob('*') if p.is_file()] if src.is_dir() else [src]
+                    parents = []
+                    for source in inputs:
+                        case = case_for(self.cfg, source)
+                        parent = {'evidence_id':self._rel(source), 'case_id':case.case_id,
+                                  'classification':case.classification, 'hosts':case.hosts,'users':case.users,
+                                  'sha256':results.sha256_file(source) if source.is_file() else None}
+                        parents.append(parent)
+                    results.write_meta(folder, **{**meta,'provenance':parents})
+                task_exceeded = runner.bound_result(folder, folder, self.cfg.max_output_mb * 1024 * 1024)
+                session_exceeded = runner.bound_result(Path(self.cfg.output_root), folder,
+                                                       self.cfg.max_session_output_mb * 1024 * 1024)
+                out.output_exceeded = out.output_exceeded or task_exceeded or session_exceeded
             payload = out.payload
             if out.pseudo:
                 payload = out.pseudo.redact(payload)
@@ -113,10 +131,12 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
             schemas.validate_output(payload)
         except (safety.SafetyError, ValueError, FileNotFoundError, KeyError) as exc:
             aid = self._journal(rec, t0, "refused", error=str(exc))
-            raise ToolError(f"refused (audit_id {aid}): {exc}") from exc
+            detail = str(exc) if self.cfg.llm_mode == 'local' else 'request refused; inspect the server journal locally'
+            raise ToolError(f"refused (audit_id {aid}): {detail}") from exc
         except Exception as exc:  # journal every failure, then report it
             aid = self._journal(rec, t0, "tool_error", error=f"{type(exc).__name__}: {exc}")
-            raise ToolError(f"tool error (audit_id {aid}): {type(exc).__name__}: {exc}") from exc
+            detail = f'{type(exc).__name__}: {exc}' if self.cfg.llm_mode == 'local' else 'inspect the server journal locally'
+            raise ToolError(f"tool error (audit_id {aid}): {detail}") from exc
         rec.update(params=out.params_real, argv=out.argv, engine=out.engine,
                    evidence_sha256=out.evidence_sha256, result_id=out.result_id,
                    exit_code=out.exit_code, output_sha256=out.output_sha256)
@@ -129,19 +149,73 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
         if out.timed_out:
             outcome, extra["error"] = "timeout", f"timeout after {self.cfg.timeout_seconds} s"
         elif out.output_exceeded:
-            outcome, extra["error"] = "tool_error", f"output over {self.cfg.max_output_mb} MB"
+            outcome = 'tool_error'
+            session_full = runner.output_volume(Path(self.cfg.output_root)) >= self.cfg.max_session_output_mb * 1024 * 1024
+            extra['error'] = (f'session output over {self.cfg.max_session_output_mb} MB' if session_full
+                              else f'output over {self.cfg.max_output_mb} MB')
         elif out.error:
             outcome, extra["error"] = "tool_error", out.error
         elif out.exit_code not in (None, 0):
             outcome, extra["error"] = "tool_error", f"exit code {out.exit_code}"
         else:
             outcome = "ok"
+        if out.result_id and outcome == 'ok':
+            previous = next((e for e in audit.iter_events(self.cfg.audit_file)
+                             if e['type'] == 'tool_call' and e.get('result_id') == out.result_id), None)
+            if previous is None:
+                extra['result_manifest'] = results.manifest(results.result_dir(self.cfg.output_root, out.result_id))
         payload["audit_id"] = self._journal(rec, t0, outcome, **extra)
         return contract.render(payload)
 
     # ---- helpers -------------------------------------------------------------------------
     def _policy(self, path: Path | None) -> Pseudonymizer | None:
+        if path is not None:
+            p, root = path.resolve(), Path(self.cfg.output_root).resolve()
+            if p.is_relative_to(root) and p != root:
+                results.verify_result(self.cfg, p.relative_to(root).parts[0])
+        if path is not None:
+            folder = path if path.is_dir() else path.parent if path.name in ('_', 'case.toml') else None
+            if folder is not None:
+                from .redact import Policies
+                return Policies([pseudonymizer_for(self.cfg, case_for(self.cfg, p))
+                                 for p in [folder / 'case.toml', *sorted(folder.rglob('*'))]
+                                 if p.is_file() or p.name == 'case.toml'])
         return pseudonymizer_for(self.cfg, case_for(self.cfg, path))
+
+    def _result_policy(self, rid: str, seen: set | None = None) -> Any:
+        seen = set() if seen is None else seen
+        if rid in seen or len(seen) >= 32:
+            raise safety.SafetyError("invalid result provenance")
+        seen.add(rid)
+        m = results.verified_meta(self.cfg, rid)
+        if m.get("input_path"):
+            from .redact import Policies, Case
+            return Policies([self._policy(Path(m['input_path'])),
+                             *[pseudonymizer_for(self.cfg, Case(s['case_id'],s['classification'],
+                                                               s.get('hosts',[]),s.get('users',[])))
+                               for s in m.get('provenance',[])],
+                             *[self._policy(safety.jail_path(s['path'], self.cfg.evidence_root))
+                               for s in m.get('source_inputs', [])]])
+        if "policy_sources" not in m and self.cfg.llm_mode == "cloud":
+            raise safety.SafetyError("result has no classification provenance; regenerate locally")
+        from .redact import Policies
+        policies = [self._result_policy(s, set(seen)) for s in m.get("policy_sources", [])]
+        if m.get('input_path_case'):
+            policies.append(self._policy(Path(m['input_path_case'])))
+        policies.extend(self._policy(Path(p)) for p in m.get('policy_case_paths', []))
+        return Policies(policies)
+
+    def _findings_policy(self, findings: list[dict]) -> Any:
+        from .redact import Policies
+        policies = []
+        for f in findings:
+            if self.cfg.llm_mode == 'local' and f.get('status') == 'rejeté par le serveur':
+                continue  # Invalid citations are inspectable locally, never result data.
+            citations = f.get("citation_list", [])
+            if not citations and self.cfg.llm_mode == "cloud":
+                raise safety.SafetyError("finding has no classification provenance")
+            policies.extend(self._result_policy(c["result_id"]) for c in citations)
+        return Policies(policies)
 
     def _restore_path(self, p: str) -> str:
         """Tokens in a path (HOST_1/...) are looked up in every case mapping."""
@@ -259,9 +333,9 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
 
     async def op_query_results(self, params: dict[str, Any], conf: Any = None) -> Outcome:
         d = results.result_dir(self.cfg.output_root, params["result_id"])
-        meta = results.read_meta(d)
+        meta = results.verified_meta(self.cfg, d.name)
         src = Path(meta["input_path"]) if meta.get("input_path") else None
-        ps = self._policy(src)
+        ps = self._result_policy(d.name)
         real = ps.restore(params) if ps else dict(params)
         filters = {k: real.get(k) for k in ("contains", "column", "equals", "regex", "columns",
                                               "sort_by", "sort_desc", "limit", "offset")
@@ -290,12 +364,16 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
         root = Path(self.cfg.output_root)
         items, withheld = [], 0
         for d in sorted(root.iterdir() if root.is_dir() else [], reverse=True):
-            m = results.read_meta(d) if d.is_dir() else {}
-            if not m:
+            if not d.is_dir() or not (d/'meta.json').is_file():
                 continue
+            producer = next((e for e in audit.iter_events(self.cfg.audit_file)
+                             if e['type'] == 'tool_call' and e.get('result_id') == d.name), None)
+            if producer and producer.get('outcome') != 'ok':
+                continue  # Failed runs are never a readable result catalogue entry.
+            m = results.verified_meta(self.cfg, d.name)
             src = Path(m["input_path"]) if m.get("input_path") else None
             try:
-                ps = self._policy(src)
+                ps = self._result_policy(d.name)
             except safety.SafetyError:
                 withheld += 1
                 continue
@@ -315,7 +393,28 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
                              f"(replayable: {sorted(REPLAYABLE)})")
         if orig.get("outcome") != "ok":
             raise ValueError(f"audit_id {params['audit_id']} did not succeed; nothing to compare")
-        new = await getattr(self, f"op_{orig['tool']}")(orig["params"], conf)
+        if orig.get('result_id'):
+            results.verify_result(self.cfg, orig['result_id'])
+            meta = results.read_meta(results.result_dir(self.cfg.output_root, orig['result_id']))
+            if meta.get('input_path'):
+                src = Path(meta['input_path'])
+                self._policy(src)
+                if src.is_file():
+                    verified = evidence.verify_full(self.cfg, src, self.actor)
+                    if not verified['matches_registration']:
+                        raise safety.SafetyError('replay evidence changed since registration')
+                elif src.is_dir():
+                    from .import_ops import content_digest
+                    if content_digest(src) != meta.get('input_sha256'):
+                        raise safety.SafetyError('replay evidence directory changed')
+                else:
+                    raise safety.SafetyError('replay evidence missing')
+        from .ez_ops import FORCE_REPLAY
+        token = FORCE_REPLAY.set(True)
+        try:
+            new = await getattr(self, f"op_{orig['tool']}")(dict(orig["params"]), conf)
+        finally:
+            FORCE_REPLAY.reset(token)
         match = new.output_sha256 == orig["output_sha256"]
         item = {"original_audit_id": orig["audit_id"], "original_result_id": orig["result_id"],
                 "new_result_id": new.result_id, "original_output_sha256": orig["output_sha256"],

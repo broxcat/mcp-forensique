@@ -11,7 +11,7 @@
   the tool in the registry, each value is checked against its kind (bool, int, ids, date,
   enum_batch, regpath, evidence_path). The input and every path option must be under the
   evidence root (no symlink / junction). The output folder is chosen by the script:
-    <EvidenceRoot>\<CaseHost>\ez_out\<Tool>_<yyyyMMddTHHmmssZ>\out\
+    <StagingRoot>\<CaseHost>\ez_out\<Tool>_<yyyyMMddTHHmmssZ>\out\
   plus manifest.json (tool, version, exe SHA-256, input SHA-256, argv, UTC times, outputs).
   Input digest: file = SHA-256; folder = SHA-256 of the sorted (ordinal) lines
   "relative/path<NUL>sha256<LF>" of its files (dot files and case.toml skipped), as in
@@ -32,6 +32,7 @@ param(
     [Parameter(Mandatory = $true)][ValidatePattern('^[A-Za-z0-9_.-]{1,64}$')][string]$CaseHost,
     [Parameter(Mandatory = $true)][string]$EzDir,
     [string]$EvidenceRoot = '',
+    [Parameter(Mandatory = $true)][string]$StagingRoot,
     [hashtable]$Options = @{},
     [string]$Registry = '',
     [ValidateRange(1, 1440)][int]$TimeoutMinutes = 120,
@@ -113,6 +114,20 @@ if ($reg.format -ne 'forensic-mcp/ez-registry/1') { throw "Unknown registry form
 $spec = Get-Prop $reg.tools $Tool
 if ($null -eq $spec) { throw "Unknown tool '$Tool'. Registry tools: $($reg.tools.PSObject.Properties.Name -join ', ')" }
 $root = [IO.Path]::GetFullPath($EvidenceRoot).TrimEnd('\')
+$staging = [IO.Path]::GetFullPath($StagingRoot).TrimEnd('\')
+if ($staging -eq $root -or $staging.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase) -or
+    $root.StartsWith($staging + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'StagingRoot and EvidenceRoot must be separate, non-nested directories'
+}
+# Reject existing reparse points in the staging path before any write.
+$ancestor = $staging
+while ($ancestor) {
+    if ((Test-Path -LiteralPath $ancestor) -and
+        ((Get-Item -LiteralPath $ancestor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'StagingRoot must not contain junctions or symbolic links'
+    }
+    $ancestor = Split-Path -Parent $ancestor
+}
 $inputFull = Resolve-UnderRoot $InputPath $root
 $isDir = Test-Path -LiteralPath $inputFull -PathType Container
 $inFlag = if ($isDir) { '-d' } else { '-f' }
@@ -125,6 +140,7 @@ if ($null -eq $exe) { throw "$Tool.exe not found under $EzDir" }
 
 # ---- typed options ------------------------------------------------------------------------
 $optArgv = New-Object System.Collections.Generic.List[string]
+$sourceInputs = @()
 foreach ($name in $Options.Keys) {
     $o = Get-Prop $spec.options $name
     if ($null -eq $o) { throw "$Tool has no option '$name'. Allowed: $((@($spec.options.PSObject.Properties | ForEach-Object { $_.Name }) -join ', ')) (none = no option)" }
@@ -147,7 +163,10 @@ foreach ($name in $Options.Keys) {
                        $optArgv.Add($o.flag); $optArgv.Add($b); continue }
         'regpath' { if (([string]$v) -notmatch $reg.regpath_pattern -or ([string]$v).Length -gt 512) { throw "$name must be a registry path" }
                     $optArgv.Add($o.flag); $optArgv.Add([string]$v); continue }
-        'evidence_path' { $optArgv.Add($o.flag); $optArgv.Add((Resolve-UnderRoot ([string]$v) $root)); continue }
+        'evidence_path' { $optionPath = Resolve-UnderRoot ([string]$v) $root
+                          $optArgv.Add($o.flag); $optArgv.Add($optionPath)
+                          $sourceInputs += [ordered]@{ flag = $o.flag; path = (Get-RelativePosix $optionPath $root); sha256 = (Get-ContentDigest $optionPath) }
+                          continue }
         default { throw "Unsupported option kind '$($o.kind)'" }
     }
 }
@@ -156,7 +175,7 @@ $oflag = if ($Tool -eq 'RECmd' -and $optArgv -contains '--bn') { '--csv' } else 
 
 # ---- output folder, argv ------------------------------------------------------------------
 $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
-$exportDir = Join-Path $root (Join-Path $CaseHost (Join-Path 'ez_out' "$($Tool)_$stamp"))
+$exportDir = Join-Path $staging (Join-Path $CaseHost (Join-Path 'ez_out' "$($Tool)_$stamp"))
 $outDir = Join-Path $exportDir 'out'
 $target = if ($oflag -eq '-o') { Join-Path $outDir 'strings.txt' } else { $outDir }
 $argv = @($inFlag, $inputFull) + $optArgv.ToArray() + @($oflag, $target) + @($spec.fixed)
@@ -190,6 +209,7 @@ $manifest = [ordered]@{
     tool_signature = (Get-AuthenticodeSignature -LiteralPath $exe.FullName).Status.ToString()
     host = $CaseHost
     input = [ordered]@{ path = $inputRel; kind = $(if ($isDir) { 'folder' } else { 'file' }); sha256 = $inputDigest }
+    source_inputs = @($sourceInputs)
     argv = @($Tool) + $argv; output_format = $oflag; outputs = $outputs
     started_utc = $started.ToString('yyyy-MM-ddTHH:mm:ss.fffZ'); finished_utc = $finished.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
     exit_code = $p.ExitCode; stdout_tail = (Get-Tail $stdout); stderr_tail = (Get-Tail $stderr)
@@ -198,4 +218,4 @@ $manifest = [ordered]@{
 }
 [IO.File]::WriteAllText((Join-Path $exportDir 'manifest.json'), ($manifest | ConvertTo-Json -Depth 6),
                         (New-Object Text.UTF8Encoding $false))
-Write-Host "Done: exit $($p.ExitCode), $($outputs.Count) output file(s). Import it with ez_import(tool='$Tool', path='$(Get-RelativePosix $exportDir $root)')."
+Write-Host "Done: exit $($p.ExitCode), $($outputs.Count) output file(s) in $exportDir. Verify and integrate this export as new evidence before calling ez_import with its evidence-relative path."

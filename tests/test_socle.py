@@ -82,7 +82,7 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
                  ("crisis_add_event", {"time_utc": "2026-09-29T14:00:00Z", "kind": "event",
                                        "description": "Alerte EDR", "owner": "SOC",
                                        "source": "SOC"}),
-                 ("crisis_timeline", {}), ("sitrep_draft", {"audience": "direction"}),
+                 ("crisis_timeline", {}), ("sitrep_draft", {"case": ".", "audience": "direction"}),
                  ("containment_suggestions", {"incident_type": "ransomware"}),
                  ("stakeholder_upsert", {"case": "", "role": "dpo"}),
                  ("stakeholder_list", {}),
@@ -110,12 +110,8 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
 async def test_response_size_is_bounded(cfg) -> None:
     cfg.max_response_kb = 1  # the full 2-row response is ~1.3 KiB
     r = await _call(cfg, "vol3_run", {"path": "mem.raw", "plugin": "windows.cmdline"})
-    s = r.structured_content
-    assert s["truncated"] and s["row_count"] == 3
-    assert contract.size_kb(s) <= 1 or s["rows"] == []
-    assert s["page"]["next_offset"] == len(s["rows"]) < 3
-    assert schemas.errors(schemas.output_validator(), s) == []
-
+    assert r.is_error  # EF-04: explicit refusal when no row fits; never a repeating cursor
+    assert "budget" in r.content[0].text
 
 # ---- audit journal (ET-04, objective 3) -----------------------------------------------------
 async def test_every_call_is_journaled_ok_refused_failed(cfg) -> None:
@@ -232,7 +228,9 @@ async def test_client_case_refused_in_cloud_mode(cfg) -> None:
     path = _case(cfg, "client")
     cfg.llm_mode = "cloud"
     r = await _call(cfg, "vol3_run", {"path": path, "plugin": "windows.cmdline"})
-    assert r.is_error and "classified 'client'" in r.content[0].text
+    assert r.is_error and 'inspect the server journal locally' in r.content[0].text
+    assert "classified 'client'" in _events(cfg, 'tool_call')[-1]['error']
+    assert path not in r.content[0].text
     assert _events(cfg, "tool_call")[-1]["outcome"] == "refused"
     assert not _events(cfg, "evidence_registered")  # refused before hashing
     listing = (await _call(cfg, "list_evidence", {})).structured_content

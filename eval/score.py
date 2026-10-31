@@ -24,6 +24,7 @@ Run inside the container:
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import hashlib
 import json
 import re
@@ -45,6 +46,33 @@ TODO = "À MESURER"
 TO_COMPLETE = re.compile(r"à compléter", re.I)
 NOTHING = "Rien à signaler à ce stade."
 SECTION = re.compile(r"^## (\d+)\. (.+)$", re.M)
+
+
+def ioc_matches(ioc: dict, text: str) -> bool:
+    """Match whole IOC tokens; never treat one address/domain/hash as a substring."""
+    value, kind = ioc['value'].casefold(), ioc['type']
+    text = text.casefold()
+    if kind == 'ip':
+        try:
+            target = ipaddress.ip_address(value)
+        except ValueError:
+            return False
+        for candidate in re.findall(r'[0-9a-f:.]+', text):
+            try:
+                if ipaddress.ip_address(candidate) == target:
+                    return True
+            except ValueError:
+                pass
+        return False
+    boundaries = {
+        'domain': r'\w.\-', 'sha256': r'0-9a-f', 'url': r'\w:/?&=.%#\-+',
+        'file_path': r'\w/\\.\-:', 'registry_key': r'\w/\\.\-:',
+        'process': r'\w.\-',
+    }
+    if kind in ('file_path', 'registry_key'):
+        value, text = value.replace('/', '\\'), text.replace('/', '\\')
+    chars = boundaries.get(kind, r'\w')
+    return re.search(f'(?<![{chars}]){re.escape(value)}(?![{chars}])', text) is not None
 
 
 def _ts(s: str) -> datetime:
@@ -276,13 +304,20 @@ def score(gt: dict[str, Any], session: list[dict[str, Any]],
                            / len(fact_findings), 3) if fact_findings else None,
         "detail": facts}
 
-    texts = [(e["text"] + " " + " ".join(str(c["value"]) for c in e["citations"])).casefold()
-             for e in accepted]
-    iocs = [{"step": s["step"], **i, "found": any(i["value"].casefold() in t for t in texts)}
+    texts = [(e, ' '.join(str(c['value']) for c in e['citations']))
+             for e in accepted if e['kind'] == 'fact' and e.get('citations')]
+    def found(ioc, labels):
+        return any(status[e['finding_id']]['status'] in labels and ioc_matches(ioc, t) for e,t in texts)
+    iocs = [{"step": s["step"], **i,
+             "found": found(i, {'à valider', 'à revoir', STATUS_LABEL['validated']}),
+             "validated": found(i, {STATUS_LABEL['validated']}),
+             "rejected": found(i, {STATUS_LABEL['rejected']})}
             for s in gt["steps"] for i in s["iocs"]]
     out["iocs"] = {"expected": len(iocs), "found": sum(i["found"] for i in iocs),
                    "recall": round(sum(i["found"] for i in iocs) / len(iocs), 3) if iocs else None,
-                   "detail": iocs}
+                   "validated": sum(i['validated'] for i in iocs),
+                   "validated_recall": round(sum(i['validated'] for i in iocs) / len(iocs), 3) if iocs else None,
+                   "rejected": sum(i['rejected'] for i in iocs), "detail": iocs}
     steps = [{"step": s["step"], "cdc_step": s["cdc_step"],
               "found": any(f["found"] for f in facts if f["step"] == s["step"])}
              for s in gt["steps"]]

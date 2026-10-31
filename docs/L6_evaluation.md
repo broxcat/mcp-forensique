@@ -1,3 +1,8 @@
+> État du 31/10/2026 : les tableaux et nombres ci-dessous sont historiques.
+> Voir [audit_remediation.md](audit_remediation.md) et [traceability.md](traceability.md)
+> pour les corrections et limites actuelles. Les mentions historiques de conformité
+> ne valent pas attestation actuelle. Les mesures de lab restent à réaliser.
+
 # L6 — Rapport d'évaluation comparative (BROUILLON)
 
 *Brouillon du 03/10/2026 (phase P7), préparé par l'agent de développement. Aucun résultat

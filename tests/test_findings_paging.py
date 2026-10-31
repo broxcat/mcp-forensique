@@ -79,7 +79,7 @@ async def test_paging_keeps_filters(cfg) -> None:
 
 
 async def test_size_bound_keeps_next_call_aligned(cfg) -> None:
-    cfg.max_response_kb = 2
+    cfg.max_response_kb = 6  # includes text and structured copies plus SDK envelope
     r = await _call(cfg, "vol_pslist", {"path": "mem.raw"})
     assert r["truncated"] and r["page"]["next_offset"] == len(r["rows"])
     assert r["page"]["next_call"] == {"tool": "query_results", "args": {

@@ -1,5 +1,18 @@
 # CLAUDE.md — MCP Forensique (Majeure Blue Team)
 
+Follow-up maintenance (2026-10-31): F01–F04 extend the audit corrections from
+2c519f4275fb. See docs/followup_verification.md for regression evidence and limits.
+Work uses a dedicated worktree and a temporary offline container; no real evidence
+or investigation journal is mounted and the investigation server is not restarted.
+
+Current maintenance status (2026-10-31): audit remediation is on
+`fix/audit-forensic-compliance`, based on audited commit bfea22c53615.
+See docs/audit_remediation.md for current safeguards, tests and limitations;
+the dated J4–J16 entries below are historical, not current acceptance evidence.
+CLI processes now default to cloud; local models require explicit --llm-mode local.
+Final reports require an out-of-band senior review of the exact candidate.
+No real investigation finding or lab result was validated by the coding agent.
+
 Loaded at the start of every session. Read it fully before doing anything.
 **The source of truth is the Cahier des charges (CDC, 26/09/2026, L. Plancke & W. Triffault).**
 This file turns it into work for the coding agent. Requirement IDs (EF-xx, ET-xx) and phases

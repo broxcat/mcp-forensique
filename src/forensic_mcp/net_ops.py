@@ -79,7 +79,7 @@ class NetOps:
         rid = data.get(key)
         if rid and (Path(self.cfg.output_root) / rid / "rows.jsonl").exists():
             d = Path(self.cfg.output_root) / rid
-            return rid, d, results.read_meta(d).get("argv", []), 0, []
+            return rid, d, results.verified_meta(self.cfg, rid).get("argv", []), 0, []
         rid, d = results.new_result(self.cfg.output_root, f"pcap_{view}")
         argv = tshark.read_argv(self.cfg, path, view, filt)
         rr = await tshark.run_to_file(self.cfg, argv, d / "fields.txt", d / "stderr.txt",

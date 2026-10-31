@@ -1,6 +1,60 @@
 """Result folders: meta.json, stable `_row` numbers and streaming queries over CSV/JSONL rows."""
 from __future__ import annotations
 
+def manifest(d):
+    """Digest every result file, including raw outputs and metadata."""
+    return {p.relative_to(d).as_posix(): sha256_file(p) for p in sorted(d.rglob('*')) if p.is_file()}
+
+
+def _integrity_failure(cfg, rid):
+    from . import audit
+    from .safety import SafetyError
+    audit.append(cfg.audit_file, 'tool_call', {'kind':'server'}, tool='verify_result',
+                 params={'result_id':rid}, argv=[], engine='forensic-mcp', evidence_sha256=None,
+                 result_id=None, exit_code=None, duration_s=0, output_sha256=None,
+                 outcome='refused', error='result integrity or provenance mismatch')
+    raise SafetyError('result integrity or provenance mismatch; rerun the analysis')
+
+
+def _sealed_meta(cfg, rid, producer):
+    raw = (result_dir(cfg.output_root, rid)/'meta.json').read_bytes()
+    if hashlib.sha256(raw).hexdigest() != producer['result_manifest'].get('meta.json'):
+        _integrity_failure(cfg, rid)
+    return json.loads(raw)
+
+
+def verify_result(cfg, rid, seen=None):
+    """Refuse missing, unsuccessful or altered result producers."""
+    from . import audit
+    from .safety import SafetyError
+    seen = set() if seen is None else seen
+    if rid in seen or len(seen) >= 32:
+        _integrity_failure(cfg, rid)
+    seen.add(rid)
+    d = result_dir(cfg.output_root, rid)
+    producer = next((e for e in audit.iter_events(cfg.audit_file)
+                    if e['type'] == 'tool_call' and e.get('result_id') == rid), None)
+    valid = (audit.verify_report(cfg.audit_file)['ok'] and producer
+             and producer.get('outcome') == 'ok' and producer.get('result_manifest')
+             and producer['result_manifest'] == manifest(d))
+    if not valid:
+        _integrity_failure(cfg, rid)
+    meta = _sealed_meta(cfg, rid, producer)
+    parents = list(meta.get('policy_sources', []))
+    if meta.get('input_path'):
+        src, root = Path(meta['input_path']).resolve(), Path(cfg.output_root).resolve()
+        if src.is_relative_to(root) and src != root:
+            parents.append(src.relative_to(root).parts[0])
+    for parent in set(parents):
+        verify_result(cfg, parent, set(seen))
+    return producer
+
+
+def verified_meta(cfg, rid):
+    """Integrity is independent of policy; parse only bytes matching the sealed digest."""
+    producer = verify_result(cfg, rid)
+    return _sealed_meta(cfg, rid, producer)
+
 import csv
 import hashlib
 import heapq

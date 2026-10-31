@@ -2,7 +2,7 @@
   "mcpServers": {
     "forensic": {
       "command": "docker",
-      "args": ["exec", "-i", "forensic-mcp", "python", "-m", "forensic_mcp", "--stdio"]
+      "args": ["exec", "-i", "forensic-mcp", "python", "-m", "forensic_mcp", "--stdio", "--llm-mode", "cloud"]
     }
   }
 }

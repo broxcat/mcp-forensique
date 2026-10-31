@@ -79,6 +79,8 @@ def findings_from_events(events: Any, with_citations: bool = False) -> list[dict
     out: dict[str, dict[str, Any]] = {}
     for e in events:
         if e["type"] == "suggestion":
+            if e['finding_id'] in out:
+                raise ValueError('duplicate finding identifier in journal')
             f = {"finding_id": e["finding_id"], "kind": e["kind"],
                  "status": STATUS_LABEL[e["status"]], "confidence": e["confidence"],
                  "text": e["text"],
@@ -114,8 +116,9 @@ class FindingsOps:
             d = results.result_dir(self.cfg.output_root, str(rid))
         except (ValueError, FileNotFoundError):
             return cit, f"unknown result_id {rid!r}"
-        meta = results.read_meta(d)
-        ps = self._policy(Path(meta["input_path"]) if meta.get("input_path") else None)
+        meta = results.verified_meta(self.cfg, d.name)
+        results.verify_result(self.cfg, str(rid))
+        ps = self._result_policy(str(rid))
         if ps:  # tokens (HOST_1, IP_EXT_1…) cited in cloud mode -> real values
             value = ps.restore(value)
             cit["value"] = value
@@ -154,8 +157,9 @@ class FindingsOps:
             d = results.result_dir(self.cfg.output_root, str(rid))
         except (ValueError, FileNotFoundError):
             return cit, f"unknown result_id {rid!r}", {}
-        meta = results.read_meta(d)
-        ps = self._policy(Path(meta["input_path"]) if meta.get("input_path") else None)
+        meta = results.verified_meta(self.cfg, d.name)
+        results.verify_result(self.cfg, str(rid))
+        ps = self._result_policy(str(rid))
         if ps and field != OBS_CALL:
             value = ps.restore(value)
             cit["value"] = value
@@ -262,14 +266,18 @@ class FindingsOps:
         if self._finding_ps is not None:  # the journal keeps real values (L2 §9.6)
             text = self._finding_ps.restore(text)
         ev = audit.append(self.cfg.audit_file, "suggestion", self.actor, finding_id=fid,
+                          _allocate=('finding_id', 'F'),
                           kind=kind, text=text, citations=checked, confidence=confidence,
                           attack=[str(t) for t in attack if ATTACK_RE.match(str(t))],
                           cross_check={"status": "failed" if problems else "passed",
                                        "mismatches": problems}, status=status,
                           **({"observation": observed} if kind == "observation" else {}))
+        fid = ev['finding_id']
         summary = (f"{fid} REJECTED by the cross-check: {'; '.join(problems)}" if problems else
                    f"{fid} recorded ({kind}, confidence {confidence}): à valider by an analyst")
         out = self._listing("record_finding", params, rows, summary)
+        if self.cfg.llm_mode == 'cloud':
+            out.pseudo = self._findings_policy([{'citation_list': checked}])
         out.payload["notes"] = [f"suggestion journaled as audit_id {ev['audit_id']}"] + problems
         if kind == "observation" and not problems:
             out.payload["notes"] += [
@@ -281,12 +289,15 @@ class FindingsOps:
 
     def findings(self) -> list[dict[str, Any]]:
         """All findings with their current status (see load_findings)."""
-        return load_findings(self.cfg.audit_file)
+        return load_findings(self.cfg.audit_file, with_citations=True)
 
     async def op_list_findings(self, params: dict[str, Any], conf: Any = None) -> Any:
         items = [f for f in self.findings()
                  if params.get("status") in (None, f["status"])
                  and params.get("kind") in (None, f["kind"])]
         pending = sum(1 for f in items if f["status"] == "à valider")
+        ps = self._findings_policy(items)
+        items = [{k: v for k, v in f.items() if k not in ('citation_list', 'observation')}
+                 for f in items]
         return self._listing("list_findings", params, items,
-                             f"{len(items)} findings, {pending} à valider")
+                             f"{len(items)} findings, {pending} à valider", pseudo=ps)

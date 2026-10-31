@@ -9,6 +9,7 @@ This module is not imported by the MCP server (checked by a test).
 from __future__ import annotations
 
 import re
+import hashlib
 import sys
 from pathlib import Path
 from typing import Any, Callable
@@ -26,6 +27,23 @@ class ValidationError(ValueError):
     """A decision that cannot be recorded."""
 
 
+def review_report(cfg, rid, analyst, reason, senior=False):
+    """Out-of-band attestation; OS/account controls must authenticate the reviewer."""
+    if not senior or not NAME_RE.fullmatch(analyst) or len(reason.strip()) < 3:
+        raise ValidationError('named senior reviewer and reason required')
+    d = results.result_dir(cfg.output_root, rid)
+    m = results.verified_meta(cfg, rid)
+    snapshot = hashlib.sha256(audit.canonical(load_findings(cfg.audit_file, with_citations=True)).encode()).hexdigest()
+    if not m.get('final') or snapshot != m.get('findings_sha256'):
+        raise ValidationError('candidate is stale or is not a final report candidate')
+    digest = results.sha256_file(d / 'report.md')
+    if digest != m.get('report_sha256'):
+        raise ValidationError('candidate report was modified')
+    return audit.append(cfg.audit_file, 'report_review', {'kind':'analyst','name':analyst},
+                        result_id=rid,report_sha256=digest,findings_sha256=snapshot,
+                        senior=True,comment=reason)
+
+
 def decide(cfg: Config, finding_id: str, decision: str, analyst: str, reason: str,
            channel: str = "cli") -> dict[str, Any]:
     """Journal one analyst decision; returns {"audit_id", "hash", "ts_utc"}."""
@@ -36,12 +54,15 @@ def decide(cfg: Config, finding_id: str, decision: str, analyst: str, reason: st
         raise ValidationError("analyst name required (2-80 characters)")
     if not 3 <= len(reason) <= 500 or "\x00" in reason:
         raise ValidationError("reason required (3-500 characters)")
-    f = next((x for x in load_findings(cfg.audit_file) if x["finding_id"] == finding_id), None)
+    f = next((x for x in load_findings(cfg.audit_file, with_citations=True) if x["finding_id"] == finding_id), None)
     if f is None:
         raise ValidationError(f"unknown finding {finding_id!r}")
     if f["status"] == STATUS_LABEL["rejected_by_server"] and decision != "rejected":
         raise ValidationError(f"{finding_id} was rejected by the server cross-check: it can only "
                               "be rejected (with a reason), never validated or re-opened")
+    if decision == 'validated':
+        for c in f['citation_list']:
+            results.verify_result(cfg, c['result_id'])
     return audit.append(cfg.audit_file, "validation",
                         {"kind": "analyst", "name": analyst, "client": channel},
                         finding_id=finding_id, decision=decision, comment=reason)
