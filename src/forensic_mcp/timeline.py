@@ -95,10 +95,15 @@ def build(output_root: Path, case_dir: Path, around: str,
         if not fam or not src or meta.get("exit_code") not in (0, None):
             continue
         src_path, out_root = Path(src).resolve(), root.resolve()
-        if src_path.is_relative_to(out_root):  # a file extracted from a disk image
+        ancestors = set()
+        while src_path.is_relative_to(out_root):
+            if src_path in ancestors or len(ancestors) >= 32:
+                raise ValueError('invalid timeline evidence provenance')
+            ancestors.add(src_path)
             m0 = results.read_meta(out_root / src_path.relative_to(out_root).parts[0])
-            if m0.get("tool") == "disk_extract" and m0.get("input_path"):
-                src_path = Path(m0["input_path"]).resolve()
+            if not m0.get('input_path'):
+                raise ValueError('missing timeline evidence provenance')
+            src_path = Path(m0["input_path"]).resolve()
         if not src_path.is_relative_to(case_dir):
             continue
         sources.append(d.name)
