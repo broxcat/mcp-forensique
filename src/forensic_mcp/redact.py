@@ -57,6 +57,21 @@ class Case:
 
 
 def case_for(cfg: Config, path: Path | None) -> Case:
+    current = _current_case(cfg, path)
+    if path:
+        p, out = Path(path).resolve(), Path(cfg.output_root).resolve()
+        if p.is_relative_to(out) and p != out:
+            meta = out / p.relative_to(out).parts[0] / 'meta.json'
+            m = json.loads(meta.read_text(encoding='utf-8')) if meta.is_file() else {}
+            for parent in m.get('provenance', []):
+                if CLASSIFICATIONS.index(parent['classification']) >= CLASSIFICATIONS.index(current.classification):
+                    current = Case(parent['case_id'], parent['classification'],
+                                   list(set(current.hosts + parent.get('hosts', []))),
+                                   list(set(current.users + parent.get('users', []))))
+    return current
+
+
+def _current_case(cfg: Config, path: Path | None) -> Case:
     """Nearest case.toml between the evidence file and the evidence root; default otherwise."""
     root = Path(cfg.evidence_root).resolve()
     src = source_image(cfg, path) if path else None

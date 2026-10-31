@@ -107,6 +107,18 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
             out: Outcome = await getattr(self, f"op_{tool}")(params, conf)
             if out.result_id and not any(e.get('result_id') == out.result_id for e in audit.iter_events(self.cfg.audit_file)):
                 folder = results.result_dir(self.cfg.output_root,out.result_id)
+                meta = results.read_meta(folder)
+                if meta.get('input_path'):
+                    src = Path(meta['input_path'])
+                    inputs = [p for p in src.rglob('*') if p.is_file()] if src.is_dir() else [src]
+                    parents = []
+                    for source in inputs:
+                        case = case_for(self.cfg, source)
+                        parent = {'evidence_id':self._rel(source), 'case_id':case.case_id,
+                                  'classification':case.classification, 'hosts':case.hosts,'users':case.users,
+                                  'sha256':results.sha256_file(source) if source.is_file() else None}
+                        parents.append(parent)
+                    results.write_meta(folder, **{**meta,'provenance':parents})
                 task_exceeded = runner.bound_result(folder, folder, self.cfg.max_output_mb * 1024 * 1024)
                 session_exceeded = runner.bound_result(Path(self.cfg.output_root), folder,
                                                        self.cfg.max_session_output_mb * 1024 * 1024)
@@ -173,8 +185,11 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
         seen.add(rid)
         m = results.read_meta(results.result_dir(self.cfg.output_root, rid))
         if m.get("input_path"):
-            from .redact import Policies
+            from .redact import Policies, Case
             return Policies([self._policy(Path(m['input_path'])),
+                             *[pseudonymizer_for(self.cfg, Case(s['case_id'],s['classification'],
+                                                               s.get('hosts',[]),s.get('users',[])))
+                               for s in m.get('provenance',[])],
                              *[self._policy(safety.jail_path(s['path'], self.cfg.evidence_root))
                                for s in m.get('source_inputs', [])]])
         if "policy_sources" not in m and self.cfg.llm_mode == "cloud":

@@ -9,6 +9,9 @@ l’image du projet. Les preuves des tests sont synthétiques, jamais des résul
 La résolution de classification remonte tous les parents par `meta.json`, pour
 disque, mémoire et réseau. Les chaînes absentes, cycliques, hors racine ou de plus
 de 32 niveaux sont refusées, sans retour silencieux à internal.
+Les nouveaux résultats enregistrent aussi les identités de preuves parentes,
+empreintes, identités de cas et classifications dans les métadonnées scellées.
+Une classification historique plus restrictive est conservée si case.toml change.
 
 ## R04 — Réutilisation par inode (EF-04, EF-05)
 
