@@ -86,3 +86,10 @@ processus et chemins utilisent des limites de token adaptées au type.
 Le score distingue IOC exploratoires, validés et rejetés par l’analyste.
 Un rejet ne contribue plus au rappel exploratoire. Aucune vérité terrain réelle
 n’est ajoutée : le fichier de lab reste à remplir par l’équipe.
+
+## C01 — Appariement du modèle (ET-07, CDC §5)
+
+Chaque processus CLI utilise cloud par défaut, même si le fichier TOML indique
+local. Le modèle local exige `--llm-mode local` sur un processus distinct. Le
+modèle d’espace cloud fixe explicitement cloud. Le transport ne prouve pas
+l’hébergement du modèle ; l’équipe doit contrôler la configuration du client.

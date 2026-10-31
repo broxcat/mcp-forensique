@@ -19,8 +19,11 @@ def main(argv: list[str] | None = None) -> int:
     g = p.add_mutually_exclusive_group()
     g.add_argument("--http", action="store_true", help="Streamable HTTP on http_host:http_port")
     g.add_argument("--stdio", action="store_true", help="stdio transport (local MCP clients)")
+    p.add_argument('--llm-mode', choices=['cloud','local'], default='cloud',
+                   help='Data policy for this process; local requires an explicitly local model')
     args = p.parse_args(argv)
     cfg = load_config()
+    cfg.llm_mode = args.llm_mode
     if args.command == "validate":
         from .validation import run_cli  # never imported by the MCP server
 
