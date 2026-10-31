@@ -49,3 +49,47 @@ Avant correction : les tests de timeline détectent le défaut de revérificatio
 le parcours de deux extractions détecte aussi un listing interne sans producteur.
 Après correction : 51 tests ciblés F03, rapports, extractions et imports réussis.
 Le contrôle complet précédent, après F02, donnait 300 réussites en 131,88 s.
+
+## F04 — Flux séparés et sorties natives (ET-02, CDC §9)
+
+Le runner compte explicitement stdout et stderr, même hors du périmètre natif.
+`output_dir` désigne le répertoire de tâche surveillé pour les nouveaux fichiers
+natifs ; les moteurs le passent explicitement, notamment icat avec son stderr
+dans le parent de `extracted/`. Les chemins résolus sont dédupliqués. Aucun ancêtre
+commun arbitraire n’est parcouru. Les fichiers natifs préexistants et les autres
+résultats sont exclus de la troncature ; les deux flux désignés restent les fichiers
+de sortie appartenant à l’appelant, ouverts en écriture par le runner.
+Les contrôles ont lieu pendant le processus et après sa terminaison. Un dépassement
+arrête le groupe, borne les fichiers de cette exécution et signale un échec.
+
+Avant correction : les quatre régressions F04 échouaient. Après correction :
+38 tests ciblés F04, runner, tshark réel, extraction et socle réussis.
+
+## Contre-vérifications fournies
+
+Le script fourni a été recopié dans `.scratch/`, sans modification du fichier
+original. Seuls les deux appels qui divulguaient auparavant des données ont été
+adaptés pour accepter les refus ToolError attendus et poursuivre les quatre sondes.
+Des assertions exigent les quatre protections :
+
+- Vue globale de crise : aucune donnée client exposée en cloud.
+- Métadonnées altérées : requête refusée, aucune donnée client retournée.
+- Preuve derrière timeline modifiée : export refusé avant création du candidat.
+- stderr séparé : dépassement détecté, 1 024 octets conservés pour une borne de 1 024.
+
+Les quatre assertions passent dans le conteneur temporaire sans réseau. Aucun
+nom de test ni aucune attestation synthétique n’est une revue humaine réelle.
+Les limites organisationnelles et de lab du bilan initial restent applicables.
+Le polling autorise toujours des pics transitoires : il ne remplace pas un quota
+dur de système de fichiers.
+
+## Validation finale
+
+`docker exec forensic-followup-tests python -m pytest -q -p no:cacheprovider` :
+**327 passed in 152.25s**, sans échec ni test ignoré. Compilation Python
+(`compileall -q src eval`) réussie ; inventaire du README conforme.
+Les quatre contre-vérifications adaptées aux refus attendus passent aussi.
+Les tests utilisent les bibliothèques réelles du projet dans `forensic-mcp:dev`.
+La majorité des moteurs forensiques des fixtures restent synthétiques ; le test
+tshark réel existant est inclus. Aucune validation sur un lab réel n’est revendiquée.
+Le serveur d’enquête, ses preuves et son journal n’ont pas été utilisés.

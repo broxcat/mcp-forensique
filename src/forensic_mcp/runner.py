@@ -19,7 +19,7 @@ async def capture(argv: list[str], timeout: float = 120) -> str:
     with tempfile.TemporaryDirectory(prefix='forensic-help-') as folder:
         d = Path(folder)
         rr = await run_process(argv, d/'stdout', d/'stderr', timeout,
-                               max_output_bytes=16 * 1024 * 1024)
+                               max_output_bytes=16 * 1024 * 1024, output_dir=d)
         if rr.timed_out or rr.output_exceeded or rr.exit_code != 0:
             raise ValueError('tool discovery failed, timed out or exceeded output budget')
         return (d/'stdout').read_text(errors='replace') + (d/'stderr').read_text(errors='replace')
@@ -55,9 +55,13 @@ async def run_process(argv: list[str], stdout_path: Path, stderr_path: Path, tim
                       env: dict[str, str] | None = None,
                       max_output_bytes: int | None = None,
                       tty_stdin: bool = False, session_root: Path | None = None,
-                      session_max_bytes: int | None = None) -> RunResult:
+                      session_max_bytes: int | None = None,
+                      output_dir: Path | None = None) -> RunResult:
     """Run argv, stream stdout/stderr to files; kill the process group on timeout or when
-    stdout+stderr grow beyond max_output_bytes (checked every POLL_SECONDS).
+    stdout+stderr and new native files in output_dir grow beyond max_output_bytes.
+    Both streams are always counted, irrespective of their directories. Native
+    scope defaults to stdout's parent; callers should provide their task directory.
+    Pre-existing native files are excluded and never truncated by this runner.
     tty_stdin: give the tool a pseudo-terminal as stdin (nothing is ever written to it), for
     tools that read stdin when it is redirected (bstrings checks Console.IsInputRedirected)."""
     if session_root is not None and session_max_bytes is not None:
@@ -82,7 +86,7 @@ async def run_process(argv: list[str], stdout_path: Path, stderr_path: Path, tim
                     stderr_path.write_bytes(b'')
                     return RunResult(-1, stdout_path, stderr_path, 0, output_exceeded=True)
                 return await run_process(argv, stdout_path, stderr_path, max(0.01, deadline-time.monotonic()),
-                                         env, limit, tty_stdin)
+                                         env, limit, tty_stdin, output_dir=output_dir)
             finally:
                 fcntl.flock(lock, fcntl.LOCK_UN)
     start = time.monotonic()
@@ -90,7 +94,8 @@ async def run_process(argv: list[str], stdout_path: Path, stderr_path: Path, tim
     master, slave = os.openpty() if tty_stdin else (None, None)
     try:
         return await _run(argv, stdout_path, stderr_path, deadline, start, env,
-                          max_output_bytes, asyncio.subprocess.DEVNULL if slave is None else slave)
+                          max_output_bytes, asyncio.subprocess.DEVNULL if slave is None else slave,
+                          output_dir)
     finally:
         for fd in (slave, master):
             if fd is not None:
@@ -99,14 +104,18 @@ async def run_process(argv: list[str], stdout_path: Path, stderr_path: Path, tim
 
 async def _run(argv: list[str], stdout_path: Path, stderr_path: Path, deadline: float,
                start: float, env: dict[str, str] | None, max_output_bytes: int | None,
-               stdin: Any) -> RunResult:
+               stdin: Any, output_dir: Path | None) -> RunResult:
     timed_out = exceeded = False
-    root = stdout_path.parent
-    existing = {p for p in root.rglob('*') if p.is_file()} - {stdout_path, stderr_path}
+    root = (output_dir or stdout_path.parent).resolve()
+    if not root.is_dir():
+        raise ValueError('native output scope must be an existing task directory')
+    streams = {stdout_path.resolve(), stderr_path.resolve()}
+    existing = {p.resolve() for p in root.rglob('*') if p.is_file()} - streams
 
     def outputs():
-        return [p for p in root.rglob('*') if p.is_file() and not p.is_symlink()
-                and p not in existing]
+        native = {p.resolve() for p in root.rglob('*') if p.is_file() and not p.is_symlink()
+                  and p.resolve().is_relative_to(root) and p.resolve() not in existing}
+        return sorted(native | {p for p in streams if p.is_file()})
 
     def over_budget():
         return max_output_bytes is not None and sum(p.stat().st_size for p in outputs()) > max_output_bytes

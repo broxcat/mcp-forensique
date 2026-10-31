@@ -207,7 +207,7 @@ async def version(cfg: Config) -> str:
         out = Path(cfg.output_root) / ".toolcache"
         out.mkdir(parents=True, exist_ok=True)
         rr = await runner.run_process([*cmd(cfg, "tshark"), "--version"], out / "tshark_v.txt",
-                                      out / "tshark_v.err", 60, session_root=cfg.output_root, session_max_bytes=cfg.max_session_output_mb * 1024 * 1024, max_output_bytes=1 << 20)
+                                      out / "tshark_v.err", 60, output_dir=out, session_root=cfg.output_root, session_max_bytes=cfg.max_session_output_mb * 1024 * 1024, max_output_bytes=1 << 20)
         first = (out / "tshark_v.txt").read_text(errors="replace").splitlines()
         m = re.search(r"(\d+\.\d+\.\d+)", first[0] if first else "")
         _version["tshark"] = f"tshark {m.group(1)}" if m and rr.exit_code == 0 else "tshark"
@@ -217,7 +217,7 @@ async def version(cfg: Config) -> str:
 async def run_to_file(cfg: Config, argv: list[str], stdout: Path, stderr: Path,
                       max_mb: int) -> runner.RunResult:
     """Run a network tool with timeout and an output bound (ET-02)."""
-    return await runner.run_process(argv, stdout, stderr, cfg.timeout_seconds,
+    return await runner.run_process(argv, stdout, stderr, cfg.timeout_seconds, output_dir=stderr.parent,
                                     session_root=cfg.output_root, session_max_bytes=cfg.max_session_output_mb * 1024 * 1024, max_output_bytes=max_mb * 1024 * 1024)
 
 

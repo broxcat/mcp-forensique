@@ -1,5 +1,10 @@
 # CLAUDE.md — MCP Forensique (Majeure Blue Team)
 
+Follow-up maintenance (2026-10-31): F01–F04 extend the audit corrections from
+2c519f4275fb. See docs/followup_verification.md for regression evidence and limits.
+Work uses a dedicated worktree and a temporary offline container; no real evidence
+or investigation journal is mounted and the investigation server is not restarted.
+
 Current maintenance status (2026-10-31): audit remediation is on
 `fix/audit-forensic-compliance`, based on audited commit bfea22c53615.
 See docs/audit_remediation.md for current safeguards, tests and limitations;

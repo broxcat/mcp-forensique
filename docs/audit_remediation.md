@@ -1,5 +1,9 @@
 # Corrections de l’audit du 31 octobre 2026
 
+La contre-vérification de cette livraison et les corrections résiduelles F01–F04
+sont décrites dans [followup_verification.md](followup_verification.md). Le résultat
+de 267 tests ci-dessous correspond à la livraison initiale, avant ces compléments.
+
 Branche : `fix/audit-forensic-compliance`. Aucun changement fusionné dans main.
 Le dépôt local était propre ; origin/main a été récupéré avant de créer la branche.
 Le cahier des charges est référencé par CLAUDE.md et le rapport fourni ; aucun
