@@ -82,8 +82,13 @@ class ReportOps:
                 if src:
                     try:
                         sources.add(evidence.relpath(self.cfg, Path(src)))
+                        from .redact import source_image
+                        original = source_image(self.cfg, Path(src))
+                        if original:
+                            sources.add(evidence.relpath(self.cfg, original))
                     except ValueError:
-                        pass
+                        if final:
+                            raise safety.SafetyError('invalid original evidence provenance')
                 c["provenance"] = {"tool": call.get("tool"), "engine": call.get("engine"),
                                    "argv": " ".join(str(a) for a in call.get("argv") or []),
                                    "evidence_sha256": call.get("evidence_sha256"),

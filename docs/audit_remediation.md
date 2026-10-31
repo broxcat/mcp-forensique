@@ -80,6 +80,10 @@ fichiers du résultat. Citation, validation positive et export final comparent c
 manifeste et exigent un producteur réussi et une chaîne valide. Les résultats
 historiques non scellés doivent être recalculés. Toute anomalie est journalisée.
 L’ancrage externe du journal reste une mesure organisationnelle indispensable.
+Les manifestes des extractions parentes sont revérifiés récursivement ; les preuves
+originales sont incluses dans la vérification finale, en plus des fichiers dérivés.
+Le parcours logiciel extraction → analyse → constat → décision synthétique → revue
+synthétique → rapport est couvert ; il ne remplace aucune validation humaine réelle.
 
 ## R11 — Sources des imports Windows (EF-05, EF-10)
 

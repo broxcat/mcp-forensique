@@ -6,10 +6,14 @@ def manifest(d):
     return {p.relative_to(d).as_posix(): sha256_file(p) for p in sorted(d.rglob('*')) if p.is_file()}
 
 
-def verify_result(cfg, rid):
+def verify_result(cfg, rid, seen=None):
     """Refuse missing, unsuccessful or altered result producers."""
     from . import audit
     from .safety import SafetyError
+    seen = set() if seen is None else seen
+    if rid in seen or len(seen) >= 32:
+        raise SafetyError('invalid result provenance chain')
+    seen.add(rid)
     d = result_dir(cfg.output_root, rid)
     producer = next((e for e in audit.iter_events(cfg.audit_file)
                     if e['type'] == 'tool_call' and e.get('result_id') == rid), None)
@@ -22,6 +26,14 @@ def verify_result(cfg, rid):
                      result_id=None,exit_code=None,duration_s=0,output_sha256=None,
                      outcome='refused',error='result integrity or provenance mismatch')
         raise SafetyError('result integrity or provenance mismatch; rerun the analysis')
+    meta = read_meta(d)
+    parents = list(meta.get('policy_sources', []))
+    if meta.get('input_path'):
+        src, root = Path(meta['input_path']).resolve(), Path(cfg.output_root).resolve()
+        if src.is_relative_to(root) and src != root:
+            parents.append(src.relative_to(root).parts[0])
+    for parent in set(parents):
+        verify_result(cfg, parent, set(seen))
     return producer
 
 import csv

@@ -1,5 +1,6 @@
 """Task 4.3b shortcuts (one test per tool) and 4.3c disk-image tools, with fake stubs."""
 import stat
+import re
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ from mcp.types import ElicitResult
 
 from export_helpers import jsonl, make_export
 from forensic_mcp import audit, safety, schemas, server
+from forensic_mcp import validation
 
 pytestmark = pytest.mark.anyio
 IMG = "WS-042/disk/ws042.E01"
@@ -201,3 +203,27 @@ async def test_second_jail_root_only_accepts_extractions(case) -> None:
             safety.jail_input(bad, case.evidence_root, out)
     refused = await _call(case, "mft_search", {"path": f"@{rid}/../rows.jsonl"})
     assert "outside the extraction" in refused
+
+
+async def test_extraction_to_reviewed_report_with_synthetic_decisions(case):
+    """Software integration only: these test attestations are not real human validation."""
+    extracted = await _call(case,'disk_extract',{'path':IMG,'partition_offset':206848,'targets':['mft']})
+    parsed = await _call(case,'mft_search',{'path':extracted['rows'][0]['path']})
+    row = parsed['rows'][0]
+    recorded = await _call(case,'record_finding',{'kind':'fact','confidence':'high',
+        'text':'Synthetic extracted MFT filename', 'citations':[{'result_id':parsed['result_id'],
+        'row':row['_row'],'field':'FileName','value':row['FileName']}]})
+    fid = re.search(r'F-\d+',recorded['summary']).group()
+    validation.decide(case,fid,'validated','Synthetic test analyst','synthetic test only')
+    candidate = await _call(case,'report_export',{'final':True})
+    rid = re.search(r'candidate (\S+):',candidate).group(1)
+    validation.review_report(case,rid,'Synthetic test senior','synthetic review only',True)
+    final = await _call(case,'report_export',{'final':True})
+    assert final['result_id'] == rid
+    text = (case.output_root/rid/'report.md').read_text()
+    assert parsed['result_id'] in text and fid in text
+    assert audit.verify_report(case.audit_file)['ok']
+    with (case.output_root/extracted['result_id']/'meta.json').open('a') as fh:
+        fh.write(' ')
+    refused = await _call(case,'report_export',{'final':True})
+    assert 'integrity' in refused
