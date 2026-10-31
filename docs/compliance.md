@@ -1,7 +1,8 @@
-> Etat du 31/10/2026 : les tableaux et nombres ci-dessous sont historiques.
+> État du 31/10/2026 : les tableaux et nombres ci-dessous sont historiques.
 > Voir [audit_remediation.md](audit_remediation.md) et [traceability.md](traceability.md)
-> pour les corrections et limites actuelles. Les mentions historiques de conformite
-> ne valent pas attestation actuelle. Les mesures de lab restent a realiser.
+> pour les corrections et limites actuelles. Les mentions historiques de conformité
+> ne valent pas attestation actuelle. Les mesures de lab restent à réaliser.
+
 # Matrice de conformité CDC ↔ forensic-mcp
 
 Mise à jour : J5 (02/10/2026), validation hors bande des constats et export du rapport (garde-fous CDC §5). Les statuts décrivent le **code** ;

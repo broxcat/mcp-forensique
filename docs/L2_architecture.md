@@ -1,7 +1,8 @@
-> Etat du 31/10/2026 : les tableaux et nombres ci-dessous sont historiques.
+> État du 31/10/2026 : les tableaux et nombres ci-dessous sont historiques.
 > Voir [audit_remediation.md](audit_remediation.md) et [traceability.md](traceability.md)
-> pour les corrections et limites actuelles. Les mentions historiques de conformite
-> ne valent pas attestation actuelle. Les mesures de lab restent a realiser.
+> pour les corrections et limites actuelles. Les mentions historiques de conformité
+> ne valent pas attestation actuelle. Les mesures de lab restent à réaliser.
+
 # L2 — Dossier d'architecture et matrice des garde-fous `forensic-mcp`
 
 *Version J4 (01/10/2026), tâches 2.1 et 2.2 : prête pour relecture (jalon M2).

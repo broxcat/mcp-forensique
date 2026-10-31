@@ -1,5 +1,10 @@
 # Corrections de l’audit du 31 octobre 2026
 
+Branche : `fix/audit-forensic-compliance`. Aucun changement fusionné dans main.
+Le dépôt local était propre ; origin/main a été récupéré avant de créer la branche.
+Le cahier des charges est référencé par CLAUDE.md et le rapport fourni ; aucun
+fichier autonome du CDC n’a été retrouvé dans le dépôt ou les pièces locales examinées.
+
 Référence : bfea22c53615464b9ed9a03ae6d8deea790146b9. Les tests de
 régression utilisent le SDK, jsonschema, YAML et les verrous Linux réels dans
 l’image du projet. Les preuves des tests sont synthétiques, jamais des résultats de lab.
@@ -142,3 +147,61 @@ L’équipe vérifie les empreintes, copie l’export comme nouvelle preuve dans
 du cas puis le monte en lecture seule avant `ez_import`. Le script ne modifie pas
 les originaux. Cette intégration contrôlée et l’exécution sur de vrais outils Windows
 restent à réaliser par l’équipe ; le montage `:ro` ne protège pas des écritures hôte.
+
+## Références de commits
+
+Les compléments successifs d’un même constat restent dans des commits dédiés.
+`git log --grep='Audit: Rxx'` permet de retrouver tous ses compléments.
+
+| Constat | Commit principal et complément final |
+|---|---|
+| R01 | 8ffe433, f31fbb1 |
+| R02 | 6e2495a, 6b7addc |
+| R03 | 27a39c1, ba23d42 |
+| R04 | 3aeaa48, 08589b5 |
+| R05 | b17c96d |
+| R06 | eb85c8d, 1d8fa89, d6d986a, f62659d |
+| R07 | ba8ac71, 6eb7803 |
+| R08 | e3b5dd3, daecad0 |
+| R09 | 03490ec, 28494ff |
+| R10 | c2e8080, 4a4ce2f |
+| R11 | 9a1c94a, e6333a9 |
+| R12 | cedfc74, a808837 |
+| C01 | 6f7b12f, d94dc8a |
+| C02 | 1c3c7a8, f947308 |
+| C03 | 4a74c49, 97ff503 |
+| C04 | ef9ca52 |
+| C05 | 5a11ece, e1c67ba |
+| C06 | 160ed43 et bilan documentaire final |
+
+## Validation et limites de remise
+
+Les commandes Python ont été exécutées dans `forensic-mcp:dev`, conteneur
+`forensic-audit-tests`, code seul monté à /app. Aucun montage du journal ni des
+preuves d’enquête. Les tests utilisent des répertoires temporaires.
+
+- Référence avant correction : 205 tests réussis.
+- Suite finale : `docker exec forensic-audit-tests python -m pytest -q` →
+  **267 passed in 112.64s** ; aucun échec ni test ignoré. Les deux attentes
+  incompatibles avec la politique cloud ont été remplacées par des assertions
+  vérifiant explicitement le mode cloud et la non-divulgation des diagnostics.
+- Sélection des nouvelles régressions contre les sources de bfea22c : 38 échecs,
+  5 réussites (7,63 s). Ce contrôle rétrospectif utilise les dépendances réelles ;
+  certains échecs constatent aussi des interfaces de protection absentes à cette révision.
+- SDK MCP, PyYAML, jsonschema et flock Linux réels ; quatre processus concurrents.
+- Test d’intégration avec le tshark installé : capture synthétique et limite native.
+- Parseurs synthétiques du dépôt pour la majorité des tests Volatility/EZ/disque.
+- Garde Windows : quatre contrôles sans écritures ; analyse syntaxique sans erreur.
+- Inventaire README conforme (57 outils) ; compilation Python réussie.
+
+À réaliser par l’équipe : essais sur preuves de lab réelles, vérité terrain figée,
+conversations et confirmations cloud/local, mesures comparatives L6, revue senior
+authentifiée, ancrage hors poste du journal, accord fournisseur et rattachement des
+livrables L1/L8 éventuellement remis ailleurs. Aucune identité de relecteur réelle,
+mesure d’efficacité ou validation humaine n’est revendiquée ici.
+
+Limites techniques : le polling n’est pas un quota disque dur ; le journal continue
+à croître après épuisement du budget. La pseudonymisation ne couvre pas tous les
+encodages possibles. Les résultats anciens sans manifeste scellé doivent être
+recalculés. L’image Docker existante a été utilisée, sans reconstruire ni modifier
+les dépendances installées. Le serveur d’enquête n’a pas été démarré ou redémarré.

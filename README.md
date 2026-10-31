@@ -72,7 +72,7 @@ users = ["alice"]
 ```
 
 Configuration du serveur : [`forensic-mcp.docker.toml`](forensic-mcp.docker.toml) (bornes de
-réponse, délai maximal, classification par défaut `internal`, `llm_mode = "local"` par défaut).
+réponse, délai maximal, classification par défaut `internal`, TOML historique local ; processus CLI cloud par défaut).
 Après une modification du code ou de la configuration : `docker compose restart forensic` (pas de
 rechargement automatique).
 
@@ -126,7 +126,7 @@ claude mcp add forensic -- docker exec -i forensic-mcp python -m forensic_mcp --
 tout le reste exige le jeton (`/mcp` sans jeton : 401). *Non vérifié* : l'enregistrement du
 serveur dans Open WebUI et les confirmations d'actions sensibles depuis ce client.
 
-**Modes LLM** (`llm_mode` dans `forensic-mcp.docker.toml`) :
+**Modes LLM** (`--llm-mode cloud|local` par processus ; cloud par défaut) :
 
 | Mode | Usage | Effet |
 |---|---|---|
