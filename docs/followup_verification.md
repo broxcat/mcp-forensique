@@ -31,3 +31,21 @@ de vrais producteurs de test, au lieu de métadonnées non scellées.
 Validation avant correction : 17 échecs / 1 réussite aux premières régressions F02.
 Après correction : 24 tests F02/R01/R02/C03 réussis ; 72 tests ciblés incluant
 imports, réseau, rapports et playbook réussis lors du contrôle élargi.
+
+## F03 — Preuves originales derrière les synthèses (CDC §5, EF-05, EF-10)
+
+Le rapport parcourt récursivement le graphe scellé des citations : `policy_sources`,
+entrées directes, extractions successives, imports Windows, sources auxiliaires et
+manifestes d’export. Les preuves sont dédupliquées et leurs empreintes complètes
+sont recalculées avant candidature puis après revue, même si taille/mtime restent
+identiques. Les empreintes scellées et les manifestes de dossiers sont comparés,
+en plus du registre. Les sources absentes, non enregistrées ou incohérentes bloquent
+l’export. Les audit_id « après » figurent dans le candidat ; la finalisation lie
+ses nouveaux événements de vérification sans réécrire les octets relus.
+Les listings internes produits par une extraction sont également scellés, afin que
+leur provenance soit vérifiable dans les parcours successifs.
+
+Avant correction : les tests de timeline détectent le défaut de revérification ;
+le parcours de deux extractions détecte aussi un listing interne sans producteur.
+Après correction : 51 tests ciblés F03, rapports, extractions et imports réussis.
+Le contrôle complet précédent, après F02, donnait 300 réussites en 131,88 s.
