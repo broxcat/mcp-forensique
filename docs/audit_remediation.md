@@ -44,3 +44,10 @@ sorties natives et stdout/stderr, pendant et après le processus. Un dépassemen
 arrête le groupe et tronque les sorties au budget ; le statut est un échec explicite.
 La borne est contrôlée par polling, pas par quota disque : un pic transitoire
 reste possible. Le quota global de session reste à mettre en place.
+
+## R07 — Réponses bornées (EF-04, ET-02)
+
+La mesure inclut l’indentation, les marqueurs et l’échappement des caractères `<`.
+Une réponse dont les champs hors lignes dépassent le budget est refusée avec une
+erreur explicite. Une ligne qui ne tient pas ne produit jamais un curseur immobile.
+Les données complètes restent dans les fichiers du résultat.

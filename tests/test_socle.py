@@ -110,12 +110,8 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
 async def test_response_size_is_bounded(cfg) -> None:
     cfg.max_response_kb = 1  # the full 2-row response is ~1.3 KiB
     r = await _call(cfg, "vol3_run", {"path": "mem.raw", "plugin": "windows.cmdline"})
-    s = r.structured_content
-    assert s["truncated"] and s["row_count"] == 3
-    assert contract.size_kb(s) <= 1 or s["rows"] == []
-    assert s["page"]["next_offset"] == len(s["rows"]) < 3
-    assert schemas.errors(schemas.output_validator(), s) == []
-
+    assert r.is_error  # EF-04: explicit refusal when no row fits; never a repeating cursor
+    assert "budget" in r.content[0].text
 
 # ---- audit journal (ET-04, objective 3) -----------------------------------------------------
 async def test_every_call_is_journaled_ok_refused_failed(cfg) -> None:

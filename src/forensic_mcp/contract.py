@@ -71,7 +71,8 @@ def numbered(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def size_kb(payload: dict[str, Any]) -> float:
     """Serialized size of a payload in KiB."""
-    return len(json.dumps(payload, ensure_ascii=False).encode()) / 1024
+    body = json.dumps(payload, ensure_ascii=False, indent=1).replace('<', '\\u003c')
+    return len(f'{BEGIN}\n{NOTICE}\n{body}\n{END}'.encode()) / 1024
 
 
 def fit(payload: dict[str, Any], max_kb: int) -> dict[str, Any]:
@@ -93,6 +94,8 @@ def fit(payload: dict[str, Any], max_kb: int) -> dict[str, Any]:
         call["args"]["offset"] = end
     else:
         page["next_call"] = _next_call(None, payload.get("result_id"), end, page["limit"])
+    if size_kb(payload) > max_kb or (not rows and end < payload['row_count']):
+        raise ValueError("response exceeds budget: narrow the query or increase max_response_kb; no page can progress")
     return payload
 
 
