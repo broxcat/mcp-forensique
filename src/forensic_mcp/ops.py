@@ -164,7 +164,10 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
         seen.add(rid)
         m = results.read_meta(results.result_dir(self.cfg.output_root, rid))
         if m.get("input_path"):
-            return self._policy(Path(m["input_path"]))
+            from .redact import Policies
+            return Policies([self._policy(Path(m['input_path'])),
+                             *[self._policy(safety.jail_path(s['path'], self.cfg.evidence_root))
+                               for s in m.get('source_inputs', [])]])
         if "policy_sources" not in m and self.cfg.llm_mode == "cloud":
             raise safety.SafetyError("result has no classification provenance; regenerate locally")
         from .redact import Policies

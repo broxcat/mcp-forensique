@@ -140,6 +140,7 @@ if ($null -eq $exe) { throw "$Tool.exe not found under $EzDir" }
 
 # ---- typed options ------------------------------------------------------------------------
 $optArgv = New-Object System.Collections.Generic.List[string]
+$sourceInputs = @()
 foreach ($name in $Options.Keys) {
     $o = Get-Prop $spec.options $name
     if ($null -eq $o) { throw "$Tool has no option '$name'. Allowed: $((@($spec.options.PSObject.Properties | ForEach-Object { $_.Name }) -join ', ')) (none = no option)" }
@@ -162,7 +163,10 @@ foreach ($name in $Options.Keys) {
                        $optArgv.Add($o.flag); $optArgv.Add($b); continue }
         'regpath' { if (([string]$v) -notmatch $reg.regpath_pattern -or ([string]$v).Length -gt 512) { throw "$name must be a registry path" }
                     $optArgv.Add($o.flag); $optArgv.Add([string]$v); continue }
-        'evidence_path' { $optArgv.Add($o.flag); $optArgv.Add((Resolve-UnderRoot ([string]$v) $root)); continue }
+        'evidence_path' { $optionPath = Resolve-UnderRoot ([string]$v) $root
+                          $optArgv.Add($o.flag); $optArgv.Add($optionPath)
+                          $sourceInputs += [ordered]@{ flag = $o.flag; path = (Get-RelativePosix $optionPath $root); sha256 = (Get-ContentDigest $optionPath) }
+                          continue }
         default { throw "Unsupported option kind '$($o.kind)'" }
     }
 }
@@ -205,6 +209,7 @@ $manifest = [ordered]@{
     tool_signature = (Get-AuthenticodeSignature -LiteralPath $exe.FullName).Status.ToString()
     host = $CaseHost
     input = [ordered]@{ path = $inputRel; kind = $(if ($isDir) { 'folder' } else { 'file' }); sha256 = $inputDigest }
+    source_inputs = @($sourceInputs)
     argv = @($Tool) + $argv; output_format = $oflag; outputs = $outputs
     started_utc = $started.ToString('yyyy-MM-ddTHH:mm:ss.fffZ'); finished_utc = $finished.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
     exit_code = $p.ExitCode; stdout_tail = (Get-Tail $stdout); stderr_tail = (Get-Tail $stderr)

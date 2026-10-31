@@ -86,6 +86,16 @@ class ImportOps:
             raise safety.SafetyError(f"input {inp.get('path')} differs from the one the export "
                                      "was made from (content digest mismatch)")
         self._ez_input({'path': str(src)})
+        source_inputs = man.get('source_inputs') or []
+        required_flags = {o.flag for o in zimmerman.REGISTRY[tool].options.values()
+                          if o.kind == 'evidence_path' and o.flag in (man.get('argv') or [])}
+        if not required_flags <= {s.get('flag') for s in source_inputs}:
+            raise safety.SafetyError('manifest missing original option sources; regenerate the Windows export')
+        for source in source_inputs:
+            original = safety.jail_path(source['path'], self.cfg.evidence_root)
+            self._ez_input({'path': str(original)})
+            if not original.exists() or content_digest(original) != source.get('sha256'):
+                raise safety.SafetyError('Windows option source missing or modified')
         if known.get(msha) and (d0 / "rows.jsonl").exists():
             m = results.read_meta(d0)
             return {"result_id": d0.name, "dir": d0, "plugin": tool, "argv": m["argv"],
@@ -112,6 +122,7 @@ class ImportOps:
         argv = [str(a) for a in man.get("argv") or []]
         results.write_meta(d, tool=tool, plugin=tool, argv=argv, tool_version=man.get("tool_version"),
                            input_path=str(src), input_sha256=inp.get("sha256"),
+                           source_inputs=source_inputs,
                            export_path=str(folder), manifest_sha256=msha,
                            exit_code=man.get("exit_code"), row_count=n, error=error or None,
                            notes=notes, imported=True)

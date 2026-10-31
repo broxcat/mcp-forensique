@@ -75,6 +75,9 @@ L’ancrage externe du journal reste une mesure organisationnelle indispensable.
 Les empreintes de l’export et de sa source sont contrôlées avant tout retour du
 cache. La source originale est enregistrée par le mécanisme commun, y compris
 les fichiers d’un dossier. L’export final refuse une source citée absente du registre.
+Les options de chemin sont inventoriées dans `source_inputs` du manifeste Windows,
+enregistrées et revérifiées avant réutilisation. Les anciens exports comportant
+de telles options sans inventaire doivent être régénérés.
 
 ## R12 — Rejeu EVTX/MFT (ET-04, CDC §2 O3)
 

@@ -78,6 +78,7 @@ class ReportOps:
                 call = calls.get(c["result_id"], {})
                 meta = results.read_meta(Path(self.cfg.output_root) / c["result_id"])
                 src = meta.get("input_path")
+                sources.update(s['path'] for s in meta.get('source_inputs', []))
                 if src:
                     try:
                         sources.add(evidence.relpath(self.cfg, Path(src)))
