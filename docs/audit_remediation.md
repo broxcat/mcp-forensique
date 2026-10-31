@@ -22,3 +22,10 @@ Les constats, rapports et consultations ultérieures résolvent toutes les sourc
 citées. En cloud, client est refusé et les politiques internes sont composées.
 Une ancienne synthèse sans provenance est refusée : la régénérer localement.
 Les fichiers bruts restent sensibles et doivent être protégés côté serveur.
+
+## R02 — Isolation des sitreps (EF-12, EF-13, CDC §5)
+
+Un dossier explicite est obligatoire. Tous les parents des citations d’un constat
+doivent appartenir à ce dossier ; les constats multi-dossiers sont exclus.
+Recommandations et compteurs sont calculés après filtrage. La politique du dossier
+est conservée même si le sitrep ne contient aucun constat.

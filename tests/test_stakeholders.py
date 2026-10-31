@@ -266,7 +266,7 @@ async def test_sitrep_communications_never_state_an_open_status_as_done(cfg) -> 
                                      "summary": "message laissé, pas de réponse"})
         await _call(c, "stakeholder_upsert", {"case": "", "role": "client", "status": "sans_objet"})
         st1 = await _call(c, "checklist_status", {"case": ""})
-        reps = {a: await _call(c, "sitrep_draft", {"audience": a})
+        reps = {a: await _call(c, "sitrep_draft", {"case": ".", "audience": a})
                 for a in ("direction", "technique")}
         await _call(c, "stakeholder_upsert", {"case": "", "role": "dpo", "stakeholder_id": "S-0002",
                                               "status": "accuse_reception"})

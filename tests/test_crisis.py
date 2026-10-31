@@ -81,9 +81,9 @@ async def test_sitrep_uses_validated_findings_only(cfg) -> None:
         await _call(c, "crisis_add_event", _ev("2026-09-29T14:00:00Z", "event", "Alerte EDR"))
         await _call(c, "crisis_add_event", _ev("2026-09-29T14:20:00Z", "action",
                                                "Dump mémoire réalisé", owner="Analyste A"))
-        tech = await _call(c, "sitrep_draft", {"audience": "technique", "title": "WS-042"})
-        boss = await _call(c, "sitrep_draft", {"audience": "direction"})
-        legal = await _call(c, "sitrep_draft", {"audience": "juridique"})
+        tech = await _call(c, "sitrep_draft", {"case": ".", "audience": "technique", "title": "WS-042"})
+        boss = await _call(c, "sitrep_draft", {"case": ".", "audience": "direction"})
+        legal = await _call(c, "sitrep_draft", {"case": ".", "audience": "juridique"})
     texts = {}
     for name, r in (("tech", tech), ("boss", boss), ("legal", legal)):
         assert [x["section"] for x in r["rows"]] == list(SECTIONS)

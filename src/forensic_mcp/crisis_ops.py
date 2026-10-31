@@ -213,11 +213,27 @@ class CrisisOps:
         audience = params.get("audience")
         if audience not in AUDIENCES:
             raise ValueError(f"audience must be one of {AUDIENCES}")
+        if not params.get('case'):
+            raise safety.SafetyError("sitrep requires an explicit case folder")
         case, ps = self._crisis_policy(params.get("case"))
+        if case == '.':
+            case = ''
         title = str(params.get("title") or "").strip()[:120] or (
             f"incident {case}" if case else "incident en cours")
         events = self.crisis_events(case or None)
-        findings = load_findings(self.cfg.audit_file)
+        from .redact import source_image, Policies
+        root = safety.jail_path(case, self.cfg.evidence_root)
+        findings = []
+        for f in load_findings(self.cfg.audit_file, with_citations=True):
+            paths = []
+            for c in f['citation_list']:
+                m = results.read_meta(results.result_dir(self.cfg.output_root, c['result_id']))
+                if m.get('input_path'):
+                    src = Path(m['input_path']).resolve()
+                    paths.append(source_image(self.cfg, src) or src)
+            if paths and len(paths) == len(f['citation_list']) and all(p.is_relative_to(root) for p in paths):
+                findings.append(f)
+        ps = Policies([ps, self._findings_policy(findings)])
         sec = self._sitrep_sections(audience, events, findings)
         sec["communications"] = self.communications_section(audience, case or None)
         n_sh = len(self.stakeholder_board(case or None))
@@ -244,6 +260,8 @@ class CrisisOps:
                                               for i in items), encoding="utf-8")
         elapsed = round(time.monotonic() - t0, 3)
         results.write_meta(d, tool="sitrep_draft", plugin="sitrep", argv=[], input_path=None,
+                           policy_sources=sorted({c['result_id'] for f in findings for c in f['citation_list']}),
+                           input_path_case=str(root / 'case.toml'),
                            audience=audience, head_hash=head["head_hash"], row_count=len(items),
                            sitrep_sha256=results.sha256_file(d / "sitrep.md"),
                            generation_s=elapsed, exit_code=0)
@@ -257,7 +275,7 @@ class CrisisOps:
         out.payload["notes"] = [f"sitrep: /output/{rid}/sitrep.md",
                                 "BROUILLON : à relire et compléter (impact, décisions) par le "
                                 "responsable de crise avant diffusion."]
-        self._learn_people(ps, case)
+        self._learn_people(self._crisis_policy(case)[1], case)
         out.pseudo = ps
         out.audit_extra = {"sitrep_sha256": results.sha256_file(d / "sitrep.md"),
                            "head_hash": head["head_hash"]}

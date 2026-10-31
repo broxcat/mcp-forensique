@@ -154,7 +154,10 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
         if "policy_sources" not in m and self.cfg.llm_mode == "cloud":
             raise safety.SafetyError("result has no classification provenance; regenerate locally")
         from .redact import Policies
-        return Policies([self._result_policy(s, set(seen)) for s in m.get("policy_sources", [])])
+        policies = [self._result_policy(s, set(seen)) for s in m.get("policy_sources", [])]
+        if m.get('input_path_case'):
+            policies.append(self._policy(Path(m['input_path_case'])))
+        return Policies(policies)
 
     def _findings_policy(self, findings: list[dict]) -> Any:
         from .redact import Policies

@@ -82,7 +82,7 @@ async def test_every_tool_response_matches_contract(cfg) -> None:
                  ("crisis_add_event", {"time_utc": "2026-09-29T14:00:00Z", "kind": "event",
                                        "description": "Alerte EDR", "owner": "SOC",
                                        "source": "SOC"}),
-                 ("crisis_timeline", {}), ("sitrep_draft", {"audience": "direction"}),
+                 ("crisis_timeline", {}), ("sitrep_draft", {"case": ".", "audience": "direction"}),
                  ("containment_suggestions", {"incident_type": "ransomware"}),
                  ("stakeholder_upsert", {"case": "", "role": "dpo"}),
                  ("stakeholder_list", {}),
