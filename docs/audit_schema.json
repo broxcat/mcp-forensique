@@ -52,7 +52,7 @@
         "audit_id": {"description": "1-based sequence number, equals the line number.", "type": "integer", "minimum": 1},
         "ts_utc": {"$ref": "#/$defs/utc"},
         "type": {
-          "enum": ["evidence_registered", "evidence_verified", "tool_call", "suggestion",
+          "enum": ["report_review", "evidence_registered", "evidence_verified", "tool_call", "suggestion",
                    "validation", "action_request", "action_confirmed", "crisis_event",
                    "imported_from_windows", "stakeholder_update", "comms_logged"]
         },

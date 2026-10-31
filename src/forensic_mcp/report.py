@@ -10,10 +10,11 @@ value, tool, command line, version, evidence SHA-256, audit ids.
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from typing import Any
 
-from . import audit, evidence, results, safety
+from . import audit, contract, evidence, results, safety
 from .findings_ops import BLOCKING, STATUS_LABEL, load_findings
 
 
@@ -57,6 +58,7 @@ class ReportOps:
               if f["status"] != STATUS_LABEL["rejected_by_server"]]
         blocking = [f for f in fs if f["status"] in BLOCKING]
         ps = self._findings_policy(fs)
+        snapshot = hashlib.sha256(audit.canonical(load_findings(self.cfg.audit_file, with_citations=True)).encode()).hexdigest()
         if final and blocking:
             raise safety.SafetyError(
                 "export final refusé : " + ", ".join(f"{f['finding_id']} ({f['status']})"
@@ -90,6 +92,19 @@ class ReportOps:
             raise safety.SafetyError(f"export final refusé : preuve modifiée depuis "
                                      f"l'enregistrement : {', '.join(changed)}")
         head = audit.verify_report(self.cfg.audit_file)  # after the "after" hashes
+        if final:
+            for review in reversed(list(audit.iter_events(self.cfg.audit_file))):
+                if review['type'] != 'report_review' or review.get('findings_sha256') != snapshot:
+                    continue
+                approved = results.result_dir(self.cfg.output_root, review['result_id'])
+                m = results.read_meta(approved)
+                if (m.get('title') == title and review.get('senior') is True
+                        and results.sha256_file(approved / 'report.md') == review['report_sha256']):
+                    out = self._listing('report_export', params, [], 'Rapport FINAL relu par un senior', pseudo=ps)
+                    out.result_id = out.payload['result_id'] = approved.name
+                    out.payload['raw_output'] = contract.raw_output(approved.name)
+                    out.audit_extra = {'final':True,'head_hash':m['head_hash'],'report_sha256':review['report_sha256'],'review_audit_id':review['audit_id']}
+                    return out
         rid, d = results.new_result(self.cfg.output_root, "report")
         text = self._markdown(title, final, head, shown, fs, ev_rows)
         (d / "report.md").write_text(text, encoding="utf-8")
@@ -99,8 +114,11 @@ class ReportOps:
                                               for i in items), encoding="utf-8")
         results.write_meta(d, tool="report_export", plugin="report", argv=[], input_path=None,
                            policy_sources=sorted({c['result_id'] for f in fs for c in f['citation_list']}),
+                           title=title, findings_sha256=snapshot,
                            final=final, head_hash=head["head_hash"], row_count=len(items),
                            report_sha256=results.sha256_file(d / "report.md"), exit_code=0)
+        if final:
+            raise safety.SafetyError(f'export final requires senior review of candidate {rid}: use review-report locally')
         out = self._listing("report_export", params, items,
                             f"{'Rapport FINAL' if final else 'Brouillon'} : {len(items)} constats, "
                             f"{len(blocking)} non validés ; journal {head['lines']} lignes, "

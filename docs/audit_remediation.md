@@ -101,3 +101,13 @@ n’expose que son identifiant d’audit ; le détail reste dans le journal loca
 La pseudonymisation n’est pas une garantie d’anonymat des textes libres ou de
 tous les encodages. Les données client restent obligatoirement locales ; l’accord
 fournisseur de non-rétention reste à obtenir et documenter par l’équipe.
+
+## C03 — Relecture senior (CDC §5)
+
+`report_export(final=true)` prépare un candidat et refuse sa diffusion finale
+tant qu’il n’a pas une revue senior hors MCP. Depuis un terminal local :
+`python -m forensic_mcp review-report`, puis relancer l’export. L’événement lie
+le nom déclaré, le motif, l’empreinte exacte du rapport et la version des constats.
+Le rapport approuvé est réutilisé sans réécriture. Une modification l’invalide.
+L’identité et la qualification senior doivent être authentifiées par les contrôles
+du poste et la procédure d’équipe ; la saisie du nom est une attestation déclarative.

@@ -9,6 +9,7 @@ This module is not imported by the MCP server (checked by a test).
 from __future__ import annotations
 
 import re
+import hashlib
 import sys
 from pathlib import Path
 from typing import Any, Callable
@@ -24,6 +25,23 @@ NAME_RE = re.compile(r"^[^\x00-\x1f]{2,80}$")
 
 class ValidationError(ValueError):
     """A decision that cannot be recorded."""
+
+
+def review_report(cfg, rid, analyst, reason, senior=False):
+    """Out-of-band attestation; OS/account controls must authenticate the reviewer."""
+    if not senior or not NAME_RE.fullmatch(analyst) or len(reason.strip()) < 3:
+        raise ValidationError('named senior reviewer and reason required')
+    d = results.result_dir(cfg.output_root, rid)
+    m = results.read_meta(d)
+    snapshot = hashlib.sha256(audit.canonical(load_findings(cfg.audit_file, with_citations=True)).encode()).hexdigest()
+    if not m.get('final') or snapshot != m.get('findings_sha256'):
+        raise ValidationError('candidate is stale or is not a final report candidate')
+    digest = results.sha256_file(d / 'report.md')
+    if digest != m.get('report_sha256'):
+        raise ValidationError('candidate report was modified')
+    return audit.append(cfg.audit_file, 'report_review', {'kind':'analyst','name':analyst},
+                        result_id=rid,report_sha256=digest,findings_sha256=snapshot,
+                        senior=True,comment=reason)
 
 
 def decide(cfg: Config, finding_id: str, decision: str, analyst: str, reason: str,
