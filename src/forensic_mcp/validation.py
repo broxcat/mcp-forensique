@@ -36,12 +36,15 @@ def decide(cfg: Config, finding_id: str, decision: str, analyst: str, reason: st
         raise ValidationError("analyst name required (2-80 characters)")
     if not 3 <= len(reason) <= 500 or "\x00" in reason:
         raise ValidationError("reason required (3-500 characters)")
-    f = next((x for x in load_findings(cfg.audit_file) if x["finding_id"] == finding_id), None)
+    f = next((x for x in load_findings(cfg.audit_file, with_citations=True) if x["finding_id"] == finding_id), None)
     if f is None:
         raise ValidationError(f"unknown finding {finding_id!r}")
     if f["status"] == STATUS_LABEL["rejected_by_server"] and decision != "rejected":
         raise ValidationError(f"{finding_id} was rejected by the server cross-check: it can only "
                               "be rejected (with a reason), never validated or re-opened")
+    if decision == 'validated':
+        for c in f['citation_list']:
+            results.verify_result(cfg, c['result_id'])
     return audit.append(cfg.audit_file, "validation",
                         {"kind": "analyst", "name": analyst, "client": channel},
                         finding_id=finding_id, decision=decision, comment=reason)

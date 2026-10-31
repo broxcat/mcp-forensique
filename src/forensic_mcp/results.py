@@ -1,6 +1,29 @@
 """Result folders: meta.json, stable `_row` numbers and streaming queries over CSV/JSONL rows."""
 from __future__ import annotations
 
+def manifest(d):
+    """Digest every result file, including raw outputs and metadata."""
+    return {p.relative_to(d).as_posix(): sha256_file(p) for p in sorted(d.rglob('*')) if p.is_file()}
+
+
+def verify_result(cfg, rid):
+    """Refuse missing, unsuccessful or altered result producers."""
+    from . import audit
+    from .safety import SafetyError
+    d = result_dir(cfg.output_root, rid)
+    producer = next((e for e in audit.iter_events(cfg.audit_file)
+                    if e['type'] == 'tool_call' and e.get('result_id') == rid), None)
+    valid = (audit.verify_report(cfg.audit_file)['ok'] and producer
+             and producer.get('outcome') == 'ok' and producer.get('result_manifest')
+             and producer['result_manifest'] == manifest(d))
+    if not valid:
+        audit.append(cfg.audit_file, 'tool_call', {'kind':'server'}, tool='verify_result',
+                     params={'result_id':rid}, argv=[],engine='forensic-mcp',evidence_sha256=None,
+                     result_id=None,exit_code=None,duration_s=0,output_sha256=None,
+                     outcome='refused',error='result integrity or provenance mismatch')
+        raise SafetyError('result integrity or provenance mismatch; rerun the analysis')
+    return producer
+
 import csv
 import hashlib
 import heapq

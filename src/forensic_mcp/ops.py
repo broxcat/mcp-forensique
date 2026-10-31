@@ -136,6 +136,11 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
             outcome, extra["error"] = "tool_error", f"exit code {out.exit_code}"
         else:
             outcome = "ok"
+        if out.result_id and outcome == 'ok':
+            previous = next((e for e in audit.iter_events(self.cfg.audit_file)
+                             if e['type'] == 'tool_call' and e.get('result_id') == out.result_id), None)
+            if previous is None:
+                extra['result_manifest'] = results.manifest(results.result_dir(self.cfg.output_root, out.result_id))
         payload["audit_id"] = self._journal(rec, t0, outcome, **extra)
         return contract.render(payload)
 

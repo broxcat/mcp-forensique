@@ -69,6 +69,8 @@ class ReportOps:
         sources = set()
         for f in shown:
             for c in f["citation_list"]:
+                if final:
+                    results.verify_result(self.cfg, c['result_id'])
                 call = calls.get(c["result_id"], {})
                 meta = results.read_meta(Path(self.cfg.output_root) / c["result_id"])
                 src = meta.get("input_path")

@@ -57,3 +57,11 @@ Les données complètes restent dans les fichiers du résultat.
 L’allocation F/C/S et l’écriture partagent le même verrou Linux du journal.
 Les vues utilisent l’identifiant effectivement alloué. Le test lance quatre
 processus indépendants partageant le fichier, sans substitut de flock.
+
+## R08 — Intégrité des résultats (EF-10, CDC §5)
+
+Le premier appel producteur scelle dans le journal les empreintes de tous les
+fichiers du résultat. Citation, validation positive et export final comparent ce
+manifeste et exigent un producteur réussi et une chaîne valide. Les résultats
+historiques non scellés doivent être recalculés. Toute anomalie est journalisée.
+L’ancrage externe du journal reste une mesure organisationnelle indispensable.

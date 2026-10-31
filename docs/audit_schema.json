@@ -95,6 +95,7 @@
               "timed_out": {"type": "boolean"},
               "duration_s": {"type": "number", "minimum": 0},
               "output_sha256": {"description": "sha256 of rows.jsonl, compared by replay().", "oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+              "result_manifest": {"description": "Sealed relative file paths and hashes of the producing result.", "type": "object", "additionalProperties": {"$ref": "#/$defs/sha256"}},
               "replay_of": {"description": "audit_id of the original call when this is a replay.", "type": "integer", "minimum": 1},
               "replay_match": {"type": "boolean"},
               "row_count": {"description": "Rows matched by this call (since 5.3; used to verify an observation = absence).", "type": "integer", "minimum": 0},
