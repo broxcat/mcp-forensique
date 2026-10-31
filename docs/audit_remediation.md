@@ -93,3 +93,11 @@ Chaque processus CLI utilise cloud par défaut, même si le fichier TOML indique
 local. Le modèle local exige `--llm-mode local` sur un processus distinct. Le
 modèle d’espace cloud fixe explicitement cloud. Le transport ne prouve pas
 l’hébergement du modèle ; l’équipe doit contrôler la configuration du client.
+
+## C02 — Représentations et erreurs (CDC §5)
+
+Les IPv6 et arguments PowerShell encodés sont masqués. En cloud, une erreur
+n’expose que son identifiant d’audit ; le détail reste dans le journal local.
+La pseudonymisation n’est pas une garantie d’anonymat des textes libres ou de
+tous les encodages. Les données client restent obligatoirement locales ; l’accord
+fournisseur de non-rétention reste à obtenir et documenter par l’équipe.

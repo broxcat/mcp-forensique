@@ -23,6 +23,8 @@ from .config import CLASSIFICATIONS, Config
 from .safety import SafetyError
 
 IPV4 = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})(?![\d.])")
+IPV6 = re.compile(r'(?<![\w:])([0-9a-fA-F]*:[0-9a-fA-F:.]+)(?![\w:])')
+ENCODED = re.compile(r'(?i)(-(?:enc|encodedcommand|e)\s+)[A-Za-z0-9+/=]{16,}')
 TOKEN = re.compile(r"\b(?:HOST|USER|IP_EXT|IP_INT|PERSON|CONTACT)_\d+\b")
 # Contact details typed into the stakeholder board (EF-15): e-mail addresses and phone numbers.
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
@@ -192,6 +194,8 @@ class Pseudonymizer:
 
     def text(self, s: str) -> str:
         """Pseudonymise one string: IPv4 addresses, then every known host/user name."""
+        s = ENCODED.sub(r'\1[ENCODED_REDACTED]', s)
+        s = IPV6.sub(self._ip, s)
         s = IPV4.sub(self._ip, s)
         names = sorted((k for k, t in self.fwd.items() if not t.startswith("IP_")), key=len,
                        reverse=True)

@@ -113,10 +113,12 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
             schemas.validate_output(payload)
         except (safety.SafetyError, ValueError, FileNotFoundError, KeyError) as exc:
             aid = self._journal(rec, t0, "refused", error=str(exc))
-            raise ToolError(f"refused (audit_id {aid}): {exc}") from exc
+            detail = str(exc) if self.cfg.llm_mode == 'local' else 'request refused; inspect the server journal locally'
+            raise ToolError(f"refused (audit_id {aid}): {detail}") from exc
         except Exception as exc:  # journal every failure, then report it
             aid = self._journal(rec, t0, "tool_error", error=f"{type(exc).__name__}: {exc}")
-            raise ToolError(f"tool error (audit_id {aid}): {type(exc).__name__}: {exc}") from exc
+            detail = f'{type(exc).__name__}: {exc}' if self.cfg.llm_mode == 'local' else 'inspect the server journal locally'
+            raise ToolError(f"tool error (audit_id {aid}): {detail}") from exc
         rec.update(params=out.params_real, argv=out.argv, engine=out.engine,
                    evidence_sha256=out.evidence_sha256, result_id=out.result_id,
                    exit_code=out.exit_code, output_sha256=out.output_sha256)
