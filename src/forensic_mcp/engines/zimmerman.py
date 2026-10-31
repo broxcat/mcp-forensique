@@ -161,7 +161,7 @@ async def run(cfg: Config, tool: str, path: Path, options: list[str],
         raise ValueError("AppCompatCacheParser without -f would read the host registry: refused")
     start = time.time()
     rr = await runner.run_process(argv, d / "stdout.txt", d / "stderr.txt", cfg.timeout_seconds,
-                                  max_output_bytes=cfg.max_output_mb * 1024 * 1024,
+                                  session_root=cfg.output_root, session_max_bytes=cfg.max_session_output_mb * 1024 * 1024, max_output_bytes=cfg.max_output_mb * 1024 * 1024,
                                   tty_stdin=spec.tty_stdin)
     if oflag == "-o":
         lines = target.read_text(errors="replace").splitlines() if target.exists() else []

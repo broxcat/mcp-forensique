@@ -45,7 +45,13 @@ Le runner compte les nouveaux fichiers du répertoire de sortie, y compris les
 sorties natives et stdout/stderr, pendant et après le processus. Un dépassement
 arrête le groupe et tronque les sorties au budget ; le statut est un échec explicite.
 La borne est contrôlée par polling, pas par quota disque : un pic transitoire
-reste possible. Le quota global de session reste à mettre en place.
+reste possible. Le budget partagé `max_session_output_mb` (10 Gio par défaut)
+porte sur tout `output_root`, y compris les sessions précédentes. Les processus
+partagent un verrou de budget pour leurs sous-processus. La normalisation fait
+également l’objet d’un contrôle final : les nouveaux résultats excessifs sont
+tronqués et journalisés en échec. Le journal lui-même reste conservé même quand
+le budget est épuisé ; un quota de système de fichiers reste nécessaire pour
+une borne absolue sans pic transitoire. Utiliser un output_root dédié par session.
 Les commandes de découverte et d’aide Volatility passent également par le runner,
 avec fichiers temporaires nettoyés et arrêt du groupe au timeout.
 

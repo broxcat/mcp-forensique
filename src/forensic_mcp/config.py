@@ -29,6 +29,7 @@ class Config:
     max_cell_chars: int = 400
     max_response_kb: int = 64          # response size bound (ET-02, §5)
     max_output_mb: int = 1024          # stdout+stderr bound of one tool run (ET-02)
+    max_session_output_mb: int = 10240  # persistent output-root budget, shared by processes
     llm_mode: str = "local"            # "local" (Ollama) or "cloud"
     default_classification: str = "internal"  # when no case.toml applies
     sleuthkit_dir: Path = Path("/usr/bin")    # mmls, fls, icat (task 4.3c)

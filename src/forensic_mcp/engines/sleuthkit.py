@@ -96,4 +96,4 @@ async def run_to_file(cfg: Config, argv: list[str], stdout: Path, stderr: Path,
                       max_mb: int) -> runner.RunResult:
     """Run a Sleuth Kit command with timeout and an output bound (ET-02)."""
     return await runner.run_process(argv, stdout, stderr, cfg.timeout_seconds,
-                                    max_output_bytes=max_mb * 1024 * 1024)
+                                    session_root=cfg.output_root, session_max_bytes=cfg.max_session_output_mb * 1024 * 1024, max_output_bytes=max_mb * 1024 * 1024)

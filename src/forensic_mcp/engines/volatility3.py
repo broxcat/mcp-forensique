@@ -183,7 +183,7 @@ async def run(cfg: Config, path: Path, full: str, options: list[str],
     argv = [*vol_cmd(cfg), "-q", "-r", "json", "-f", str(path), "-o", str(files), full, *options]
     start = time.time()
     rr = await runner.run_process(argv, d / "stdout.txt", d / "stderr.txt", cfg.timeout_seconds,
-                                  max_output_bytes=cfg.max_output_mb * 1024 * 1024)
+                                  session_root=cfg.output_root, session_max_bytes=cfg.max_session_output_mb * 1024 * 1024, max_output_bytes=cfg.max_output_mb * 1024 * 1024)
     row_count = _write_rows(d)
     ver = await version(cfg)
     results.write_meta(

@@ -14,7 +14,7 @@ from typing import Any
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult
 
-from . import audit, contract, evidence, results, safety, schemas
+from . import audit, contract, evidence, results, safety, schemas, runner
 from .config import Config, load_tools
 from .engines import tshark, volatility3
 from .artefact_ops import ArtefactOps
@@ -105,6 +105,12 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
                                "result_id": None, "exit_code": None, "output_sha256": None}
         try:
             out: Outcome = await getattr(self, f"op_{tool}")(params, conf)
+            if out.result_id and not any(e.get('result_id') == out.result_id for e in audit.iter_events(self.cfg.audit_file)):
+                folder = results.result_dir(self.cfg.output_root,out.result_id)
+                task_exceeded = runner.bound_result(folder, folder, self.cfg.max_output_mb * 1024 * 1024)
+                session_exceeded = runner.bound_result(Path(self.cfg.output_root), folder,
+                                                       self.cfg.max_session_output_mb * 1024 * 1024)
+                out.output_exceeded = out.output_exceeded or task_exceeded or session_exceeded
             payload = out.payload
             if out.pseudo:
                 payload = out.pseudo.redact(payload)
@@ -131,7 +137,10 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
         if out.timed_out:
             outcome, extra["error"] = "timeout", f"timeout after {self.cfg.timeout_seconds} s"
         elif out.output_exceeded:
-            outcome, extra["error"] = "tool_error", f"output over {self.cfg.max_output_mb} MB"
+            outcome = 'tool_error'
+            session_full = runner.output_volume(Path(self.cfg.output_root)) >= self.cfg.max_session_output_mb * 1024 * 1024
+            extra['error'] = (f'session output over {self.cfg.max_session_output_mb} MB' if session_full
+                              else f'output over {self.cfg.max_output_mb} MB')
         elif out.error:
             outcome, extra["error"] = "tool_error", out.error
         elif out.exit_code not in (None, 0):

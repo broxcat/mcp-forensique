@@ -16,3 +16,13 @@ async def test_completed_outputs_are_bounded(tmp_path, native):
 async def test_discovery_has_timeout_cleanup():
     with pytest.raises(ValueError,match='timed out'):
         await capture([sys.executable,'-c','import time; time.sleep(10)'],timeout=0.1)
+
+@pytest.mark.anyio
+async def test_session_budget_is_shared_across_tasks(tmp_path):
+    for i in range(2):
+        d = tmp_path/str(i)
+        d.mkdir()
+        rr = await run_process([sys.executable,'-c',"print('x'*3000)"],d/'o',d/'e',10,
+                               max_output_bytes=4096,session_root=tmp_path,session_max_bytes=4096)
+        assert rr.output_exceeded == (i == 1)
+    assert sum(p.stat().st_size for p in tmp_path.rglob('*') if p.is_file()) <= 4096
