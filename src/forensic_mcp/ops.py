@@ -141,6 +141,13 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
 
     # ---- helpers -------------------------------------------------------------------------
     def _policy(self, path: Path | None) -> Pseudonymizer | None:
+        if path is not None:
+            folder = path if path.is_dir() else path.parent if path.name in ('_', 'case.toml') else None
+            if folder is not None:
+                from .redact import Policies
+                return Policies([pseudonymizer_for(self.cfg, case_for(self.cfg, p))
+                                 for p in [folder / 'case.toml', *sorted(folder.rglob('*'))]
+                                 if p.is_file() or p.name == 'case.toml'])
         return pseudonymizer_for(self.cfg, case_for(self.cfg, path))
 
     def _result_policy(self, rid: str, seen: set | None = None) -> Any:

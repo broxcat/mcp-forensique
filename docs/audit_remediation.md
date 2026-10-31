@@ -29,3 +29,10 @@ Un dossier explicite est obligatoire. Tous les parents des citations d’un cons
 doivent appartenir à ce dossier ; les constats multi-dossiers sont exclus.
 Recommandations et compteurs sont calculés après filtrage. La politique du dossier
 est conservée même si le sitrep ne contient aucun constat.
+
+## R05 — Dossiers parents (CDC §5, EF-05)
+
+La politique d’un répertoire examine chaque fichier descendant avant son
+enregistrement ou son analyse. Une source client bloque l’ensemble en cloud ;
+les politiques internes des sous-dossiers sont composées. Ce contrôle couvre
+aussi le périmètre de timeline.
