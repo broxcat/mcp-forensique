@@ -66,12 +66,6 @@ class ImportOps:
         cache = Path(self.cfg.output_root) / ".toolcache" / "ez_import.json"
         known = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
         d0 = Path(self.cfg.output_root) / known.get(msha, "-")
-        if known.get(msha) and (d0 / "rows.jsonl").exists():
-            m = results.read_meta(d0)
-            return {"result_id": d0.name, "dir": d0, "plugin": tool, "argv": m["argv"],
-                    "exit_code": m["exit_code"], "timed_out": False, "output_exceeded": False,
-                    "row_count": m["row_count"], "stderr_tail": "", "cached": True,
-                    "error": m.get("error") or "", "notes": m.get("notes", [])}
         files = []
         for o in man.get("outputs") or []:
             name = str(o.get("file", ""))
@@ -91,6 +85,13 @@ class ImportOps:
         if content_digest(src) != inp.get("sha256"):
             raise safety.SafetyError(f"input {inp.get('path')} differs from the one the export "
                                      "was made from (content digest mismatch)")
+        self._ez_input({'path': str(src)})
+        if known.get(msha) and (d0 / "rows.jsonl").exists():
+            m = results.read_meta(d0)
+            return {"result_id": d0.name, "dir": d0, "plugin": tool, "argv": m["argv"],
+                    "exit_code": m["exit_code"], "timed_out": False, "output_exceeded": False,
+                    "row_count": m["row_count"], "stderr_tail": "", "cached": True,
+                    "error": m.get("error") or "", "notes": m.get("notes", [])}
         notes = [f"imported from Windows: {tool} {man.get('tool_version')} run "
                  f"{man.get('started_utc')}; manifest sha256 {msha[:16]}…"]
         if hashlib.sha256(registry_json_text().encode()).hexdigest() != man.get("registry_sha256"):

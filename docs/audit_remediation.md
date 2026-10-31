@@ -65,3 +65,9 @@ fichiers du résultat. Citation, validation positive et export final comparent c
 manifeste et exigent un producteur réussi et une chaîne valide. Les résultats
 historiques non scellés doivent être recalculés. Toute anomalie est journalisée.
 L’ancrage externe du journal reste une mesure organisationnelle indispensable.
+
+## R11 — Sources des imports Windows (EF-05, EF-10)
+
+Les empreintes de l’export et de sa source sont contrôlées avant tout retour du
+cache. La source originale est enregistrée par le mécanisme commun, y compris
+les fichiers d’un dossier. L’export final refuse une source citée absente du registre.

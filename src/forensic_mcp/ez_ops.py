@@ -95,6 +95,11 @@ class EzOps:
         with the same parameters; otherwise query_results on the result."""
         from .ops import Outcome  # circular at import time
 
+        meta = results.read_meta(r['dir'])
+        if meta.get('imported') and meta.get('input_path'):
+            from .redact import Policies
+            ps = Policies([ps, self._policy(Path(meta['input_path']))])
+
         extra: dict[str, Any] = {"exit_code": r["exit_code"]}
         if r["exit_code"] != 0:
             extra["stderr_tail"] = r["stderr_tail"]

@@ -36,6 +36,8 @@ class ReportOps:
         reg = evidence.load_registry(self.cfg)
         for p in sorted(paths):
             entries = [(k, v) for k, v in reg.items() if k == p or k.startswith(p.rstrip("/") + "/")]
+            if final and not entries:
+                raise safety.SafetyError('cited evidence missing from registry')
             for key, rec in entries:
                 row = {"path": key, "sha256_registration": rec["sha256"], "sha256_export": None,
                        "matches": None}
