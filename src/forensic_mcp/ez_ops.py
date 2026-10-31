@@ -78,8 +78,8 @@ class EzOps:
         key = json.dumps([PARSE_FORMAT, tool, ev["sha256"], argv])
         rid = None if FORCE_REPLAY.get() else data.get(key)
         d = Path(self.cfg.output_root) / rid if rid else None
-        if d is not None and d.is_dir() and results.read_meta(d).get("exit_code") == 0:
-            m = results.read_meta(d)
+        if d is not None and d.is_dir():
+            m = results.verified_meta(self.cfg, d.name)
             return {"result_id": rid, "dir": d, "plugin": tool, "argv": m["argv"], "exit_code": 0,
                     "timed_out": False, "output_exceeded": False, "row_count": m["row_count"],
                     "stderr_tail": "", "cached": True}
@@ -100,7 +100,10 @@ class EzOps:
         meta = results.read_meta(r['dir'])
         if meta.get('imported') and meta.get('input_path'):
             from .redact import Policies
-            ps = Policies([ps, self._result_policy(r['result_id'])])
+            # A fresh import is still being produced; cache reads were verified above.
+            ps = Policies([ps, self._policy(Path(meta['input_path'])),
+                           *[self._policy(safety.jail_path(s['path'], self.cfg.evidence_root))
+                             for s in meta.get('source_inputs', [])]])
 
         extra: dict[str, Any] = {"exit_code": r["exit_code"]}
         if r["exit_code"] != 0:
@@ -207,7 +210,7 @@ class EzOps:
         d = Path(self.cfg.output_root) / rid if rid else None
         if d is None or not d.is_dir():
             return None
-        m = results.read_meta(d)
+        m = results.verified_meta(self.cfg, d.name)
         return {"result_id": rid, "dir": d, "plugin": tool, "argv": m["argv"], "exit_code": 0,
                 "timed_out": False, "output_exceeded": False, "row_count": m["row_count"],
                 "stderr_tail": "", "cached": True}
@@ -248,7 +251,7 @@ class EzOps:
         ps = self._policy(case_dir / "_")
         events, sources, cut = timeline.build(self.cfg.output_root, case_dir,
                                               str(params["around"]),
-                                              int(params.get("window_minutes") or 30))
+                                              int(params.get("window_minutes") or 30), cfg=self.cfg)
         rid, d = results.new_result(self.cfg.output_root, "timeline")
         with open(d / "rows.jsonl", "w", encoding="utf-8") as fh:
             for e in events:

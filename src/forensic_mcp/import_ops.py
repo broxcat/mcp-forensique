@@ -97,7 +97,7 @@ class ImportOps:
             if not original.exists() or content_digest(original) != source.get('sha256'):
                 raise safety.SafetyError('Windows option source missing or modified')
         if known.get(msha) and (d0 / "rows.jsonl").exists():
-            m = results.read_meta(d0)
+            m = results.verified_meta(self.cfg, d0.name)
             return {"result_id": d0.name, "dir": d0, "plugin": tool, "argv": m["argv"],
                     "exit_code": m["exit_code"], "timed_out": False, "output_exceeded": False,
                     "row_count": m["row_count"], "stderr_tail": "", "cached": True,

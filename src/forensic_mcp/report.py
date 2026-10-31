@@ -76,7 +76,7 @@ class ReportOps:
                 if final:
                     results.verify_result(self.cfg, c['result_id'])
                 call = calls.get(c["result_id"], {})
-                meta = results.read_meta(Path(self.cfg.output_root) / c["result_id"])
+                meta = results.verified_meta(self.cfg, c['result_id'])
                 src = meta.get("input_path")
                 sources.update(s['path'] for s in meta.get('source_inputs', []))
                 if src:
@@ -103,7 +103,7 @@ class ReportOps:
                 if review['type'] != 'report_review' or review.get('findings_sha256') != snapshot:
                     continue
                 approved = results.result_dir(self.cfg.output_root, review['result_id'])
-                m = results.read_meta(approved)
+                m = results.verified_meta(self.cfg, approved.name)
                 if (m.get('title') == title and review.get('senior') is True
                         and results.sha256_file(approved / 'report.md') == review['report_sha256']):
                     out = self._listing('report_export', params, [], 'Rapport FINAL relu par un senior', pseudo=ps)
@@ -124,6 +124,13 @@ class ReportOps:
                            final=final, head_hash=head["head_hash"], row_count=len(items),
                            report_sha256=results.sha256_file(d / "report.md"), exit_code=0)
         if final:
+            # Candidates are not exports, but their metadata must already be sealed
+            # before the out-of-band reviewer or a later export reads it.
+            audit.append(self.cfg.audit_file, 'tool_call', {'kind':'server'},
+                         tool='report_candidate', params={'title':title}, argv=[], engine='forensic-mcp',
+                         evidence_sha256=None, result_id=rid, exit_code=0, duration_s=0,
+                         output_sha256=results.rows_sha256(d), result_manifest=results.manifest(d),
+                         outcome='ok', final=False)
             raise safety.SafetyError(f'export final requires senior review of candidate {rid}: use review-report locally')
         out = self._listing("report_export", params, items,
                             f"{'Rapport FINAL' if final else 'Brouillon'} : {len(items)} constats, "

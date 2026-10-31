@@ -79,7 +79,7 @@ class DiskOps:
         rid = data.get(key)
         if rid and (Path(self.cfg.output_root) / rid / "rows.jsonl").exists():
             d = Path(self.cfg.output_root) / rid
-            return rid, d, results.read_meta(d).get("argv", []), 0
+            return rid, d, results.verified_meta(self.cfg, rid).get("argv", []), 0
         rid, d = results.new_result(self.cfg.output_root, "disk_list")
         argv = [*sleuthkit.cmd(self.cfg, "fls"), "-r", "-p", "-o", str(sector), str(path)]
         rr = await sleuthkit.run_to_file(self.cfg, argv, d / "fls.txt", d / "stderr.txt",
@@ -205,6 +205,8 @@ class DiskOps:
         key = f"{rec['sha256']}|{self._sector(real.get('partition_offset') or 0)}"
         rid = json.loads(cache.read_text(encoding="utf-8")).get(key)
         d = Path(self.cfg.output_root) / rid if rid else None
+        if d and (d/'rows.jsonl').exists():
+            results.verify_result(self.cfg, rid)
         return (rid, d) if d and (d / "rows.jsonl").exists() else None
 
     @staticmethod

@@ -17,5 +17,5 @@ async def test_review_is_required_and_bound_to_exact_report(cfg):
     assert ok.result_id == rid
     with (cfg.output_root/rid/'report.md').open('a') as fh:
         fh.write('altered')
-    with pytest.raises(SafetyError,match='senior review'):
+    with pytest.raises(SafetyError,match='integrity'):
         await eng.op_report_export({'final':True})

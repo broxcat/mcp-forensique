@@ -255,7 +255,7 @@ class CrisisOps:
                 continue
             paths = []
             for c in f['citation_list']:
-                m = results.read_meta(results.result_dir(self.cfg.output_root, c['result_id']))
+                m = results.verified_meta(self.cfg, c['result_id'])
                 if m.get('input_path'):
                     src = Path(m['input_path']).resolve()
                     paths.append(source_image(self.cfg, src) or src)

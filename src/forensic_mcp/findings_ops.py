@@ -116,7 +116,7 @@ class FindingsOps:
             d = results.result_dir(self.cfg.output_root, str(rid))
         except (ValueError, FileNotFoundError):
             return cit, f"unknown result_id {rid!r}"
-        meta = results.read_meta(d)
+        meta = results.verified_meta(self.cfg, d.name)
         results.verify_result(self.cfg, str(rid))
         ps = self._result_policy(str(rid))
         if ps:  # tokens (HOST_1, IP_EXT_1…) cited in cloud mode -> real values
@@ -157,7 +157,7 @@ class FindingsOps:
             d = results.result_dir(self.cfg.output_root, str(rid))
         except (ValueError, FileNotFoundError):
             return cit, f"unknown result_id {rid!r}", {}
-        meta = results.read_meta(d)
+        meta = results.verified_meta(self.cfg, d.name)
         results.verify_result(self.cfg, str(rid))
         ps = self._result_policy(str(rid))
         if ps and field != OBS_CALL:

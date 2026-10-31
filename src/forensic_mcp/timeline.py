@@ -73,7 +73,7 @@ def _events(fam: str, rid: str, d: Path) -> Iterator[tuple[datetime, dict[str, A
 
 
 def build(output_root: Path, case_dir: Path, around: str,
-          window_minutes: int) -> tuple[list[dict[str, Any]], list[str], bool]:
+          window_minutes: int, cfg=None) -> tuple[list[dict[str, Any]], list[str], bool]:
     """Events of results whose input lies under case_dir, within ±window of `around`.
     Returns (events sorted by time, source result_ids, truncated)."""
     center = to_utc(around)
@@ -89,7 +89,15 @@ def build(output_root: Path, case_dir: Path, around: str,
     truncated = False
     root = Path(output_root)
     for d in sorted(root.iterdir() if root.is_dir() else [], reverse=True):  # newest first
-        meta = results.read_meta(d) if d.is_dir() else {}
+        if not d.is_dir() or not (d/'meta.json').is_file():
+            continue
+        if cfg is not None:
+            from . import audit
+            producer = next((e for e in audit.iter_events(cfg.audit_file)
+                             if e['type'] == 'tool_call' and e.get('result_id') == d.name), None)
+            if producer and producer.get('outcome') != 'ok':
+                continue
+        meta = results.verified_meta(cfg, d.name) if cfg else results.read_meta(d)
         src = meta.get("input_path")
         fam = _family(meta)
         if not fam or not src or meta.get("exit_code") not in (0, None):

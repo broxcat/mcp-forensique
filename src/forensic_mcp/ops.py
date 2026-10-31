@@ -170,6 +170,10 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
     # ---- helpers -------------------------------------------------------------------------
     def _policy(self, path: Path | None) -> Pseudonymizer | None:
         if path is not None:
+            p, root = path.resolve(), Path(self.cfg.output_root).resolve()
+            if p.is_relative_to(root) and p != root:
+                results.verify_result(self.cfg, p.relative_to(root).parts[0])
+        if path is not None:
             folder = path if path.is_dir() else path.parent if path.name in ('_', 'case.toml') else None
             if folder is not None:
                 from .redact import Policies
@@ -183,7 +187,7 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
         if rid in seen or len(seen) >= 32:
             raise safety.SafetyError("invalid result provenance")
         seen.add(rid)
-        m = results.read_meta(results.result_dir(self.cfg.output_root, rid))
+        m = results.verified_meta(self.cfg, rid)
         if m.get("input_path"):
             from .redact import Policies, Case
             return Policies([self._policy(Path(m['input_path'])),
@@ -203,10 +207,10 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
 
     def _findings_policy(self, findings: list[dict]) -> Any:
         from .redact import Policies
-        if self.cfg.llm_mode == 'local':
-            return Policies([])
         policies = []
         for f in findings:
+            if self.cfg.llm_mode == 'local' and f.get('status') == 'rejeté par le serveur':
+                continue  # Invalid citations are inspectable locally, never result data.
             citations = f.get("citation_list", [])
             if not citations and self.cfg.llm_mode == "cloud":
                 raise safety.SafetyError("finding has no classification provenance")
@@ -329,7 +333,7 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
 
     async def op_query_results(self, params: dict[str, Any], conf: Any = None) -> Outcome:
         d = results.result_dir(self.cfg.output_root, params["result_id"])
-        meta = results.read_meta(d)
+        meta = results.verified_meta(self.cfg, d.name)
         src = Path(meta["input_path"]) if meta.get("input_path") else None
         ps = self._result_policy(d.name)
         real = ps.restore(params) if ps else dict(params)
@@ -360,9 +364,13 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
         root = Path(self.cfg.output_root)
         items, withheld = [], 0
         for d in sorted(root.iterdir() if root.is_dir() else [], reverse=True):
-            m = results.read_meta(d) if d.is_dir() else {}
-            if not m:
+            if not d.is_dir() or not (d/'meta.json').is_file():
                 continue
+            producer = next((e for e in audit.iter_events(self.cfg.audit_file)
+                             if e['type'] == 'tool_call' and e.get('result_id') == d.name), None)
+            if producer and producer.get('outcome') != 'ok':
+                continue  # Failed runs are never a readable result catalogue entry.
+            m = results.verified_meta(self.cfg, d.name)
             src = Path(m["input_path"]) if m.get("input_path") else None
             try:
                 ps = self._result_policy(d.name)

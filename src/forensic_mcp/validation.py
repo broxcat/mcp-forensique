@@ -32,7 +32,7 @@ def review_report(cfg, rid, analyst, reason, senior=False):
     if not senior or not NAME_RE.fullmatch(analyst) or len(reason.strip()) < 3:
         raise ValidationError('named senior reviewer and reason required')
     d = results.result_dir(cfg.output_root, rid)
-    m = results.read_meta(d)
+    m = results.verified_meta(cfg, rid)
     snapshot = hashlib.sha256(audit.canonical(load_findings(cfg.audit_file, with_citations=True)).encode()).hexdigest()
     if not m.get('final') or snapshot != m.get('findings_sha256'):
         raise ValidationError('candidate is stale or is not a final report candidate')
