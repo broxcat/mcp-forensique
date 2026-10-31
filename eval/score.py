@@ -304,8 +304,8 @@ def score(gt: dict[str, Any], session: list[dict[str, Any]],
                            / len(fact_findings), 3) if fact_findings else None,
         "detail": facts}
 
-    texts = [(e, (e["text"] + " " + " ".join(str(c["value"]) for c in e["citations"])))
-             for e in accepted]
+    texts = [(e, ' '.join(str(c['value']) for c in e['citations']))
+             for e in accepted if e['kind'] == 'fact' and e.get('citations')]
     def found(ioc, labels):
         return any(status[e['finding_id']]['status'] in labels and ioc_matches(ioc, t) for e,t in texts)
     iocs = [{"step": s["step"], **i,
@@ -316,6 +316,7 @@ def score(gt: dict[str, Any], session: list[dict[str, Any]],
     out["iocs"] = {"expected": len(iocs), "found": sum(i["found"] for i in iocs),
                    "recall": round(sum(i["found"] for i in iocs) / len(iocs), 3) if iocs else None,
                    "validated": sum(i['validated'] for i in iocs),
+                   "validated_recall": round(sum(i['validated'] for i in iocs) / len(iocs), 3) if iocs else None,
                    "rejected": sum(i['rejected'] for i in iocs), "detail": iocs}
     steps = [{"step": s["step"], "cdc_step": s["cdc_step"],
               "found": any(f["found"] for f in facts if f["step"] == s["step"])}
