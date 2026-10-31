@@ -38,11 +38,7 @@ def vol2_cmd(cfg: Config) -> list[str]:
 
 
 async def _capture(argv: list[str], timeout: float = 300) -> str:
-    proc = await asyncio.create_subprocess_exec(
-        *argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-        stdin=asyncio.subprocess.DEVNULL, cwd="/tmp")
-    out, _ = await asyncio.wait_for(proc.communicate(), timeout)
-    return out.decode(errors="replace")
+    return await runner.capture(argv, timeout)
 
 
 def parse_info(text: str) -> dict[str, dict[str, str]]:

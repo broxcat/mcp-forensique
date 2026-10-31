@@ -5,11 +5,23 @@ import asyncio
 import os
 import signal
 import time
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 POLL_SECONDS = 0.25
+
+
+async def capture(argv: list[str], timeout: float = 120) -> str:
+    """Bound discovery/help commands with the same process cleanup as analyses."""
+    with tempfile.TemporaryDirectory(prefix='forensic-help-') as folder:
+        d = Path(folder)
+        rr = await run_process(argv, d/'stdout', d/'stderr', timeout,
+                               max_output_bytes=16 * 1024 * 1024)
+        if rr.timed_out or rr.output_exceeded or rr.exit_code != 0:
+            raise ValueError('tool discovery failed, timed out or exceeded output budget')
+        return (d/'stdout').read_text(errors='replace') + (d/'stderr').read_text(errors='replace')
 
 
 @dataclass

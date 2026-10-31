@@ -44,6 +44,8 @@ sorties natives et stdout/stderr, pendant et après le processus. Un dépassemen
 arrête le groupe et tronque les sorties au budget ; le statut est un échec explicite.
 La borne est contrôlée par polling, pas par quota disque : un pic transitoire
 reste possible. Le quota global de session reste à mettre en place.
+Les commandes de découverte et d’aide Volatility passent également par le runner,
+avec fichiers temporaires nettoyés et arrêt du groupe au timeout.
 
 ## R07 — Réponses bornées (EF-04, ET-02)
 
