@@ -111,3 +111,12 @@ le nom déclaré, le motif, l’empreinte exacte du rapport et la version des co
 Le rapport approuvé est réutilisé sans réécriture. Une modification l’invalide.
 L’identité et la qualification senior doivent être authentifiées par les contrôles
 du poste et la procédure d’équipe ; la saisie du nom est une attestation déclarative.
+
+## C05 — Exports Windows (EF-06)
+
+Le script exige `-StagingRoot`, distinct et non imbriqué avec `-EvidenceRoot`.
+Les sorties et manifestes sont produits uniquement dans cet espace de préparation.
+L’équipe vérifie les empreintes, copie l’export comme nouvelle preuve dans le dossier
+du cas puis le monte en lecture seule avant `ez_import`. Le script ne modifie pas
+les originaux. Cette intégration contrôlée et l’exécution sur de vrais outils Windows
+restent à réaliser par l’équipe ; le montage `:ro` ne protège pas des écritures hôte.
