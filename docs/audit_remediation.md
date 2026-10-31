@@ -36,3 +36,11 @@ La politique d’un répertoire examine chaque fichier descendant avant son
 enregistrement ou son analyse. Une source client bloque l’ensemble en cloud ;
 les politiques internes des sous-dossiers sont composées. Ce contrôle couvre
 aussi le périmètre de timeline.
+
+## R06 — Sorties des processus (ET-02, CDC §9)
+
+Le runner compte les nouveaux fichiers du répertoire de sortie, y compris les
+sorties natives et stdout/stderr, pendant et après le processus. Un dépassement
+arrête le groupe et tronque les sorties au budget ; le statut est un échec explicite.
+La borne est contrôlée par polling, pas par quota disque : un pic transitoire
+reste possible. Le quota global de session reste à mettre en place.

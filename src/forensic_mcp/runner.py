@@ -62,6 +62,16 @@ async def _run(argv: list[str], stdout_path: Path, stderr_path: Path, deadline: 
                start: float, env: dict[str, str] | None, max_output_bytes: int | None,
                stdin: Any) -> RunResult:
     timed_out = exceeded = False
+    root = stdout_path.parent
+    existing = {p for p in root.rglob('*') if p.is_file()} - {stdout_path, stderr_path}
+
+    def outputs():
+        return [p for p in root.rglob('*') if p.is_file() and not p.is_symlink()
+                and p not in existing]
+
+    def over_budget():
+        return max_output_bytes is not None and sum(p.stat().st_size for p in outputs()) > max_output_bytes
+
     with open(stdout_path, "wb") as out, open(stderr_path, "wb") as err:
         proc = await asyncio.create_subprocess_exec(
             *argv, stdout=out, stderr=err, stdin=stdin,
@@ -72,15 +82,23 @@ async def _run(argv: list[str], stdout_path: Path, stderr_path: Path, deadline: 
                 break
             except asyncio.TimeoutError:
                 pass
-            if max_output_bytes is not None and (
-                    os.path.getsize(stdout_path) + os.path.getsize(stderr_path) > max_output_bytes):
+            if over_budget():
                 exceeded = True
             elif time.monotonic() >= deadline:
                 timed_out = True
             if exceeded or timed_out:
                 _kill_group(proc.pid)
                 await proc.wait()
+    exceeded = exceeded or over_budget()
     if exceeded and max_output_bytes is not None:
-        _truncate(stdout_path, stderr_path, max_output_bytes)
+        _kill_group(proc.pid)
+        remaining = max_output_bytes
+        for p in sorted(outputs()):
+            keep = min(p.stat().st_size, remaining)
+            os.chmod(p, 0o600)
+            os.truncate(p, keep)
+            remaining -= keep
     code = proc.returncode if proc.returncode is not None else -1
+    if exceeded and code == 0:
+        code = -1
     return RunResult(code, stdout_path, stderr_path, time.monotonic() - start, timed_out, exceeded)
