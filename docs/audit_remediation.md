@@ -71,3 +71,10 @@ L’ancrage externe du journal reste une mesure organisationnelle indispensable.
 Les empreintes de l’export et de sa source sont contrôlées avant tout retour du
 cache. La source originale est enregistrée par le mécanisme commun, y compris
 les fichiers d’un dossier. L’export final refuse une source citée absente du registre.
+
+## R12 — Rejeu EVTX/MFT (ET-04, CDC §2 O3)
+
+EVTX et MFT sont rejouables avec les paramètres journalisés. Un contexte propre
+à l’appel désactive les deux chemins de cache EZ, sans affecter les autres appels.
+Les événements métier restent reconstruits par réduction déterministe du journal,
+sans réinsérer suggestions ou décisions humaines.

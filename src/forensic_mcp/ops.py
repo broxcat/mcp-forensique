@@ -31,7 +31,7 @@ from .stakeholder_ops import StakeholderOps
 from .redact import TOKEN, Pseudonymizer, case_for, pseudonymizer_for
 
 REPLAYABLE = set(TYPED_VOL3) | {"vol3_run", "vol2_run", "vol2_imageinfo", "vol2_yarascan",
-                                 "ez_run", "pcap_info", "pcap_conversations", "pcap_dns_query",
+                                 "ez_run", "evtx_query", "mft_search", "pcap_info", "pcap_conversations", "pcap_dns_query",
                                  "pcap_http_objects", "pcap_tls_info"}
 MAX_LISTED = 500
 
@@ -353,7 +353,12 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
                              f"(replayable: {sorted(REPLAYABLE)})")
         if orig.get("outcome") != "ok":
             raise ValueError(f"audit_id {params['audit_id']} did not succeed; nothing to compare")
-        new = await getattr(self, f"op_{orig['tool']}")(orig["params"], conf)
+        from .ez_ops import FORCE_REPLAY
+        token = FORCE_REPLAY.set(True)
+        try:
+            new = await getattr(self, f"op_{orig['tool']}")(dict(orig["params"]), conf)
+        finally:
+            FORCE_REPLAY.reset(token)
         match = new.output_sha256 == orig["output_sha256"]
         item = {"original_audit_id": orig["audit_id"], "original_result_id": orig["result_id"],
                 "new_result_id": new.result_id, "original_output_sha256": orig["output_sha256"],

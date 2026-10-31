@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ from .timeline import to_utc
 
 # Bumped when the parse output changes (4.3b: CSV -> JSON) so older cached parses are not reused.
 PARSE_FORMAT = "rows-v2-json"
+FORCE_REPLAY = ContextVar('force_replay', default=False)
 PRESETS_FILE = Path(__file__).resolve().parents[2] / "rules" / "evtx_presets.yaml"
 EVTX_COLUMNS = ["TimeCreated", "EventId", "Channel", "Computer", "UserName", "RemoteHost",
                 "MapDescription", "PayloadData1", "PayloadData2", "PayloadData3",
@@ -74,7 +76,7 @@ class EzOps:
         cache = Path(self.cfg.output_root) / ".toolcache" / "ez_parse.json"
         data = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
         key = json.dumps([PARSE_FORMAT, tool, ev["sha256"], argv])
-        rid = data.get(key)
+        rid = None if FORCE_REPLAY.get() else data.get(key)
         d = Path(self.cfg.output_root) / rid if rid else None
         if d is not None and d.is_dir() and results.read_meta(d).get("exit_code") == 0:
             m = results.read_meta(d)
@@ -197,6 +199,8 @@ class EzOps:
                                 repeat=True)
 
     async def _cached_full(self, tool: str, ev: dict) -> dict[str, Any] | None:
+        if FORCE_REPLAY.get():
+            return None
         cache = Path(self.cfg.output_root) / ".toolcache" / "ez_parse.json"
         data = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
         rid = data.get(json.dumps([PARSE_FORMAT, tool, ev["sha256"], []]))
