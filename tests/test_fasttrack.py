@@ -92,7 +92,7 @@ async def test_mcp_lists_tools_and_runs(cfg) -> None:
 
 
 def test_http_auth_health_and_home(cfg) -> None:
-    cfg.allowed_origins = [*cfg.allowed_origins, "http://localhost:3000"]
+    cfg.allowed_origins = [*cfg.allowed_origins, "https://analyst.example.test"]
     app = web.build_app(server.build_server(cfg), cfg)
     token = cfg.api_token_file.read_text().strip()
     assert stat.S_IMODE(cfg.api_token_file.stat().st_mode) == 0o600 and len(token) >= 40
@@ -115,7 +115,11 @@ def test_http_auth_health_and_home(cfg) -> None:
         assert evil_host.status_code in (400, 421)
         evil_origin = c.post("/mcp", json=init, headers={**auth, "Origin": "http://evil.example"})
         assert evil_origin.status_code in (400, 403)
-        webui = c.post("/mcp", json=init, headers={**auth, "Origin": "http://localhost:3000"})
-        assert webui.status_code == 200
+        retired_origin = c.post("/mcp", json=init,
+                                headers={**auth, "Origin": "http://localhost:3000"})
+        assert retired_origin.status_code in (400, 403)
+        configured_origin = c.post("/mcp", json=init,
+                                   headers={**auth, "Origin": "https://analyst.example.test"})
+        assert configured_origin.status_code == 200
     # token is reused on restart
     assert web.load_or_create_token(cfg.api_token_file) == token

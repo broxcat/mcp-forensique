@@ -8,6 +8,6 @@ DOCKER_TOML = Path(__file__).parents[1] / "forensic-mcp.docker.toml"
 
 def test_docker_config_hosts_and_origins() -> None:
     cfg = load_config(DOCKER_TOML)
-    assert "forensic:8000" in cfg.allowed_hosts and "localhost:8000" in cfg.allowed_hosts
-    assert "http://localhost:3000" in cfg.allowed_origins
+    assert cfg.allowed_hosts == ["localhost:8000", "127.0.0.1:8000"]
+    assert cfg.allowed_origins == ["http://localhost:8000", "http://127.0.0.1:8000"]
     assert str(cfg.evidence_root) == "/evidence" and cfg.http_host == "0.0.0.0"

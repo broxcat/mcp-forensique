@@ -31,7 +31,8 @@ les intégrer comme nouvelles preuves après vérification, avant montage en lec
   (visibles sous Windows, ouvrables dans Timeline Explorer).
 - Utilisateur non privilégié, toutes les capacités Linux supprimées, aucun montage possible.
 - Transport de référence **stdio** ; transport **HTTP** sur `127.0.0.1:8000` (jeton), écart au
-  cahier des charges documenté (L2 §6), réservé à Open WebUI pour le modèle local.
+  cahier des charges documenté (L2 §6). Les deux transports sont indépendants du client et du
+  mode LLM ; aucun service d'interface n'est nécessaire.
 
 ## 2. Installation
 
@@ -41,7 +42,8 @@ Prérequis : Windows 10/11, Docker Desktop démarré, Git.
 git clone git@github.com:broxcat/mcp-forensique.git
 cd mcp-forensique
 Copy-Item .env.example .env      # puis éditer .env (voir ci-dessous)
-docker compose up -d --build     # premier build long : .NET 9, outils EZ, Volatility 2
+docker compose config --quiet   # validation sans afficher la configuration ni les secrets
+docker compose up -d --build forensic # premier build long : .NET 9, outils EZ, Volatility 2
 docker compose exec forensic python scripts/check_tools_18.py --vol3 /opt/venv/bin/vol
 docker compose exec forensic pytest -q
 ```
@@ -54,8 +56,11 @@ Fichier `.env` (jamais commité, ne contient aucun secret à partager ; modèle 
 | `COMPOSE_PROJECT_NAME` | `forensic-mcp` : nom du projet Compose, fixé pour ne pas dépendre du nom du dossier (voir §3) |
 | `EVIDENCE_DIR` | Dossier Windows des preuves, monté en lecture seule sur `/evidence` (barres obliques `/`, par exemple `C:/cases/evidence`) |
 | `OUTPUT_DIR` | Dossier Windows des résultats et du journal (`/output`) |
-| `WEBUI_SECRET_KEY` | Secret de session d'Open WebUI (32 caractères aléatoires ou plus), à générer soi-même |
-| `OLLAMA_BASE_URL` | Optionnel : URL d'Ollama vue depuis le conteneur Open WebUI |
+
+Le Compose fourni démarre uniquement le service `forensic`, en HTTP sur
+`http://127.0.0.1:8000/mcp` ; seul le port `8000` est publié, sur la boucle locale.
+Les trois variables ci-dessus suffisent à configurer ce déploiement. Si `.env` existe déjà,
+conserver ses chemins au lieu de le remplacer par le modèle.
 
 Le jeton HTTP n'est pas dans `.env` : il est créé au premier démarrage dans `.secrets/api_token`
 (ignoré par Git). Ne copiez jamais `.env`, `.secrets/` ni un jeton dans une conversation avec un
@@ -89,10 +94,13 @@ deux clones ont le même nom de projet Compose. C'est arrivé pendant le projet 
   24 outils) a été supprimé et recréé d'ici. *Non vérifié* : ce que fait un `docker compose up`
   lancé depuis un second clone avec ce réglage (non essayé) ; le nom de conteneur étant fixe,
   un second clone ne peut de toute façon pas tourner en même temps.
-- Les deux volumes (cache des symboles Volatility, données d'Open WebUI) ont un nom fixe dans
-  `docker-compose.yml` (`scp-forensique_vol3-cache`, `scp-forensique_open-webui`) : ils
-  survivent à un changement de nom de projet. Compose affiche alors un avertissement
+- Le volume du cache des symboles Volatility a un nom fixe dans `docker-compose.yml`
+  (`scp-forensique_vol3-cache`) : il survit à un changement de nom de projet.
+  Compose affiche alors un avertissement
   « already exists but was created for project … », sans conséquence.
+- Un conteneur ou un volume d'une ancienne interface peut encore exister chez l'opérateur.
+  Le retrait de sa déclaration ne l'arrête pas et n'efface aucune donnée ; sa gestion reste
+  une opération séparée de migration, sans suppression de volume ni nettoyage global.
 - Vérifier ce qui tourne, avant chaque session :
 
 ```powershell
@@ -120,21 +128,27 @@ Ajout manuel équivalent :
 claude mcp add forensic -- docker exec -i forensic-mcp python -m forensic_mcp --stdio
 ```
 
-**Open WebUI, HTTP avec jeton (écart documenté, L2 §6).** `http://localhost:3000` ; serveur MCP
-à déclarer avec l'URL interne `http://forensic:8000/mcp` et l'en-tête
-`Authorization: Bearer <jeton>` (contenu de `.secrets/api_token`). `GET /health` est public,
-tout le reste exige le jeton (`/mcp` sans jeton : 401). *Non vérifié* : l'enregistrement du
-serveur dans Open WebUI et les confirmations d'actions sensibles depuis ce client.
+**Serveur HTTP avec jeton (écart documenté, L2 §6).** Le service `forensic` fourni expose
+`http://127.0.0.1:8000/mcp`. Les requêtes MCP exigent l'en-tête
+`Authorization: Bearer <jeton>` (contenu de `.secrets/api_token`) ; `/mcp` sans jeton renvoie
+401. `GET /health` et la page d'accueil `/` sont publics, sans données de preuve. Le jeton
+et la protection DNS rebinding restent nécessaires. Aucun autre client HTTP n'est qualifié
+par ce nettoyage ; les confirmations sensibles restent refusées si le client ne prend pas
+en charge l'élicitation requise.
 
 **Modes LLM** (`--llm-mode cloud|local` par processus ; cloud par défaut) :
 
 | Mode | Usage | Effet |
 |---|---|---|
-| `local` | modèle Ollama, via Open WebUI | sorties brutes |
+| `local` | modèle effectivement local, processus lancé explicitement avec `--llm-mode local` | sorties brutes |
 | `cloud` | modèle hébergé par un tiers (Claude) | cas `lab` : brut ; `internal` : pseudonymisation stable (`HOST_n`, `USER_n`, `IP_EXT_n`, `IP_INT_n`, `PERSON_n`, `CONTACT_n`), correspondance gardée côté serveur ; `client` : refusé |
 
-Le mode est **déclaré** dans la configuration, pas détecté : un client cloud connecté à un
-serveur réglé sur `local` reçoit des données brutes.
+Le mode est **déclaré**, pas détecté : un client cloud connecté à un processus réglé sur
+`local` reçoit des données brutes. La CLI impose `cloud` par défaut, même si le TOML indique
+`local`. Pour un modèle effectivement local, la commande stdio du processus dédié est
+`docker exec -i forensic-mcp python -m forensic_mcp --stdio --llm-mode local` ; le processus
+HTTP du Compose conserve sa politique cloud. Cela décrit une commande disponible, sans
+attester une session avec un client local.
 
 ## 5. Outils disponibles
 
@@ -428,7 +442,7 @@ catégories).
 
 Le build est reproductible ou échoue : image de base par empreinte (`python:3.12-slim-bookworm@sha256:…`),
 paquets Python par version exacte (`requirements.lock`), runtime .NET 9.0.20, paquets
-forensiques Debian par version, Open WebUI par empreinte, et **SHA-256 de chaque fichier
+forensiques Debian par version et **SHA-256 de chaque fichier
 téléchargé** (script d'installation .NET, zip de Volatility 2, les 17 zips EZ dans
 `rules/ez_zips.sha256`).
 

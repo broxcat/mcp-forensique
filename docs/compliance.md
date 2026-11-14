@@ -2,6 +2,11 @@
 > Voir [audit_remediation.md](audit_remediation.md) et [traceability.md](traceability.md)
 > pour les corrections et limites actuelles. Les mentions historiques de conformité
 > ne valent pas attestation actuelle. Les mesures de lab restent à réaliser.
+>
+> Maintenance du 14/11/2026 (ET-01, ET-07, ET-08, ET-09) : retrait de l'interface optionnelle
+> du Compose ; serveur, transports, authentification, politiques et garde-fous conservés.
+> Les mentions Open WebUI de l'épinglage P7 ci-dessous sont **historiques**, sans exigence
+> de déploiement actuelle. Procédure courante : [README, §2–4](../README.md).
 
 # Matrice de conformité CDC ↔ forensic-mcp
 
@@ -44,7 +49,7 @@ Tests : `tests/test_validation_report.py` (validation, rapport), `tests/scenario
 | ET-04 | Journal d'audit horodaté et rejouable | fait (socle) | `audit.py` (types, `audit_id`, `ts_utc`, verrou `flock`, `verify_report` : chaîne + séquence + schéma, `head_hash`), `ops.Engine.call` (`tool_call` automatique : ok / tool_error / timeout / refused), `replay` | `test_socle.py::test_every_call_is_journaled_ok_refused_failed`, `::test_concurrent_appends_keep_the_chain`, `::test_verify_detects_schema_and_sequence_errors`, `::test_replay_reruns_and_compares` ; `test_phase2.py::test_audit_chain_detects_tampering` | Événements `suggestion`, `validation` : 4.4 ; `crisis_event` : 6.1 ; `stakeholder_update`, `comms_logged` : 6.2 ; ancrage du hash de tête dans le rapport : 4.4. |
 | ET-05 | Validation des chemins (jail) | fait | `safety.jail_path` (`resolve` + `is_relative_to`), message explicite « placer la preuve sous EVIDENCE_DIR » | `test_phase2.py::test_jail_*`, `test_socle.py::test_every_call_is_journaled_ok_refused_failed` | — |
 | ET-06 | Skill au format SKILL.md | partiel | `skills/playbook-poste-compromis/SKILL.md` (frontmatter `name`, `description` ; quand l'utiliser, principes, déroulé, règles de citation résumées) + `references/` ; prompt MCP `playbook_poste_compromis(case)` (`playbook.py`) ; `references/interpretation_artefacts.md` (normal / suspect / pièges par artefact) et `references/regles_citation.md` (5.2) | `test_playbook.py::test_skill_frontmatter`, `::test_playbook_prompt`, `::test_references_5_2_use_real_tools_and_allowed_attack_ids` | Essais avec les deux LLM à jouer par l'équipe (`docs/essais_skill.md`). 5.3 : prompt par défaut = SKILL.md seul (5 081 caractères, borne 6 000 testée) ; références en sections et ressources MCP `playbook://references/<section>`. |
-| ET-07 | LLM cloud et LLM local | partiel | `llm_mode` appliqué par `redact.pseudonymizer_for` ; service `webui` (Open WebUI + Ollama) | `test_socle.py::test_*_cloud_mode` | Serveur MCP pas encore enregistré dans Open WebUI ; mode déclaré, pas détecté (L2 §12 point 2). Fiche d'essai cloud / local prête (`docs/essais_skill.md`), essais à jouer par l'équipe. |
+| ET-07 | LLM cloud et LLM local | partiel | `llm_mode` appliqué par `redact.pseudonymizer_for` ; CLI cloud par défaut, `--llm-mode local` explicite | `test_socle.py::test_*_cloud_mode` ; `test_audit_c01.py` | Politique indépendante du transport et d'une interface. Mode déclaré, pas détecté ; aucun nouveau client local qualifié. Fiche d'essai cloud / local prête (`docs/essais_skill.md`), essais à jouer par l'équipe. |
 | ET-08 | Machine d'analyse Linux | fait | `Dockerfile`, `docker-compose.yml` | Phase 1 : `check_tools.py` 20/20 | Justification : L2 §5. Épinglage des versions à faire (L2 §12 point 4). |
 | ET-09 | ≥ 1 test unitaire par outil exposé | fait | 177 tests (12/10, 6.5) ; faux outils dans `tests/fakebin/` | `test_findings_paging.py::test_every_exposed_tool_has_a_test` (échoue si un des 51 outils n'est appelé par aucun test) ; 6.4 : `test_inventory.py` — les tableaux du README (§5) sont générés depuis `tools/list` par `scripts/tool_inventory.py` + `docs/tool_catalog.yaml` et comparés au serveur (nombre d'outils, une ligne par outil, catégories et leurs descriptions, événements de journal existants, classe sensible = `action_on_demand`) ; README périmé ⇒ échec (4 variantes périmées essayées le 12/10 : toutes en échec) ; `test_socle.py` valide la réponse de chaque outil contre le schéma | — |
 
@@ -92,7 +97,7 @@ sur le Gantt (4.3 découpée en 4.3a/4.3b/4.3c, M4 → J12, M5 → J14) : L2 §1
 
 | Élément | Constat | Décision / état |
 |---|---|---|
-| Transport HTTP + jeton bearer + Open WebUI | Écart à ET-01, déjà construit | Conservé pour le mode LLM local (ET-07) ; L2 §6 ; transport par défaut à trancher (L2 §12 point 1). |
+| Transport HTTP + jeton bearer | Écart à ET-01, déjà construit | Conservé indépendamment du mode LLM ; stdio reste le transport de référence. Le Compose lance uniquement `forensic --http` (CLI cloud par défaut). L'ancienne interface optionnelle a été retirée le 14/11/2026 ; le mode local reste disponible explicitement. |
 | Volatility 2, 15 outils Zimmerman | Installés, non exposés | Conforme au périmètre. `validate_args` / `FORBIDDEN_FLAGS` **retirés** (décision 5, 4.1). |
 | `max_upload_gb` | Clé sans usage | **Retirée** (décision 5, 4.1) ; la config la refuse désormais. |
 | Cache SHA-256 (`output/.cache/sha256.json`) | Pas une preuve avant/après | **Remplacé** par `evidence_registry.json` + journal (4.1). L'ancien dossier `output/.cache/` n'est plus lu (à supprimer à la main). |

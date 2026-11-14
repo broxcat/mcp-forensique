@@ -1,5 +1,18 @@
 # CLAUDE.md — MCP Forensique (Majeure Blue Team)
 
+Current cleanup (2026-11-14, ET-01/ET-07/ET-08/ET-09): the active Compose deploys only
+`forensic`. The optional Open WebUI integration and its secret requirement are removed.
+HTTP bearer authentication, stdio, explicit local mode and all forensic safeguards remain.
+The dated STATUS block and findings log below preserve historical decisions and incidents;
+their UI setup/restart notes are not current operating instructions. Use README sections 2–4.
+This task authorizes local edits and checks only: no deployment, restart, build, commit,
+publication or persistent Docker data deletion. The local .env has no UI-only keys.
+Verification: Docker Compose 5.7.0 config --quiet passes with local, example and isolated
+non-UI environments; the resolved forensic service matches the baseline. Seven existing
+configuration/hardening/documentation checks pass by direct execution in an offline test
+container. Full pytest (including the modified HTTP test) could not run: the available
+Python image lacks pytest; no dependencies were installed. No service startup is claimed.
+
 Follow-up maintenance (2026-10-31): F01–F04 extend the audit corrections from
 2c519f4275fb. See docs/followup_verification.md for regression evidence and limits.
 Work uses a dedicated worktree and a temporary offline container; no real evidence
@@ -496,7 +509,7 @@ Notes:
 
 | CDC layer | Implementation |
 |---|---|
-| 1. AI client | Analyst + MCP client: **Claude Code** (cloud LLM) and the same client or **Open WebUI** on a local **Ollama** model (ET-07); skill playbook + crisis assistant |
+| 1. AI client | Analyst + MCP client; reference stdio workspace for **Claude Code** (cloud policy). Explicit local policy remains available (ET-07); no bundled UI or replacement client is required or qualified by this cleanup. Skill playbook + crisis assistant |
 | 2. MCP server | `forensic-mcp`, Python 3.12, official SDK `mcp==2.2.0`. **Reference transport: stdio (ET-01)** via `docker exec -i forensic-mcp python -m forensic_mcp --stdio` |
 | 3. Forensic tools | Volatility 3, EvtxECmd, MFTECmd (CDC) + Volatility 2 and the 15 other EZ tools (Décision J3), run as sub-processes with timeout and bounded output (ET-02) |
 | 4. Storage | `/evidence` read-only mount; `/output` results; append-only JSONL audit journal |
@@ -504,8 +517,9 @@ Notes:
 Deployment: Windows analyst PC + **one Linux container** (Debian, Docker Desktop). This is the
 "analysis machine Linux" of ET-08 and the "Docker container prepared from P2" mitigation of CDC
 §9 — to be justified in L2. **Extension beyond the CDC (already built, kept, documented):**
-Streamable HTTP transport on `127.0.0.1:8000` with bearer token, used only by Open WebUI for the
-local-model mode; its extra attack surface goes into the risk note (L7).
+Streamable HTTP transport on `127.0.0.1:8000` with bearer token, independent of the client and
+LLM mode; its extra attack surface goes into the risk note (L7). The CLI defaults to cloud;
+only an explicitly local model may use a process started with `--llm-mode local`.
 
 Container paths: Python `/opt/venv` (on PATH, `PYTHONPATH=/app/src`); `vol` = `/opt/venv/bin/vol`;
 .NET `/home/analyst/.dotnet/dotnet`; EZ tools `/home/analyst/forensic-tools/ez/<Tool>/**/<Tool>.dll`

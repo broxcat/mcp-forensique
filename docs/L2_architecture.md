@@ -2,6 +2,12 @@
 > Voir [audit_remediation.md](audit_remediation.md) et [traceability.md](traceability.md)
 > pour les corrections et limites actuelles. Les mentions historiques de conformité
 > ne valent pas attestation actuelle. Les mesures de lab restent à réaliser.
+>
+> **Archive d'architecture J4.** Le schéma et les choix Open WebUI des §2, §3, §6 et §12
+> décrivent l'ancien déploiement, pas une procédure actuelle. Depuis le nettoyage du
+> 14/11/2026, le Compose ne contient que `forensic` : aucun service d'interface ni secret
+> WebUI n'est requis. HTTP authentifié, stdio et mode local explicite sont conservés.
+> Pour le démarrage et la configuration actuels, suivre le [README, §2–4](../README.md).
 
 # L2 — Dossier d'architecture et matrice des garde-fous `forensic-mcp`
 

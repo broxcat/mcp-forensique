@@ -2,6 +2,9 @@
 > Voir [audit_remediation.md](audit_remediation.md) et [traceability.md](traceability.md)
 > pour les corrections et limites actuelles. Les mentions historiques de conformité
 > ne valent pas attestation actuelle. Les mesures de lab restent à réaliser.
+>
+> Protocole local actualisé le 14/11/2026 après retrait de l'interface optionnelle :
+> modèle et client restent à qualifier par l'équipe, sans nouvelle mesure ni session validée.
 
 # L6 — Rapport d'évaluation comparative (BROUILLON)
 
@@ -32,8 +35,9 @@ investigation classique, au regard des objectifs du CDC :
 - Skill `playbook-poste-compromis` (SKILL.md + 5 références), chargée dans Claude Code ou
   fournie par le prompt MCP au modèle local.
 - Deux modes de LLM (ET-07) : **cloud** (Claude, via Claude Code, sans shell : modèle
-  `templates/analysis-workspace/`) et **local** (modèle Ollama : **À COMPLÉTER** nom, taille,
-  quantification ; via Open WebUI 0.11.4).
+  `templates/analysis-workspace/`) et **local** (**À COMPLÉTER** modèle, taille,
+  quantification et client MCP à qualifier ; processus dédié avec `--llm-mode local`,
+  voir `essais_skill.md`). Aucun service d'interface n'est nécessaire au serveur.
 
 ## 3. Jeu de données
 
@@ -56,7 +60,7 @@ vérité terrain `eval/ground_truth.yaml` remplie par l'équipe (`status: filled
 |---|---|---|---|
 | A — classique | **À COMPLÉTER** | Volatility, EvtxECmd, MFTECmd, Timeline Explorer… en ligne de commande, sans assistant | — |
 | B — assistée (cloud) | **À COMPLÉTER** | Claude Code + `forensic-mcp` + skill | cloud |
-| C — assistée (local) | **À COMPLÉTER** | Open WebUI + `forensic-mcp` + prompt MCP | local |
+| C — assistée (local) | **À COMPLÉTER** | Client MCP et modèle local à qualifier + `forensic-mcp --llm-mode local` + prompt MCP | local |
 
 Règles communes :
 

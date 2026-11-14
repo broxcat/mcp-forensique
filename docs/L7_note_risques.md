@@ -2,6 +2,10 @@
 > Voir [audit_remediation.md](audit_remediation.md) et [traceability.md](traceability.md)
 > pour les corrections et limites actuelles. Les mentions historiques de conformité
 > ne valent pas attestation actuelle. Les mesures de lab restent à réaliser.
+>
+> Les mentions Open WebUI et de son secret dans les observations et le durcissement P7
+> sont **historiques**. Ce composant a été retiré des configurations actives le 14/11/2026 ;
+> les incidents et les preuves de validation antérieures restent consignés sans réécriture.
 
 # L7 — Note de risques : l'IA dans la chaîne DFIR (BROUILLON)
 

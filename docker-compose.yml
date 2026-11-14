@@ -24,27 +24,7 @@ services:
     security_opt:
       - "no-new-privileges:true"
 
-  webui:
-    # Pinned by digest (P7 hardening, 03/10/2026): the "main" build of Open WebUI 0.11.4 already
-    # deployed here (its MCP integration is not tested yet); change it only deliberately.
-    image: ghcr.io/open-webui/open-webui:main@sha256:8b432fe0a65b91116afc7961365c6cca5379cc923171386a96691f3471f3cae9
-    container_name: open-webui
-    ports:
-      - "127.0.0.1:3000:8080"
-    environment:
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?set WEBUI_SECRET_KEY in .env}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - open-webui:/app/backend/data
-    depends_on:
-      - forensic
-
 volumes:
-  # Fixed names: the data survives a change of Compose project name (6.5). They are the volumes
-  # created when the project was still named after the folder.
+  # Fixed name: preserve the symbol cache across changes of Compose project name (6.5).
   vol3-cache:
     name: scp-forensique_vol3-cache
-  open-webui:
-    name: scp-forensique_open-webui

@@ -3,10 +3,13 @@
 *Fiche préparée le 02/10/2026. Les essais sont joués par l'équipe (un analyste au clavier) ;
 l'assistant de développement ne les simule pas.*
 
+*Mise à jour du 14/11/2026 : cette fiche utilise le serveur seul ; aucun client local
+supplémentaire n'a été qualifié pendant le nettoyage du déploiement.*
+
 ## 1. But
 
 Vérifier que la conversation de référence (CLAUDE.md §10) se déroule avec la skill chargée, avec
-un LLM cloud (Claude) et avec un modèle local (Ollama via Open WebUI), et noter les écarts.
+un LLM cloud (Claude) et avec un modèle effectivement local, et noter les écarts.
 
 ## 2. Données
 
@@ -21,10 +24,13 @@ Utiliser des **données de test**, pas le journal du cas réel :
 
 | Mode | Client | Chargement de la skill |
 |---|---|---|
-| Cloud | Claude Code, espace d'analyse **sans Bash** (décision 3), serveur en stdio : `docker exec -i forensic-mcp python -m forensic_mcp --stdio` | Copier ou lier `skills/playbook-poste-compromis/` dans `.claude/skills/` de l'espace d'analyse |
-| Local | Open WebUI + modèle Ollama, serveur en HTTP (`127.0.0.1:8000/mcp`, jeton bearer) | Prompt MCP `playbook_poste_compromis(case="WS-042")` (SKILL.md + références), à insérer en début de conversation |
+| Cloud | Claude Code, espace d'analyse **sans Bash** (décision 3), serveur en stdio : `docker exec -i forensic-mcp python -m forensic_mcp --stdio --llm-mode cloud` | Copier ou lier `skills/playbook-poste-compromis/` dans `.claude/skills/` de l'espace d'analyse |
+| Local | Modèle et client MCP à documenter et qualifier par l'équipe ; processus dédié en stdio : `docker exec -i forensic-mcp python -m forensic_mcp --stdio --llm-mode local` | Prompt MCP `playbook_poste_compromis(case="WS-042")` ; références chargées à la demande via les sections du prompt ou les ressources MCP |
 
-Le serveur MCP n'est pas encore enregistré dans Open WebUI (STATUS) : à faire avant l'essai local.
+Avant l'essai local, vérifier que le modèle est réellement local et que le client prend en
+charge les outils, prompts et confirmations sensibles. À défaut, ces actions restent
+refusées. Le serveur HTTP fourni par Compose est indépendant de cet essai et reste en
+politique cloud par défaut ; aucune interface n'est déployée par le projet.
 
 ## 4. Déroulé (identique pour les deux modes)
 

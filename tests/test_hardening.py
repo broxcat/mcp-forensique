@@ -39,9 +39,24 @@ def test_every_ez_tool_zip_has_a_hash() -> None:
     assert {r[1] for r in rows} == set(REGISTRY) and len(rows) == 17
 
 
-def test_compose_pins_open_webui_and_build_context_excludes_secrets() -> None:
-    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    assert re.search(r"image: ghcr\.io/open-webui/open-webui:\S*@sha256:[0-9a-f]{64}", compose)
+def test_compose_deploys_only_forensic_with_readonly_evidence_and_no_privileges() -> None:
+    import yaml
+
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    assert set(compose["services"]) == {"forensic"}
+    forensic = compose["services"]["forensic"]
+    assert forensic["command"] == ["python", "-m", "forensic_mcp", "--http"]
+    assert forensic["ports"] == ["127.0.0.1:8000:8000"]
+    assert "${EVIDENCE_DIR:-./evidence}:/evidence:ro" in forensic["volumes"]
+    assert "${OUTPUT_DIR:-./output}:/output" in forensic["volumes"]
+    assert "vol3-cache:/home/analyst/.cache/volatility3" in forensic["volumes"]
+    assert forensic["cap_drop"] == ["ALL"]
+    assert forensic["security_opt"] == ["no-new-privileges:true"]
+    assert not forensic.get("depends_on") and not forensic.get("extra_hosts")
+    assert compose["volumes"] == {"vol3-cache": {"name": "scp-forensique_vol3-cache"}}
+
+
+def test_build_context_excludes_secrets() -> None:
     ignore = (ROOT / ".dockerignore").read_text(encoding="utf-8").split()
     assert {".env", ".secrets/", "evidence/", "output/"} <= set(ignore)
 
