@@ -30,7 +30,9 @@ class Config:
     max_response_kb: int = 64          # response size bound (ET-02, §5)
     max_output_mb: int = 1024          # stdout+stderr bound of one tool run (ET-02)
     max_session_output_mb: int = 10240  # persistent output-root budget, shared by processes
-    llm_mode: str = "local"            # "local" (Ollama) or "cloud"
+    # Data policy (ET-07, confidential-data guardrail): restrictive "cloud" unless a process
+    # is explicitly started for a local model (`--llm-mode local`). Never default to "local".
+    llm_mode: str = "cloud"            # "cloud" (default) or "local" (explicit only)
     default_classification: str = "internal"  # when no case.toml applies
     sleuthkit_dir: Path = Path("/usr/bin")    # mmls, fls, icat (task 4.3c)
     sleuthkit_prefix: list[str] = field(default_factory=list)  # e.g. [python] for test stubs

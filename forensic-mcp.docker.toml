@@ -24,5 +24,7 @@ default_classification = "internal"
 # file extracted from a disk image.
 sleuthkit_dir = "/usr/bin"
 max_extract_file_mb = 8192
-llm_mode = "local"
+# Data policy (ET-07): restrictive cloud by default. A local model needs a dedicated process
+# started explicitly with `python -m forensic_mcp --stdio --llm-mode local`.
+llm_mode = "cloud"
 max_session_output_mb = 10240

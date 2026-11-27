@@ -30,8 +30,13 @@ def cfg(tmp_path: Path) -> Config:
     volatility3._opt_cache.clear()
     volatility2._cache.clear()
     tshark._version.clear()
+    # llm_mode="local" is EXPLICIT on purpose: these fixtures test raw tool behaviour (values,
+    # error details). The default is now the restrictive cloud policy (audit 27/11/2026, P0 n°2);
+    # that policy is tested on its own (test_config_llm_default.py, test_socle.py *_cloud_mode,
+    # tests setting cfg.llm_mode = "cloud"). Open P1: replay the reference scenario WS-042 in
+    # both modes (cloud = production default) so cross-checks also run on pseudonymised data.
     return Config(evidence_root=ev, output_root=tmp_path / "output", tools_file=tools,
                   api_token_file=tmp_path / "secrets" / "api_token", timeout_seconds=30,
                   sleuthkit_dir=FAKEBIN / "disk", sleuthkit_prefix=[sys.executable],
                   tshark_dir=FAKEBIN / "net", tshark_prefix=[sys.executable],
-                  allowed_hosts=["localhost:8000", "127.0.0.1:8000"])
+                  allowed_hosts=["localhost:8000", "127.0.0.1:8000"], llm_mode="local")

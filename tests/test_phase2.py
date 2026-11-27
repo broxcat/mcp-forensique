@@ -78,7 +78,7 @@ def test_config_and_tools(tmp_path: Path) -> None:
     cfg_file = tmp_path / "c.toml"
     cfg_file.write_text('evidence_root = "/e"\nhttp_port = 9\n')
     cfg = config.load_config(cfg_file)
-    assert cfg.evidence_root == Path("/e") and cfg.http_port == 9 and cfg.llm_mode == "local"
+    assert cfg.evidence_root == Path("/e") and cfg.http_port == 9 and cfg.llm_mode == "cloud"
     tools = config.load_tools(Path(__file__).parents[1] / "tools.toml")
     assert len(tools) == 20 and tools["EvtxECmd"][0].endswith("dotnet")
 
