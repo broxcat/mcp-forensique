@@ -1,14 +1,19 @@
 """ET-04 / objective 3 (100 % of calls traced), audit 27/11/2026 P1."""
 import asyncio
+import os
+import stat
+from pathlib import Path
 
 import pytest
 from mcp import Client
 from mcp.server.mcpserver.exceptions import ToolError
 
-from forensic_mcp import audit, results, server
+from forensic_mcp import __main__ as cli
+from forensic_mcp import audit, config, results, server
 from forensic_mcp.ops import Engine
 
 pytestmark = pytest.mark.anyio
+OPERATOR = "J. Analyste"
 
 
 def _events(cfg, type_=None):
@@ -112,3 +117,91 @@ async def test_tool_status_counts_unfinished_calls(cfg) -> None:
     # the orphan start above + this tool_status call itself, still running when it counts
     assert "2 journaled call(s) started without an end (still running or interrupted)" in notes
     assert len(audit.unfinished_calls(cfg.audit_file)) == 1  # once tool_status has ended
+
+
+# ---- human operator: mandatory, in every journaled call -------------------------------------
+async def test_operator_in_every_journaled_call_including_server_ones(cfg) -> None:
+    cfg.operator = OPERATOR
+    async with Client(server.build_server(cfg)) as c:
+        r = await c.call_tool("vol3_run", {"path": "mem.raw", "plugin": "windows.pslist"})
+        await c.call_tool("vol3_run", {"path": "../tools.toml", "plugin": "pslist"})  # refused
+        d = results.result_dir(cfg.output_root, r.structured_content["result_id"])
+        rows = d / "rows.jsonl"
+        os.chmod(rows, stat.S_IRUSR | stat.S_IWUSR)
+        rows.write_text(rows.read_text() + "\n")  # tamper -> server-side integrity refusal
+        assert (await c.call_tool("query_results", {"result_id": d.name})).is_error
+    journaled = _events(cfg, "tool_call") + _events(cfg, "tool_call_started")
+    assert {e["actor"]["kind"] for e in journaled} == {"llm", "server"}
+    assert all(e["actor"]["operator"] == OPERATOR for e in journaled)
+    assert audit.verify_report(cfg.audit_file)["ok"]
+
+
+async def test_call_without_operator_is_refused_journaled_and_not_run(cfg) -> None:
+    cfg.operator = None
+    eng, ran = Engine(cfg), []
+
+    async def op(params, conf=None):
+        ran.append(True)
+
+    eng.op_tool_status = op
+    with pytest.raises(ToolError, match="no human operator declared"):
+        await eng.call("tool_status", {})
+    assert ran == []
+    start, call = _events(cfg)
+    assert start["type"] == "tool_call_started" and call["started_audit_id"] == start["audit_id"]
+    assert call["outcome"] == "refused" and call["error"] == config.NO_OPERATOR
+    assert call["actor"]["operator"] == config.UNDECLARED_OPERATOR
+    assert audit.verify_report(cfg.audit_file)["ok"]
+
+
+async def test_operator_name_is_journaled_not_sent_to_the_model(cfg) -> None:
+    cfg.operator = OPERATOR
+    async with Client(server.build_server(cfg)) as c:
+        r = await c.call_tool("tool_status", {})
+    assert "operator declared (name kept in the journal, not shown)" in r.structured_content["notes"]
+    assert OPERATOR not in r.content[0].text and OPERATOR not in str(r.structured_content)
+    assert _events(cfg, "tool_call")[-1]["actor"]["operator"] == OPERATOR
+
+
+def test_server_refuses_to_start_without_operator(monkeypatch, capsys) -> None:
+    built = []
+
+    class Srv:
+        async def run_stdio_async(self):
+            pass
+
+    def build(cfg):
+        built.append(cfg.operator)
+        return Srv()
+
+    monkeypatch.setattr(cli, "build_server", build)
+    monkeypatch.setattr("forensic_mcp.web.serve", lambda mcp, cfg: None)
+    monkeypatch.delenv("FORENSIC_MCP_CONFIG", raising=False)
+    monkeypatch.delenv(config.OPERATOR_ENV, raising=False)
+    for transport in ("--stdio", "--http"):
+        assert cli.main([transport]) == 2
+        assert cli.main([transport, "--operator", "   "]) == 2
+    assert built == []  # never built, never served
+    err = capsys.readouterr().err
+    assert "refused to start" in err and "--operator" in err and config.OPERATOR_ENV in err
+    # stdio: ONLY --operator. The container-wide variable is ignored, never inherited.
+    monkeypatch.setenv(config.OPERATOR_ENV, "Env Analyst")
+    assert cli.main(["--stdio"]) == 2 and built == []
+    assert f"{config.OPERATOR_ENV} is ignored in stdio" in capsys.readouterr().err
+    assert cli.main(["--stdio", "--operator", "  Jane Doe "]) == 0  # the session's own name
+    # HTTP (container main process): the variable set by Compose is accepted.
+    assert cli.main(["--http"]) == 0
+    assert built == ["Jane Doe", "Env Analyst"]
+    monkeypatch.setenv(config.OPERATOR_ENV, "<undeclared>")
+    with pytest.raises(SystemExit):
+        cli.main(["--http"])
+    for bad in ("<undeclared>", "x", "a\nb"):
+        with pytest.raises(SystemExit):
+            cli.main(["--stdio", "--operator", bad])
+
+
+def test_operator_never_comes_from_the_shared_toml(tmp_path: Path) -> None:
+    f = tmp_path / "c.toml"
+    f.write_text('operator = "TOML Analyst"\n')
+    with pytest.raises(ValueError, match="operator is per process"):
+        config.load_config(f)

@@ -29,7 +29,8 @@
       "properties": {
         "kind": {"enum": ["server", "llm", "analyst"]},
         "name": {"description": "Mandatory for analyst (nominative validation).", "type": "string"},
-        "client": {"description": "MCP client name/version, or LLM mode (local/cloud).", "type": "string"}
+        "client": {"description": "MCP client name/version, or LLM mode (local/cloud).", "type": "string"},
+        "operator": {"description": "Human operator of the server process (mandatory since 27/11/2026: --operator only for a stdio session; --operator or FORENSIC_OPERATOR for the HTTP main process), declared not authenticated. '<undeclared>' only in a journaled refusal or an event written outside a server process. Absent in events written before 27/11/2026.", "type": "string", "minLength": 2}
       },
       "if": {"properties": {"kind": {"const": "analyst"}}},
       "then": {"required": ["kind", "name"]}

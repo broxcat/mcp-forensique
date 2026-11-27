@@ -57,10 +57,11 @@ Fichier `.env` (jamais commité, ne contient aucun secret à partager ; modèle 
 | `COMPOSE_PROJECT_NAME` | `forensic-mcp` : nom du projet Compose, fixé pour ne pas dépendre du nom du dossier (voir §3) |
 | `EVIDENCE_DIR` | Dossier Windows des preuves, monté en lecture seule sur `/evidence` (barres obliques `/`, par exemple `C:/cases/evidence`) |
 | `OUTPUT_DIR` | Dossier Windows des résultats et du journal (`/output`) |
+| `FORENSIC_OPERATOR` | **Obligatoire.** Opérateur humain du processus HTTP, écrit dans chaque événement du journal (déclaré, pas authentifié). Sans lui, `docker compose` refuse de démarrer |
 
 Le Compose fourni démarre uniquement le service `forensic`, en HTTP sur
 `http://127.0.0.1:8000/mcp` ; seul le port `8000` est publié, sur la boucle locale.
-Les trois variables ci-dessus suffisent à configurer ce déploiement. Si `.env` existe déjà,
+Les quatre variables ci-dessus suffisent à configurer ce déploiement. Si `.env` existe déjà,
 conserver ses chemins au lieu de le remplacer par le modèle.
 
 Le jeton HTTP n'est pas dans `.env` : il est créé au premier démarrage dans `.secrets/api_token`
@@ -126,8 +127,26 @@ ni lancer la validation. Ces règles sont appliquées par le client, pas par le 
 Ajout manuel équivalent :
 
 ```powershell
-claude mcp add forensic -- docker exec -i forensic-mcp python -m forensic_mcp --stdio
+claude mcp add forensic -- docker exec -i forensic-mcp python -m forensic_mcp --stdio --operator "Prénom Nom"
 ```
+
+**Opérateur humain obligatoire** (ET-04, audit du 27/11/2026). Tout processus serveur refuse de
+démarrer sans opérateur, et le fichier TOML ne peut pas le fournir :
+
+- **stdio** (une session d'analyste, `docker exec … --stdio`) : **uniquement**
+  `--operator "Prénom Nom"`. La variable `FORENSIC_OPERATOR` est ignorée en stdio, même si elle
+  existe dans le conteneur : un nom commun hérité du `.env` attribuerait toutes les sessions à
+  la même personne. Une session stdio est attribuée à l'analyste qui l'ouvre, via le
+  `--operator` de son `.mcp.json` (modèle : `--operator ${FORENSIC_OPERATOR}`, développé par
+  Claude Code depuis l'environnement de l'analyste) ;
+- **HTTP** (processus principal du conteneur) : `--operator` ou `FORENSIC_OPERATOR`, fourni
+  par Compose depuis `.env` ; sans lui, `docker compose` refuse de démarrer.
+
+`Engine.call` refuse aussi, en le journalisant, tout appel sans opérateur. Le nom figure dans l'acteur de chaque événement du journal
+(`actor.operator`) ; `tool_status` indique seulement qu'il est déclaré, sans l'envoyer au
+modèle. Il est **déclaré, pas authentifié** : il dit qui pilotait la session, pas qui l'a
+prouvé. La confirmation nominative des actions sensibles (formulaire MCP) et la validation hors
+bande des constats restent distinctes et nominatives à chaque fois.
 
 **Serveur HTTP avec jeton (écart documenté, L2 §6).** Le service `forensic` fourni expose
 `http://127.0.0.1:8000/mcp`. Les requêtes MCP exigent l'en-tête

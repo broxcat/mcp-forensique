@@ -2,11 +2,39 @@
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
 CLASSIFICATIONS = ("lab", "internal", "client")
+# Human operator of a server process (ET-04, objective 3: who drove each journaled call).
+# MANDATORY: the CLI refuses to start a server without one and Engine.call refuses (and
+# journals) any call without one. Declared, not authenticated; distinct from the nominative
+# confirmation of sensitive actions. Only per process, never from the shared TOML: stdio
+# sessions ONLY by --operator (a container-wide variable would be a shared name), the HTTP
+# main process by --operator or FORENSIC_OPERATOR. UNDECLARED_OPERATOR only appears in journaled refusals and in events
+# written outside a server process; a declared name can never take that value.
+OPERATOR_ENV = "FORENSIC_OPERATOR"
+UNDECLARED_OPERATOR = "<undeclared>"
+NO_OPERATOR = (f"no human operator declared for this server process: start it with "
+               f"--operator \"First Last\" (stdio: only this way) or {OPERATOR_ENV} (HTTP)")
+OPERATOR_RE = re.compile(r"^[^\x00-\x1f\x7f<>]{2,80}$")
+
+
+def check_operator(name: str | None) -> str | None:
+    """Normalised operator name, None when absent; ValueError when unusable."""
+    if name is None or not name.strip():
+        return None
+    name = name.strip()
+    if not OPERATOR_RE.fullmatch(name):
+        raise ValueError("operator must be 2-80 printable characters, without '<' or '>'")
+    return name
+
+
+def operator_of(cfg: "Config") -> str:
+    """Operator name written in every journal actor of this process."""
+    return cfg.operator or UNDECLARED_OPERATOR
 
 
 @dataclass
@@ -33,6 +61,7 @@ class Config:
     # Data policy (ET-07, confidential-data guardrail): restrictive "cloud" unless a process
     # is explicitly started for a local model (`--llm-mode local`). Never default to "local".
     llm_mode: str = "cloud"            # "cloud" (default) or "local" (explicit only)
+    operator: str | None = None        # set by the CLI only (--operator / FORENSIC_OPERATOR)
     default_classification: str = "internal"  # when no case.toml applies
     sleuthkit_dir: Path = Path("/usr/bin")    # mmls, fls, icat (task 4.3c)
     sleuthkit_prefix: list[str] = field(default_factory=list)  # e.g. [python] for test stubs
@@ -65,6 +94,9 @@ def load_config(path: str | Path | None = None) -> Config:
     cfg = Config(**raw)
     if cfg.llm_mode not in ("local", "cloud"):
         raise ValueError("llm_mode must be 'local' or 'cloud'")
+    if "operator" in raw:
+        raise ValueError(f"operator is per process: use --operator or {OPERATOR_ENV}, "
+                         "not the configuration file")
     if cfg.default_classification not in CLASSIFICATIONS:
         raise ValueError(f"default_classification must be one of {CLASSIFICATIONS}")
     return cfg

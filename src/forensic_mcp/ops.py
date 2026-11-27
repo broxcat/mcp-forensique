@@ -16,7 +16,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult
 
 from . import audit, contract, evidence, results, safety, schemas, runner
-from .config import Config, load_tools
+from .config import NO_OPERATOR, Config, load_tools, operator_of
 from .engines import tshark, volatility3
 from .artefact_ops import ArtefactOps
 from .checklist_ops import ChecklistOps
@@ -86,7 +86,9 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
 
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
-        self.actor = {"kind": "llm", "client": f"mcp; llm_mode={cfg.llm_mode}"}
+        # operator = human driving this process (declared, ET-04): in every journal actor.
+        self.actor = {"kind": "llm", "client": f"mcp; llm_mode={cfg.llm_mode}",
+                      "operator": operator_of(cfg)}
         # What this running server is (tool_status): read once, at start — a server started
         # before a `git pull` keeps reporting the code it actually loaded.
         self.code, self.started_utc = code_version(), audit.utc_now()
@@ -113,6 +115,9 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
                                "engine": "forensic-mcp", "evidence_sha256": None,
                                "result_id": None, "exit_code": None, "output_sha256": None,
                                "started_audit_id": started}
+        if not self.cfg.operator:  # mandatory operator: refused and journaled, never run
+            aid = self._journal(rec, t0, "refused", error=NO_OPERATOR)
+            raise ToolError(f"refused (audit_id {aid}): {NO_OPERATOR}")
         try:
             out: Outcome = await getattr(self, f"op_{tool}")(params, conf)
             if out.result_id and not any(e.get('result_id') == out.result_id for e in audit.iter_events(self.cfg.audit_file)):
@@ -292,9 +297,12 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
         out = self._listing("tool_status", params, items,
                             f"{len(tools)} tools installed, exposed: vol3 {vol3}, vol2 2.6, "
                             f"17 EZ tools, sleuthkit (disk_*), {net} (pcap_*) ; {server}")
+        # The operator NAME is not sent to the model (personal data): every call reaching
+        # this point has one (Engine.call refuses calls without it).
         unfinished = audit.unfinished_calls(self.cfg.audit_file)
         out.payload["notes"] = [server, f"evidence root {self.cfg.evidence_root}, output root "
                                         f"{self.cfg.output_root}",
+                                "operator declared (name kept in the journal, not shown)",
                                 f"{len(unfinished)} journaled call(s) started without an end "
                                 "(still running or interrupted)"]
         return out

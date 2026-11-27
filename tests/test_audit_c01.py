@@ -8,6 +8,6 @@ def test_process_policy_defaults_cloud_and_requires_explicit_local(monkeypatch):
         modes.append(cfg.llm_mode)
         return Server()
     monkeypatch.setattr(cli, 'build_server', build)
-    cli.main(['--stdio'])
-    cli.main(['--stdio','--llm-mode','local'])
+    cli.main(['--stdio','--operator','test-analyst'])
+    cli.main(['--stdio','--operator','test-analyst','--llm-mode','local'])
     assert modes == ['cloud','local']

@@ -8,8 +8,10 @@ def manifest(d):
 
 def _integrity_failure(cfg, rid):
     from . import audit
+    from .config import operator_of
     from .safety import SafetyError
-    audit.append(cfg.audit_file, 'tool_call', {'kind':'server'}, tool='verify_result',
+    audit.append(cfg.audit_file, 'tool_call', {'kind':'server', 'operator':operator_of(cfg)},
+                 tool='verify_result',
                  params={'result_id':rid}, argv=[], engine='forensic-mcp', evidence_sha256=None,
                  result_id=None, exit_code=None, duration_s=0, output_sha256=None,
                  outcome='refused', error='result integrity or provenance mismatch')

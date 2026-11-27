@@ -182,7 +182,8 @@ class ReportOps:
         if final:
             # Candidates are not exports, but their metadata must already be sealed
             # before the out-of-band reviewer or a later export reads it.
-            audit.append(self.cfg.audit_file, 'tool_call', {'kind':'server'},
+            audit.append(self.cfg.audit_file, 'tool_call',
+                         {'kind':'server', 'operator': self.actor['operator']},
                          tool='report_candidate', params={'title':title}, argv=[], engine='forensic-mcp',
                          evidence_sha256=None, result_id=rid, exit_code=0, duration_s=0,
                          output_sha256=results.rows_sha256(d), result_manifest=results.manifest(d),

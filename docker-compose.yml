@@ -7,6 +7,10 @@ services:
     working_dir: /app
     # MCP server over Streamable HTTP (http://localhost:8000/mcp), token in /app/.secrets/api_token.
     command: ["python", "-m", "forensic_mcp", "--http"]
+    environment:
+      # Human operator of the HTTP process, MANDATORY (ET-04, audit 27/11/2026): written in
+      # every journal event; declared, not authenticated. Compose refuses to start without it.
+      FORENSIC_OPERATOR: ${FORENSIC_OPERATOR:?set FORENSIC_OPERATOR in .env to the human operator name (README section 2)}
     volumes:
       # Project code, edited from Windows.
       - ./:/app

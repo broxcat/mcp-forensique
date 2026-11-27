@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 import anyio
 
-from .config import load_config
+from .config import NO_OPERATOR, OPERATOR_ENV, check_operator, load_config
 from .server import build_server
 
 
@@ -21,9 +22,27 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--stdio", action="store_true", help="stdio transport (local MCP clients)")
     p.add_argument('--llm-mode', choices=['cloud','local'], default='cloud',
                    help='Data policy for this process; local requires an explicitly local model')
+    p.add_argument("--operator",
+                   help="human operator of this server process, MANDATORY: --stdio accepts "
+                        f"ONLY this option; --http also accepts env {OPERATOR_ENV}. Written in "
+                        "every journal event; declared, not authenticated")
     args = p.parse_args(argv)
+    # stdio = one analyst's session (docker exec): attributed only by its own --operator, never
+    # by a container-wide variable (that would be a shared name again, like the TOML).
+    # HTTP = the container's main process: --operator or FORENSIC_OPERATOR (set by Compose).
+    raw = args.operator if args.stdio else (args.operator or os.environ.get(OPERATOR_ENV))
+    try:
+        operator = check_operator(raw)
+    except ValueError as exc:
+        p.error(str(exc))
+    if args.command is None and operator is None:  # stdio or HTTP server: refuse to start
+        why = (f'stdio needs --operator "First Last" ({OPERATOR_ENV} is ignored in stdio)'
+               if args.stdio else NO_OPERATOR)
+        print(f"forensic_mcp: refused to start: {why}", file=sys.stderr)
+        return 2
     cfg = load_config()
     cfg.llm_mode = args.llm_mode
+    cfg.operator = operator
     if args.command == 'review-report':
         if not sys.stdin.isatty():
             return 2

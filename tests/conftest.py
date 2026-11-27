@@ -39,4 +39,5 @@ def cfg(tmp_path: Path) -> Config:
                   api_token_file=tmp_path / "secrets" / "api_token", timeout_seconds=30,
                   sleuthkit_dir=FAKEBIN / "disk", sleuthkit_prefix=[sys.executable],
                   tshark_dir=FAKEBIN / "net", tshark_prefix=[sys.executable],
-                  allowed_hosts=["localhost:8000", "127.0.0.1:8000"], llm_mode="local")
+                  allowed_hosts=["localhost:8000", "127.0.0.1:8000"], llm_mode="local",
+                  operator="test-analyst")  # fictitious; the operator is mandatory (ET-04)

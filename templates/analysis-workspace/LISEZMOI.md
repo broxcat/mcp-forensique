@@ -13,7 +13,13 @@ ni accès aux secrets ; il ne passe que par le serveur MCP `forensic-mcp`, qui j
 3. Copier ou lier la skill : `skills/playbook-poste-compromis/` du dépôt vers
    `.claude/skills/playbook-poste-compromis/` de ce dossier.
 4. Le conteneur doit tourner : `docker compose up -d forensic` depuis le dépôt.
-5. Lancer Claude Code dans ce dossier ; vérifier avec `/mcp` que `forensic` est connecté.
+5. Déclarer l'opérateur humain de la session dans l'environnement qui lance Claude Code :
+   `FORENSIC_OPERATOR="Prénom Nom"`. `.mcp.json` le passe au serveur (`--operator`) ; sans lui,
+   le serveur refuse de démarrer (en stdio, la variable `FORENSIC_OPERATOR` du conteneur est
+   ignorée : la session est attribuée à l'analyste qui l'ouvre). Ce nom est **déclaré, pas authentifié** ; il est écrit dans
+   chaque événement du journal et n'est pas envoyé au modèle. Il ne remplace pas la
+   confirmation nominative des actions sensibles, demandée à chaque fois.
+6. Lancer Claude Code dans ce dossier ; vérifier avec `/mcp` que `forensic` est connecté.
 
 ## Ce que le modèle interdit
 
