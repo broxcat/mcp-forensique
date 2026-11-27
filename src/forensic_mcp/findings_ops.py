@@ -62,6 +62,46 @@ def value_matches(cell: Any, value: Any) -> str | None:
     return None
 
 
+# Rejection reason codes (fixed text, never a value): what a cloud client receives when the
+# finding has no provenance, so the model can tell what is missing and correct itself.
+_REASONS = [("no citation", "no_citation"), ("unknown result_id", "unknown_result_id"),
+            ("row must be", "row_invalid"), ("does not exist", "row_not_found"),
+            ("no encoded command", "no_encoded_command"), ("field ", "field_not_found"),
+            ("not found in", "value_mismatch"), ("is present in", "value_present"),
+            ("ATT&CK ID", "attack_id_not_allowed"), ("not a technique", "observation_attack"),
+            ("audit_id", "call_not_journaled"), ("proves", "call_failed"),
+            ("row count", "call_without_row_count"), ("returned", "call_not_empty"),
+            ("rows: cite", "result_not_empty"), ("needs the value", "value_missing"),
+            ("row must be 0", "observation_row")]
+MASKED_TEXT = ("[texte masqué : constat sans provenance (aucune citation valide) ; "
+               "le consulter localement dans le journal]")
+
+
+def reason_codes(problems: list[str]) -> list[str]:
+    """Stable codes for rejection messages (first matching pattern, else citation_invalid)."""
+    codes = []
+    for p in problems:
+        msg = p.split(": ", 1)[1] if p.startswith("citation ") else p
+        code = next((c for k, c in _REASONS if k in msg), "citation_invalid")
+        if code not in codes:
+            codes.append(code)
+    return codes
+
+
+def has_provenance(output_root: Path, citations: list[dict[str, Any]]) -> bool:
+    """False when a finding never pointed at evidence data: no citation, or a result_id that
+    is not a result folder. Such a finding is masked for a cloud client, element by element,
+    instead of making a whole collection fail (audit 27/11/2026)."""
+    if not citations:
+        return False
+    for c in citations:
+        try:
+            results.result_dir(Path(output_root), str(c.get("result_id")))
+        except (ValueError, FileNotFoundError):
+            return False
+    return True
+
+
 # Journal codes -> labels shown to people (CDC: à valider / validé / rejeté).
 STATUS_LABEL = {"à valider": "à valider", "rejected_by_server": "rejeté par le serveur",
                 "validated": "validé", "rejected": "rejeté", "to_review": "à revoir"}
@@ -273,12 +313,33 @@ class FindingsOps:
                                        "mismatches": problems}, status=status,
                           **({"observation": observed} if kind == "observation" else {}))
         fid = ev['finding_id']
+        codes = reason_codes(problems)
+        if self.cfg.llm_mode == 'cloud' and not has_provenance(self.cfg.output_root, checked):
+            # No case policy can apply: answer with fixed text and reason codes only. The
+            # finding text and the cited values are never echoed (kept in the local journal).
+            what = "no citation" if "no_citation" in codes else "invalid citation"
+            shown = {**{k: v for k, v in params.items() if k not in ("text", "citations")},
+                     "text": "[non renvoyé]", "citations": f"{len(citations)} citation(s)"}
+            out = self._listing("record_finding", shown,
+                                [{"citation": r["citation"],
+                                  "check": "ok" if r["check"] == "ok" else reason_codes([r["check"]])[0]}
+                                 for r in rows],
+                                f"{fid} REJECTED: {what} [{', '.join(codes)}]")
+            out.payload["notes"] = [
+                f"suggestion journaled as audit_id {ev['audit_id']}",
+                "reason codes: " + ", ".join(codes),
+                "every statement must cite result_id + row + field + value of a result returned "
+                "by this server (EF-10); the finding text is not echoed in cloud mode"]
+            out.params_real = params  # the journal keeps what was really sent
+            out.audit_extra = {"finding_id": fid, "finding_status": status}
+            return out
         summary = (f"{fid} REJECTED by the cross-check: {'; '.join(problems)}" if problems else
                    f"{fid} recorded ({kind}, confidence {confidence}): à valider by an analyst")
         out = self._listing("record_finding", params, rows, summary)
         if self.cfg.llm_mode == 'cloud':
             out.pseudo = self._findings_policy([{'citation_list': checked}])
-        out.payload["notes"] = [f"suggestion journaled as audit_id {ev['audit_id']}"] + problems
+        out.payload["notes"] = ([f"suggestion journaled as audit_id {ev['audit_id']}"] + problems
+                                + (["reason codes: " + ", ".join(codes)] if codes else []))
         if kind == "observation" and not problems:
             out.payload["notes"] += [
                 "Observation = absence of the trace in the cited result only, NOT absence of the "
@@ -296,8 +357,17 @@ class FindingsOps:
                  if params.get("status") in (None, f["status"])
                  and params.get("kind") in (None, f["kind"])]
         pending = sum(1 for f in items if f["status"] == "à valider")
-        ps = self._findings_policy(items)
+        # A finding without provenance is masked ELEMENT BY ELEMENT for a cloud client: one
+        # such finding must never refuse the whole list (audit 27/11/2026).
+        masked = ({f["finding_id"] for f in items
+                   if not has_provenance(self.cfg.output_root, f.get("citation_list", []))}
+                  if self.cfg.llm_mode == 'cloud' else set())
+        ps = self._findings_policy([f for f in items if f["finding_id"] not in masked])
         items = [{k: v for k, v in f.items() if k not in ('citation_list', 'observation')}
                  for f in items]
-        return self._listing("list_findings", params, items,
-                             f"{len(items)} findings, {pending} à valider", pseudo=ps)
+        items = [{**f, "text": MASKED_TEXT, "citations": "[masqué]"} if f["finding_id"] in masked
+                 else f for f in items]
+        summary = f"{len(items)} findings, {pending} à valider"
+        if masked:
+            summary += f", {len(masked)} sans provenance (texte masqué)"
+        return self._listing("list_findings", params, items, summary, pseudo=ps)
