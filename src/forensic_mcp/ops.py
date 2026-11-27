@@ -137,33 +137,41 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
             aid = self._journal(rec, t0, "tool_error", error=f"{type(exc).__name__}: {exc}")
             detail = f'{type(exc).__name__}: {exc}' if self.cfg.llm_mode == 'local' else 'inspect the server journal locally'
             raise ToolError(f"tool error (audit_id {aid}): {detail}") from exc
-        rec.update(params=out.params_real, argv=out.argv, engine=out.engine,
-                   evidence_sha256=out.evidence_sha256, result_id=out.result_id,
-                   exit_code=out.exit_code, output_sha256=out.output_sha256)
-        extra = dict(out.audit_extra, timed_out=out.timed_out)
-        if out.result_id:  # what this call returned: lets record_finding verify an absence (5.3)
-            if isinstance(out.payload.get("row_count"), int):
-                extra["row_count"] = out.payload["row_count"]
-            if out.payload.get("notes"):
-                extra["notes"] = [str(n) for n in out.payload["notes"]]
-        if out.timed_out:
-            outcome, extra["error"] = "timeout", f"timeout after {self.cfg.timeout_seconds} s"
-        elif out.output_exceeded:
-            outcome = 'tool_error'
-            session_full = runner.output_volume(Path(self.cfg.output_root)) >= self.cfg.max_session_output_mb * 1024 * 1024
-            extra['error'] = (f'session output over {self.cfg.max_session_output_mb} MB' if session_full
-                              else f'output over {self.cfg.max_output_mb} MB')
-        elif out.error:
-            outcome, extra["error"] = "tool_error", out.error
-        elif out.exit_code not in (None, 0):
-            outcome, extra["error"] = "tool_error", f"exit code {out.exit_code}"
-        else:
-            outcome = "ok"
-        if out.result_id and outcome == 'ok':
-            previous = next((e for e in audit.iter_events(self.cfg.audit_file)
-                             if e['type'] == 'tool_call' and e.get('result_id') == out.result_id), None)
-            if previous is None:
-                extra['result_manifest'] = results.manifest(results.result_dir(self.cfg.output_root, out.result_id))
+        try:  # sealing (audit 27/11/2026, P1): any failure here is journaled, never silent
+            rec.update(params=out.params_real, argv=out.argv, engine=out.engine,
+                       evidence_sha256=out.evidence_sha256, result_id=out.result_id,
+                       exit_code=out.exit_code, output_sha256=out.output_sha256)
+            extra = dict(out.audit_extra, timed_out=out.timed_out)
+            if out.result_id:  # what this call returned: lets record_finding verify an absence (5.3)
+                if isinstance(out.payload.get("row_count"), int):
+                    extra["row_count"] = out.payload["row_count"]
+                if out.payload.get("notes"):
+                    extra["notes"] = [str(n) for n in out.payload["notes"]]
+            if out.timed_out:
+                outcome, extra["error"] = "timeout", f"timeout after {self.cfg.timeout_seconds} s"
+            elif out.output_exceeded:
+                outcome = 'tool_error'
+                session_full = runner.output_volume(Path(self.cfg.output_root)) >= self.cfg.max_session_output_mb * 1024 * 1024
+                extra['error'] = (f'session output over {self.cfg.max_session_output_mb} MB' if session_full
+                                  else f'output over {self.cfg.max_output_mb} MB')
+            elif out.error:
+                outcome, extra["error"] = "tool_error", out.error
+            elif out.exit_code not in (None, 0):
+                outcome, extra["error"] = "tool_error", f"exit code {out.exit_code}"
+            else:
+                outcome = "ok"
+            if out.result_id and outcome == 'ok':
+                previous = next((e for e in audit.iter_events(self.cfg.audit_file)
+                                 if e['type'] == 'tool_call' and e.get('result_id') == out.result_id), None)
+                if previous is None:
+                    extra['result_manifest'] = results.manifest(results.result_dir(self.cfg.output_root, out.result_id))
+        except Exception as exc:
+            # The result stays unsealed: its producer is this tool_error, so verify_result
+            # refuses it for good (fail closed); the payload is not returned.
+            error = f"result sealing failed: {type(exc).__name__}: {exc}"
+            aid = self._journal(rec, t0, "tool_error", error=error)
+            detail = error if self.cfg.llm_mode == 'local' else 'inspect the server journal locally'
+            raise ToolError(f"tool error (audit_id {aid}): {detail}") from exc
         payload["audit_id"] = self._journal(rec, t0, outcome, **extra)
         return contract.render(payload)
 
