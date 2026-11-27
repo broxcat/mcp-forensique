@@ -3,6 +3,7 @@ that write nothing and state no legal deadline, communications recorded (never s
 pseudonymisation of names and contacts in cloud mode, sitrep section 6, crisis timeline."""
 import json
 import re
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -147,7 +148,10 @@ async def test_suggest_writes_nothing_and_states_no_legal_deadline(cfg) -> None:
         bad = await c.call_tool("stakeholder_suggest", {"case": "", "incident_type": "panne"})
     assert bad.is_error
     evs = list(audit.iter_events(cfg.audit_file))
-    assert {e["type"] for e in evs[before:]} == {"tool_call"}  # nothing written to the board
+    # nothing written to the board: exactly one start + one end per valid call ("panne" is
+    # rejected by the SDK schema (Literal) before reaching the server, so it is not journaled)
+    n = len(stakeholder_ops.INCIDENT_TYPES)
+    assert Counter(e["type"] for e in evs[before:]) == Counter(tool_call_started=n, tool_call=n)
     legal_roles = {c["role"] for t in data["incident_types"].values() for c in t["contacts"]
                    if c.get("legal")}
     for itype, r in got.items():

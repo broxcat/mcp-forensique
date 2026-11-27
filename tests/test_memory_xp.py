@@ -129,7 +129,7 @@ async def test_mem_extract_vad_needs_a_named_analyst(cfg) -> None:
     assert not _events(cfg, "evidence_registered")  # refused before touching the evidence
     assert not list(Path(cfg.output_root).glob("*/extracted/*"))
     assert [e["type"] for e in audit.iter_events(cfg.audit_file)] == [
-        "action_request", "action_confirmed", "tool_call"]
+        "tool_call_started", "action_request", "action_confirmed", "tool_call"]
 
 
 async def test_mem_extract_vad_vol2_hashes_and_registers(cfg) -> None:

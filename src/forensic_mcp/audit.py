@@ -148,6 +148,18 @@ def verify_audit(path: str | Path) -> tuple[bool, int]:
     return r["ok"], (r["lines"] if r["ok"] else r["first_bad"])
 
 
+def unfinished_calls(path: str | Path) -> list[dict[str, Any]]:
+    """tool_call_started events with no tool_call naming them (started_audit_id): calls
+    still running, or interrupted (process killed, power loss) — never silently lost."""
+    starts: dict[int, dict[str, Any]] = {}
+    for ev in iter_events(path):
+        if ev["type"] == "tool_call_started":
+            starts[ev["audit_id"]] = ev
+        elif ev["type"] == "tool_call" and ev.get("started_audit_id") in starts:
+            del starts[ev["started_audit_id"]]
+    return list(starts.values())
+
+
 def head_hash(path: str | Path) -> str:
     """Hash of the last line (to anchor off-host, L2 §9.5)."""
     return verify_report(path, check_schema=False)["head_hash"]

@@ -4,6 +4,7 @@ response follows the output contract and is schema-validated (ET-03), the case p
 raw / pseudonymised / refused output (confidential-data guardrail)."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import time
@@ -100,9 +101,18 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
         """Run op_<tool>, journal it, pseudonymise if required, validate and render.
         `conf` = the analyst answer injected by the server resolver (sensitive calls)."""
         t0 = time.monotonic()
+        # Journal the START before anything runs (audit 27/11/2026, P1): a process killed
+        # mid-call leaves a tool_call_started without its tool_call (audit.unfinished_calls).
+        # If the journal cannot be written, nothing is executed.
+        try:
+            started = audit.append(self.cfg.audit_file, "tool_call_started", self.actor,
+                                   tool=tool, params=params)["audit_id"]
+        except Exception as exc:
+            raise ToolError("journal unavailable: call not executed") from exc
         rec: dict[str, Any] = {"tool": tool, "params": params, "argv": [],
                                "engine": "forensic-mcp", "evidence_sha256": None,
-                               "result_id": None, "exit_code": None, "output_sha256": None}
+                               "result_id": None, "exit_code": None, "output_sha256": None,
+                               "started_audit_id": started}
         try:
             out: Outcome = await getattr(self, f"op_{tool}")(params, conf)
             if out.result_id and not any(e.get('result_id') == out.result_id for e in audit.iter_events(self.cfg.audit_file)):
@@ -137,6 +147,9 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
             aid = self._journal(rec, t0, "tool_error", error=f"{type(exc).__name__}: {exc}")
             detail = f'{type(exc).__name__}: {exc}' if self.cfg.llm_mode == 'local' else 'inspect the server journal locally'
             raise ToolError(f"tool error (audit_id {aid}): {detail}") from exc
+        except (asyncio.CancelledError, KeyboardInterrupt) as exc:  # cancelled request / ^C
+            self._journal(rec, t0, "tool_error", error=f"interrupted ({type(exc).__name__})")
+            raise
         try:  # sealing (audit 27/11/2026, P1): any failure here is journaled, never silent
             rec.update(params=out.params_real, argv=out.argv, engine=out.engine,
                        evidence_sha256=out.evidence_sha256, result_id=out.result_id,
@@ -279,8 +292,11 @@ class Engine(MemoryOps, EzOps, ArtefactOps, DiskOps, NetOps, ImportOps, Findings
         out = self._listing("tool_status", params, items,
                             f"{len(tools)} tools installed, exposed: vol3 {vol3}, vol2 2.6, "
                             f"17 EZ tools, sleuthkit (disk_*), {net} (pcap_*) ; {server}")
+        unfinished = audit.unfinished_calls(self.cfg.audit_file)
         out.payload["notes"] = [server, f"evidence root {self.cfg.evidence_root}, output root "
-                                        f"{self.cfg.output_root}"]
+                                        f"{self.cfg.output_root}",
+                                f"{len(unfinished)} journaled call(s) started without an end "
+                                "(still running or interrupted)"]
         return out
 
     async def op_list_evidence(self, params: dict[str, Any], conf: Any = None) -> Outcome:

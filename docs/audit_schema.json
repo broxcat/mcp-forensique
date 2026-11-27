@@ -54,12 +54,24 @@
         "type": {
           "enum": ["report_review", "evidence_registered", "evidence_verified", "tool_call", "suggestion",
                    "validation", "action_request", "action_confirmed", "crisis_event",
-                   "imported_from_windows", "stakeholder_update", "comms_logged"]
+                   "imported_from_windows", "stakeholder_update", "comms_logged",
+                   "tool_call_started"]
         },
         "actor": {"$ref": "#/$defs/actor"},
         "case": {"description": "Case / host identifier, e.g. WS-042.", "type": "string"}
       },
       "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "tool_call_started"}}},
+          "then": {
+            "description": "Written by Engine.call BEFORE the tool runs (since 27/11/2026); its tool_call names it in started_audit_id. A start without a tool_call = call still running or interrupted.",
+            "required": ["tool", "params"],
+            "properties": {
+              "tool": {"type": "string"},
+              "params": {"description": "Parameters as received from the client (cloud tokens not yet restored).", "type": "object"}
+            }
+          }
+        },
         {
           "if": {"properties": {"type": {"const": "report_review"}}},
           "then": {
@@ -111,6 +123,7 @@
               "output_sha256": {"description": "sha256 of rows.jsonl, compared by replay().", "oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
               "result_manifest": {"description": "Sealed relative file paths and hashes of the producing result.", "type": "object", "additionalProperties": {"$ref": "#/$defs/sha256"}},
               "replay_of": {"description": "audit_id of the original call when this is a replay.", "type": "integer", "minimum": 1},
+              "started_audit_id": {"description": "audit_id of the tool_call_started event of this call (since 27/11/2026).", "type": "integer", "minimum": 1},
               "replay_match": {"type": "boolean"},
               "row_count": {"description": "Rows matched by this call (since 5.3; used to verify an observation = absence).", "type": "integer", "minimum": 0},
               "notes": {"description": "Server notes of the response (e.g. log or audit policy required).", "type": "array", "items": {"type": "string"}}
