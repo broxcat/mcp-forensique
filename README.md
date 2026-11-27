@@ -17,9 +17,10 @@ exigence : [`docs/compliance.md`](docs/compliance.md) ; risques :
 et [les limites de mesure de traçabilité](docs/traceability.md). Les chiffres des
 anciens comptes rendus sont historiques. La conformité globale n’est pas acquise.
 
-Les processus démarrent avec une politique **cloud** restrictive, quel que soit
-le TOML. Pour un modèle effectivement local, ajouter `--llm-mode local` à la
-commande du processus dédié. Le modèle d’espace Claude impose cloud.
+Les processus démarrent avec une politique **cloud** restrictive : c'est le défaut de
+la CLI, de `Config()` et du TOML Docker. Un modèle local (Ollama ou autre) exige un
+processus dédié lancé explicitement avec `--llm-mode local`. Le modèle d’espace Claude
+impose cloud.
 L’export final exige une revue hors MCP : `python -m forensic_mcp review-report`.
 Les exports Windows exigent `-StagingRoot C:\forensic-staging`, hors EvidenceRoot ;
 les intégrer comme nouvelles preuves après vérification, avant montage en lecture seule.
@@ -144,8 +145,11 @@ en charge l'élicitation requise.
 | `cloud` | modèle hébergé par un tiers (Claude) | cas `lab` : brut ; `internal` : pseudonymisation stable (`HOST_n`, `USER_n`, `IP_EXT_n`, `IP_INT_n`, `PERSON_n`, `CONTACT_n`), correspondance gardée côté serveur ; `client` : refusé |
 
 Le mode est **déclaré**, pas détecté : un client cloud connecté à un processus réglé sur
-`local` reçoit des données brutes. La CLI impose `cloud` par défaut, même si le TOML indique
-`local`. Pour un modèle effectivement local, la commande stdio du processus dédié est
+`local` reçoit des données brutes. Le défaut est `cloud` partout : CLI, `Config()` sans
+argument, `forensic-mcp.docker.toml` et tout TOML qui ne nomme pas `llm_mode` (tests
+`tests/test_config_llm_default.py`). Le dépôt ne fournit aucun client LLM local : l'usage
+d'Ollama (ou de tout modèle local) exige `--llm-mode local` explicite sur un processus
+dédié. Pour un modèle effectivement local, la commande stdio du processus dédié est
 `docker exec -i forensic-mcp python -m forensic_mcp --stdio --llm-mode local` ; le processus
 HTTP du Compose conserve sa politique cloud. Cela décrit une commande disponible, sans
 attester une session avec un client local.
